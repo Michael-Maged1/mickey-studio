@@ -94,10 +94,9 @@ async function generateFluxImage(ctx) {
     return json({ error: 'ربط Workers AI غير موجود في النسخة المنشورة. أعد نشر العامل مع AI binding.' }, 503, ctx.headers);
   }
 
-  const seed = Number.isInteger(Number(body.seed)) ? Number(body.seed) : Math.floor(Math.random() * 2147483647);
   try {
     const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-      prompt, steps: 4, seed
+      prompt, steps: 4
     });
     if (!result || typeof result.image !== 'string') {
       return json({ error: 'لم يُرجع نموذج FLUX صورة. أعد المحاولة.' }, 502, ctx.headers);
