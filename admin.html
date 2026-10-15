@@ -44,6 +44,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="api-config.js"></script>
 </head>
 
 <body class="bg-[#09090B] text-zinc-100 min-h-screen font-sans selection:bg-zinc-700 selection:text-white flex flex-col">
@@ -389,7 +390,7 @@
     }
     const auth = firebase.auth();
     const db = firebase.firestore();
-    const apiUrl = new URL('api.php', window.location.href).href;
+    const apiUrl = window.MICKEY_API_BASE_URL || new URL('api.php', window.location.href).href;
 
     async function providerKeysRequest(action, payload = {}) {
       const user = auth.currentUser;

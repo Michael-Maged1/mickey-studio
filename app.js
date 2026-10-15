@@ -2628,8 +2628,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ geminiKey: val, action: 'save_gemini_key' })
       });
-      if (status) status.textContent = '✓ محفوظ بالخزنة والسيرفر';
-      showToast('تم حفظ مفتاح Google Gemini في الخزنة والسيرفر بنجاح ✓', 'success');
+      if (status) status.textContent = '✓ محفوظ في هذا المتصفح';
+      showToast('تم حفظ مفتاح Google Gemini في هذا المتصفح.', 'success');
     } catch (e) {
       if (status) status.textContent = '✓ محفوظ بالخزنة';
       showToast('تم حفظ مفتاح Gemini في الخزنة بنجاح.', 'success');
@@ -3688,6 +3688,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   };
 
   function getApiBaseUrl() {
+    if (window.MICKEY_API_BASE_URL) return window.MICKEY_API_BASE_URL;
     const loc = window.location;
     const path = loc.pathname.replace(/\/[^/]*$/, '');
     return `${loc.protocol}//${loc.host}${path}/api.php`;
@@ -4024,7 +4025,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   function getActiveFirebaseConfig() { return DEFAULT_FIREBASE_CONFIG; }
 
   const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
-  const API_BASE_URL = new URL('api.php', window.location.href).href;
+  const API_BASE_URL = window.MICKEY_API_BASE_URL || new URL('api.php', window.location.href).href;
   let phoneConfirmation = null;
   let phoneRecaptcha = null;
   let pendingPairCode = '';
