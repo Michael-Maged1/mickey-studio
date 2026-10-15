@@ -5,4 +5,5 @@
 gemini_keys.json
 api_keys.json
 .mickey-provider-keys.php
+dist/
 *.log

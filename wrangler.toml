@@ -1,0 +1,15 @@
+name = "mickey-studio-api"
+main = "worker/index.js"
+compatibility_date = "2026-10-16"
+
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "MICKEY_STATE"
+id = "REPLACE_WITH_CLOUDFLARE_KV_NAMESPACE_ID"
+
+[vars]
+FIREBASE_PROJECT_ID = "mickey-gemini-studio"
+FIREBASE_WEB_API_KEY = "AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg"
+ADMIN_EMAIL = "michaelmagednew@gmail.com"
+ALLOWED_ORIGINS = "https://mickey-studio.vercel.app"

@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "build:vercel": "node build-vercel.mjs"
+  }
+}
