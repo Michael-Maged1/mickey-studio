@@ -90,6 +90,9 @@ async function generateFluxImage(ctx) {
   if (!allowedSizes.has(width) || !allowedSizes.has(height)) {
     return json({ error: 'الأبعاد المختارة غير مدعومة.' }, 400, ctx.headers);
   }
+  if (!env.AI || typeof env.AI.run !== 'function') {
+    return json({ error: 'ربط Workers AI غير موجود في النسخة المنشورة. أعد نشر العامل مع AI binding.' }, 503, ctx.headers);
+  }
 
   const seed = Number.isInteger(Number(body.seed)) ? Number(body.seed) : Math.floor(Math.random() * 2147483647);
   try {
@@ -110,9 +113,10 @@ async function generateFluxImage(ctx) {
   } catch (error) {
     const message = String(error?.message || error || '');
     const isQuota = /quota|neuron|daily limit|exceed/i.test(message);
+    console.error('[Workers AI FLUX] Inference failed:', message.slice(0, 500));
     return json({ error: isQuota
       ? 'تم استهلاك الحصة اليومية المجانية في Cloudflare Workers AI.'
-      : 'تعذر الاتصال بنموذج Cloudflare AI. تحقق من تفعيل Workers AI ثم أعد المحاولة.'
+      : `تعذر الاتصال بنموذج Cloudflare AI: ${message.slice(0, 220) || 'خطأ غير معروف'}`
     }, isQuota ? 429 : 502, ctx.headers);
   }
 }
@@ -198,7 +202,7 @@ async function getGeminiKeys(env) {
     available_models: [
       { id: 'gemini-3.8-flash-tts', name: 'Gemini Flash TTS', type: 'tts' },
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash Audio', type: 'tts' },
-      { id: 'imagen-3.0-generate-002', name: 'Google Imagen 3', type: 'image' }
+      { id: 'gemini-nano-banana-2.1', name: 'Google Nano Banana 2.1', type: 'image' }
     ]
   };
 }
@@ -263,14 +267,33 @@ function audioResponse(base64, mime, headers, engine) {
 async function generateImage(ctx) {
   const prompt = String(ctx.body.prompt || '').trim();
   if (!prompt) return json({ success: false, error: 'الوصف فارغ' }, 400, ctx.headers);
-  for (const key of await activeKeys(ctx.env)) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${encodeURIComponent(key)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(ctx.body.aspectRatio) ? ctx.body.aspectRatio : '1:1', personGeneration: 'ALLOW_ADULT', outputOptions: { mimeType: 'image/jpeg' } } })
+  const keys = await activeKeys(ctx.env);
+  if (!keys.length) return json({ success: false, error: 'محرك Nano Banana غير مهيأ: أضف مفتاح Gemini صالحًا من إعدادات المنصة.' }, 503, ctx.headers);
+  const aspectRatio = ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(ctx.body.aspectRatio) ? ctx.body.aspectRatio : '1:1';
+  let lastError = '';
+  let lastStatus = 502;
+  for (const key of keys) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-nano-banana-2.1:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+          imageConfig: { aspectRatio, imageSize: '2K' }
+        }
+      })
     });
-    const data = await readJson(response); const b64 = data.predictions?.[0]?.bytesBase64Encoded;
-    if (response.ok && b64) return json({ success: true, provider: 'Google Imagen 3.0', mime_type: data.predictions[0].mimeType || 'image/jpeg', image_base64: b64, base64Data: b64 }, 200, ctx.headers);
+    const data = await readJson(response);
+    const imagePart = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data && /^image\//i.test(part.inlineData.mimeType || ''));
+    if (response.ok && imagePart) {
+      const mimeType = imagePart.inlineData.mimeType || 'image/png';
+      return json({ success: true, provider: 'Google Nano Banana 2.1', mime_type: mimeType, image_base64: imagePart.inlineData.data, base64Data: imagePart.inlineData.data }, 200, ctx.headers);
+    }
+    lastStatus = response.status || 502;
+    lastError = data.error?.message || data.candidates?.[0]?.finishReason || `Google AI returned HTTP ${lastStatus}`;
   }
-  return json({ success: false, error: 'تعذر توليد الصورة. تحقق من مفتاح Gemini API في Cloudflare.' }, 502, ctx.headers);
+  return json({ success: false, error: `تعذر التوليد عبر Nano Banana (${lastStatus}): ${String(lastError).slice(0, 240)}` }, 502, ctx.headers);
 }
 
 async function geminiText(ctx, prompt, maxOutputTokens = 2000) {
