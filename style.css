@@ -1,0 +1,521 @@
+/* ===================================================================
+   MICKEY STUDIO - SLEEK MINIMALIST AI STUDIO STYLESHEET
+   Inspired by Linear, Vercel, and RunwayML
+   Monochrome, Matte Black, Refined Typography & Clean Micro-Interactions
+   =================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --font-arabic: 'Readex Pro', 'Cairo', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Minimalist Palette */
+  --bg-app: #09090B;
+  --bg-sidebar: #0E0E11;
+  --bg-surface: #121215;
+  --bg-surface-elevated: #18181B;
+  --bg-card: rgba(24, 24, 27, 0.6);
+  --bg-card-hover: rgba(39, 39, 42, 0.7);
+
+  /* Text */
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.15);
+
+  /* Accent: Clean Indigo / Crisp White */
+  --accent-primary: #6366F1;
+  --accent-hover: #4F46E5;
+  --accent-subtle: rgba(99, 102, 241, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-arabic);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  direction: rtl;
+  text-align: right;
+  selection-background-color: #3F3F46;
+  selection-color: #FFFFFF;
+}
+
+::selection {
+  background: #3F3F46;
+  color: #FFFFFF;
+}
+
+/* ===================================================================
+   SLEEK MINIMALIST SURFACES & BUTTONS
+   =================================================================== */
+.studio-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.studio-card:hover {
+  border-color: var(--border-medium);
+}
+
+/* Primary Button: Solid White with Black text (High Contrast) or Indigo */
+.btn-primary {
+  background: #FFFFFF;
+  color: #09090B;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: #E4E4E7;
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Secondary Button: Clean Muted Surface */
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--border-medium);
+  color: #FFFFFF;
+}
+
+/* Sidebar Navigation Items */
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+.sidebar-nav-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-nav-item.active {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+}
+
+.sidebar-nav-item i {
+  font-size: 1rem;
+  width: 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.sidebar-nav-item.active i,
+.sidebar-nav-item:hover i {
+  color: var(--text-primary);
+}
+
+/* Form Controls */
+input,
+textarea,
+select {
+  outline: none;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  border-radius: 10px !important;
+  transition: border-color 0.15s ease, background-color 0.15s ease !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+select option {
+  background: #18181B !important;
+  color: #FAFAFA !important;
+}
+
+/* Subtle Pill Selector */
+.pill-option {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.pill-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+.pill-option.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.3);
+  font-weight: 600;
+}
+
+/* Floating Action Bar (Docked bottom of workspace preview) */
+.floating-action-dock {
+  background: rgba(18, 18, 22, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+  border-radius: 14px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Minimalist Scanner Indicator */
+.minimal-scanner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 9, 11, 0.8);
+  backdrop-filter: blur(8px);
+  z-index: 25;
+}
+
+.scanner-beam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #FFFFFF, transparent);
+  animation: scanMove 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  opacity: 0.75;
+}
+
+@keyframes scanMove {
+  0% {
+    top: 0%;
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 98%;
+    opacity: 0.2;
+  }
+}
+
+/* Before / After Slider */
+.compare-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: 520px;
+  overflow: hidden;
+  border-radius: 12px;
+  user-select: none;
+  background: #09090B;
+  border: 1px solid var(--border-subtle);
+}
+
+.compare-image-original,
+.compare-image-upscaled {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.compare-upscaled-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 5;
+  border-right: 1px solid #FFFFFF;
+}
+
+.compare-upscaled-wrapper img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+}
+
+.compare-slider-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  background: #18181B;
+  border: 1px solid #FFFFFF;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  z-index: 10;
+  color: #FAFAFA;
+}
+
+/* Transparent Background for Cutouts */
+.transparent-checkered-bg {
+  background-color: #0E0E11;
+  background-image:
+    linear-gradient(45deg, #18181B 25%, transparent 25%),
+    linear-gradient(-45deg, #18181B 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #18181B 75%),
+    linear-gradient(-45deg, transparent 75%, #18181B 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
+/* Modals */
+.minimal-modal-backdrop {
+  background: rgba(9, 9, 11, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.modal-content-anim {
+  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Toast */
+#toast-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.sci-fi-toast {
+  pointer-events: auto;
+  min-width: 300px;
+  max-width: 400px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #18181B;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #FAFAFA;
+  font-size: 0.875rem;
+  animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Minimal Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Audio Player Custom Dark Theme */
+audio::-webkit-media-controls-panel {
+  background-color: #18181B;
+}
+
+audio::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-time-remaining-display {
+  color: #FAFAFA;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Pulsing Mic Ring */
+@keyframes micPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 14px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.rec-pulse-active {
+  animation: micPulse 1.5s infinite;
+}
+
+/* Line Clamp Utilities */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===================================================================
+   MINIMALIST PILL AUDIO PLAYER (EXACT SCREENSHOT SPEC)
+   =================================================================== */
+#audio-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #3e4249;
+  border-radius: 4px;
+  outline: none;
+  transition: background 0.2s;
+}
+
+#audio-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 3px;
+  height: 14px;
+  background: #8ab4f8;
+  border-radius: 1.5px;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(138, 180, 248, 0.6);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+#audio-volume-slider::-moz-range-thumb {
+  width: 3px;
+  height: 14px;
+  background: #8ab4f8;
+  border: none;
+  border-radius: 1.5px;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(138, 180, 248, 0.6);
+}
+
+#audio-volume-slider::-webkit-slider-thumb:hover {
+  transform: scaleY(1.25);
+  background: #a8c7fa;
+}
