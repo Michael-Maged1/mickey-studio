@@ -269,28 +269,35 @@ async function generateImage(ctx) {
   const keys = await activeKeys(ctx.env);
   if (!keys.length) return json({ success: false, error: 'محرك Nano Banana غير مهيأ: أضف مفتاح Gemini صالحًا من إعدادات المنصة.' }, 503, ctx.headers);
   const aspectRatio = ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(ctx.body.aspectRatio) ? ctx.body.aspectRatio : '1:1';
+  const models = [
+    { id: 'gemini-nano-banana-2.1', imageSize: '2K' },
+    { id: 'gemini-3.1-flash-image', imageSize: '2K' },
+    { id: 'gemini-2.5-flash-image', imageSize: '' },
+  ];
   let lastError = '';
   let lastStatus = 502;
-  for (const key of keys) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-nano-banana-2.1:generateContent?key=${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE'],
-          imageConfig: { aspectRatio, imageSize: '2K' }
-        }
-      })
-    });
-    const data = await readJson(response);
-    const imagePart = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data && /^image\//i.test(part.inlineData.mimeType || ''));
-    if (response.ok && imagePart) {
-      const mimeType = imagePart.inlineData.mimeType || 'image/png';
-      return json({ success: true, provider: 'Google Nano Banana 2.1', mime_type: mimeType, image_base64: imagePart.inlineData.data, base64Data: imagePart.inlineData.data }, 200, ctx.headers);
+  for (const model of models) {
+    for (const key of keys) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model.id}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+            responseFormat: { image: { aspectRatio, ...(model.imageSize ? { imageSize: model.imageSize } : {}) } }
+          }
+        })
+      });
+      const data = await readJson(response);
+      const imagePart = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data && /^image\//i.test(part.inlineData.mimeType || ''));
+      if (response.ok && imagePart) {
+        const mimeType = imagePart.inlineData.mimeType || 'image/png';
+        return json({ success: true, provider: model.id, mime_type: mimeType, image_base64: imagePart.inlineData.data, base64Data: imagePart.inlineData.data }, 200, ctx.headers);
+      }
+      lastStatus = response.status || 502;
+      lastError = `${model.id}: ${data.error?.message || data.candidates?.[0]?.finishReason || `Google AI returned HTTP ${lastStatus}`}`;
     }
-    lastStatus = response.status || 502;
-    lastError = data.error?.message || data.candidates?.[0]?.finishReason || `Google AI returned HTTP ${lastStatus}`;
   }
   return json({ success: false, error: `تعذر التوليد عبر Nano Banana (${lastStatus}): ${String(lastError).slice(0, 240)}` }, 502, ctx.headers);
 }

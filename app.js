@@ -741,6 +741,11 @@ window.MickeyStudio = (function () {
         const res = await gatewayFetch('generate_image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: finalPrompt, aspectRatio: aspectRatioStr }) });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success || !data.image_base64) throw new Error(data.error || 'تعذر التوليد عبر Google Nano Banana 2.1.');
+        const providerTitle = ({
+          'gemini-nano-banana-2.1': 'Nano Banana 2.1',
+          'gemini-3.1-flash-image': 'Nano Banana 2',
+          'gemini-2.5-flash-image': 'Nano Banana'
+        })[data.provider] || 'Nano Banana';
         const b64 = data.image_base64;
         const mime = data.mime_type || 'image/jpeg';
         const blob = base64ToBlob(b64, mime);
@@ -758,10 +763,10 @@ window.MickeyStudio = (function () {
         laserScanner.classList.add('hidden');
         resultGrid.classList.remove('hidden');
         actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-        statusPill.textContent = 'اكتمل التوليد (Google Nano Banana 2.1)';
+        statusPill.textContent = `اكتمل التوليد (Google ${providerTitle})`;
         statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-400';
         SFX.playSuccess();
-        showToast('تم توليد الصورة عبر Google Nano Banana 2.1 بنجاح!', 'success');
+        showToast(`تم توليد الصورة عبر Google ${providerTitle} بنجاح!`, 'success');
         return;
       }
 
