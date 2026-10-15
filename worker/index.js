@@ -26,7 +26,7 @@ export default {
         case 'get_gemini_keys': case 'get_gemini_key': return json(await getGeminiKeys(env), 200, headers);
         case 'generate_tts': return await generateTts(context);
         case 'generate_text': return await generateText(context);
-        case 'save_gemini_key': return json({ success: true, message: 'تم حفظ المفتاح في متصفحك فقط.' }, 200, headers);
+        case 'save_gemini_key': return await saveUserGeminiKey(context);
         case 'generate_image': return await generateImage(context);
         case 'enhance_prompt': return await enhancePrompt(context);
         case 'refine_voiceover': return await refineVoiceover(context);
@@ -146,7 +146,11 @@ async function authenticate(ctx, adminOnly = false) {
   if (!doc.ok) fail(403, 'تعذر التحقق من ملف الحساب. تأكد من نشر قواعد Firestore ثم أعد تسجيل الدخول.');
   const status = profile.fields?.status?.stringValue || 'active';
   if (status !== 'active') fail(403, 'هذا الحساب موقوف من إدارة Mickey Studio.');
-  return { uid: user.localId, email: user.email || '', isAdmin, status, token };
+  return {
+    uid: user.localId, email: user.email || '', isAdmin, status, token,
+    geminiApiKey: profile.fields?.geminiApiKey?.stringValue || '',
+    geminiProviderKeysJson: profile.fields?.geminiProviderKeysJson?.stringValue || ''
+  };
 }
 function bearer(request) { const value = request.headers.get('Authorization') || ''; return value.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || ''; }
 function apiToken(ctx) { return bearer(ctx.request) || ctx.request.headers.get('X-API-Key') || ctx.url.searchParams.get('api_key') || ''; }
@@ -211,6 +215,31 @@ async function activeKeys(env) {
   if (env.GEMINI_API_KEY) values.unshift(env.GEMINI_API_KEY);
   return [...new Set(values)];
 }
+async function getUserGeminiKey(ctx) {
+  return String(ctx.access?.account?.geminiApiKey || '');
+}
+async function keysForRequest(ctx) {
+  const personalKey = await getUserGeminiKey(ctx);
+  return [...new Set([personalKey, ...await activeKeys(ctx.env)].filter(Boolean))];
+}
+async function saveUserGeminiKey(ctx) {
+  const account = await authenticate(ctx, false);
+  const key = String(ctx.body.geminiKey ?? '').trim();
+  if (key.length > 256 || (key && !/^[A-Za-z0-9_.-]{30,120}$/.test(key))) {
+    return json({ success: false, error: 'صيغة مفتاح Gemini غير صالحة.' }, 400, ctx.headers);
+  }
+  await updateUserProfileField(account, ctx.env, 'geminiApiKey', key ? { stringValue: key } : null);
+  return json({ success: true, message: key ? 'تم حفظ المفتاح بشكل خاص في Firestore.' : 'تم حذف المفتاح من Firestore.', masked_key: key ? maskKey(key) : null }, 200, ctx.headers);
+}
+async function updateUserProfileField(account, env, field, value) {
+  const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(account.uid)}?updateMask.fieldPaths=${encodeURIComponent(field)}`;
+  const fields = value === null ? {} : { [field]: value };
+  const response = await fetch(url, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${account.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (!response.ok) fail(502, 'تعذر حفظ بيانات المفاتيح في Firestore. تحقق من صلاحية حسابك على ملف المستخدم.');
+}
 function maskKey(key = '') { return key.length > 10 ? `${key.slice(0, 6)}••••${key.slice(-4)}` : '••••••••'; }
 
 async function generateTts(ctx) {
@@ -229,7 +258,7 @@ async function generateTts(ctx) {
   const style = String(data.style || `Speak in ${dialect}, with a ${female ? 'feminine' : 'masculine'} voice. Read the supplied Arabic text verbatim; do not translate it or say these directions aloud.`);
   const errors = [];
   if ((data.engine || 'gemini') !== 'neural') {
-    for (const key of await activeKeys(ctx.env)) {
+    for (const key of await keysForRequest(ctx)) {
       const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: `${style}\n\nRead the following Arabic text aloud with exact authentic ${dialect} dialect and natural expressiveness. Do NOT translate or add commentary, speak only the text:\n${text}` }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } })
@@ -266,7 +295,7 @@ function audioResponse(base64, mime, headers, engine) {
 async function generateImage(ctx) {
   const prompt = String(ctx.body.prompt || '').trim();
   if (!prompt) return json({ success: false, error: 'الوصف فارغ' }, 400, ctx.headers);
-  const keys = await activeKeys(ctx.env);
+  const keys = await keysForRequest(ctx);
   if (!keys.length) return json({ success: false, error: 'محرك Nano Banana غير مهيأ: أضف مفتاح Gemini صالحًا من إعدادات المنصة.' }, 503, ctx.headers);
   const aspectRatio = {
     '1:1': 'ASPECT_RATIO_ONE_BY_ONE',
@@ -309,7 +338,7 @@ async function generateImage(ctx) {
 }
 
 async function geminiText(ctx, prompt, maxOutputTokens = 2000) {
-  for (const key of await activeKeys(ctx.env)) {
+  for (const key of await keysForRequest(ctx)) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens } })
     });
@@ -343,7 +372,7 @@ async function transcribeAudio(ctx) {
   if (audio.length > 18_000_000) return json({ success: false, error: 'حجم ملف الصوت أكبر من الحد المسموح.' }, 413, ctx.headers);
   const mimeType = String(ctx.body.mime_type || 'audio/webm').split(';')[0];
   const prompt = `فرّغ هذا التسجيل الصوتي إلى نص عربي دقيق باللهجة ${ctx.body.dialect || 'المسموعة'}، مع علامات الترقيم. أخرج JSON صالحاً فقط بهذه الحقول: {"transcript":"النص الكامل","srt":"ترجمة SRT بتوقيتات تقديرية","dialect":"اللهجة المكتشفة","tone":"النبرة","summary":"ملخص قصير","key_points":[],"words_count":0,"estimated_speed":"معتدلة"}. لا تضف كلمات غير موجودة في التسجيل.`;
-  for (const key of await activeKeys(ctx.env)) {
+  for (const key of await keysForRequest(ctx)) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: audio } }, { text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 8192 } })
     });
@@ -441,9 +470,19 @@ async function pairPoll(ctx) {
 }
 
 async function adminProviderKeys(ctx, save) {
-  await authenticate(ctx, true);
+  const account = await authenticate(ctx, true);
   let pool = await ctx.env.MICKEY_STATE.get('gemini_pool', 'json') || [];
-  if (!save) return json(await getGeminiKeys(ctx.env), 200, ctx.headers);
+  const firestorePool = parseProviderKeys(account.geminiProviderKeysJson);
+  if (!pool.length && firestorePool.length) {
+    pool = firestorePool;
+    await ctx.env.MICKEY_STATE.put('gemini_pool', JSON.stringify(pool));
+  }
+  if (!save) {
+    if (pool.length && account.geminiProviderKeysJson !== JSON.stringify(pool)) {
+      await updateUserProfileField(account, ctx.env, 'geminiProviderKeysJson', { stringValue: JSON.stringify(pool) });
+    }
+    return json(await getGeminiKeys(ctx.env), 200, ctx.headers);
+  }
   if (ctx.body.clearGemini) pool = [];
   const raw = ctx.body.geminiKeys ?? ctx.body.geminiKey ?? ctx.body.key ?? ctx.body.apiKey ?? '';
   const incoming = Array.isArray(raw) ? raw : String(raw).split(/[\r\n,;]+/);
@@ -453,27 +492,40 @@ async function adminProviderKeys(ctx, save) {
     if (!/^[A-Za-z0-9_.-]{30,120}$/.test(candidate) || candidate.startsWith('mk_') || existing.has(candidate)) continue;
     existing.add(candidate); added++; pool.push({ id: `key_${crypto.randomUUID()}`, key: candidate, label: ctx.body.label || `مفتاح #${pool.length + 1}`, status: 'active', added_at: nowIso() });
   }
+  await updateUserProfileField(account, ctx.env, 'geminiProviderKeysJson', { stringValue: JSON.stringify(pool) });
   await ctx.env.MICKEY_STATE.put('gemini_pool', JSON.stringify(pool));
   const result = await getGeminiKeys(ctx.env);
   return json({ ...result, added_count: added }, 200, ctx.headers);
 }
+function parseProviderKeys(serialized) {
+  try {
+    const value = JSON.parse(serialized || '[]');
+    return Array.isArray(value) ? value.filter(item => item && typeof item.key === 'string') : [];
+  } catch { return []; }
+}
 async function deleteGeminiKey(ctx) {
-  await authenticate(ctx, true);
+  const account = await authenticate(ctx, true);
   const target = String(ctx.body.key_id || ctx.body.id || ctx.body.key || '');
-  const pool = await ctx.env.MICKEY_STATE.get('gemini_pool', 'json') || [];
+  let pool = await ctx.env.MICKEY_STATE.get('gemini_pool', 'json') || [];
+  if (!pool.length) pool = parseProviderKeys(account.geminiProviderKeysJson);
   const next = pool.filter(item => item.id !== target && item.key !== target);
   if (next.length === pool.length) return json({ success: false, message: 'لم يتم العثور على المفتاح المطلوب', gemini_pool: (await getGeminiKeys(ctx.env)).gemini_pool }, 200, ctx.headers);
+  await updateUserProfileField(account, ctx.env, 'geminiProviderKeysJson', { stringValue: JSON.stringify(next) });
   await ctx.env.MICKEY_STATE.put('gemini_pool', JSON.stringify(next));
   return json({ success: true, message: 'تم حذف المفتاح من حوض التدوير بنجاح', gemini_pool: (await getGeminiKeys(ctx.env)).gemini_pool }, 200, ctx.headers);
 }
 async function testGeminiKey(ctx) {
-  await authenticate(ctx, true);
+  const account = await authenticate(ctx, true);
   const pool = await ctx.env.MICKEY_STATE.get('gemini_pool', 'json') || [];
   const item = pool.find(x => x.id === (ctx.body.key_id || ctx.body.id));
   const key = String(ctx.body.key || item?.key || '');
   if (!key) return json({ success: false, error: 'لم يتم تحديد مفتاح للفحص' }, 400, ctx.headers);
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 5 } }) });
-  if (item) { item.status = response.ok ? 'active' : response.status === 429 ? 'quota_exceeded' : 'invalid'; item.last_tested = nowIso(); await ctx.env.MICKEY_STATE.put('gemini_pool', JSON.stringify(pool)); }
+  if (item) {
+    item.status = response.ok ? 'active' : response.status === 429 ? 'quota_exceeded' : 'invalid'; item.last_tested = nowIso();
+    await updateUserProfileField(account, ctx.env, 'geminiProviderKeysJson', { stringValue: JSON.stringify(pool) });
+    await ctx.env.MICKEY_STATE.put('gemini_pool', JSON.stringify(pool));
+  }
   return json({ success: response.ok, message: response.ok ? 'المفتاح يعمل بنجاح والصلاحية نشطة ✓' : undefined, error: response.ok ? undefined : (response.status === 429 ? 'تم استهلاك حصة هذا المفتاح' : 'مفتاح غير صالح أو معطل'), http_code: response.status, gemini_pool: (await getGeminiKeys(ctx.env)).gemini_pool }, 200, ctx.headers);
 }
 async function generateApiKey(ctx) {

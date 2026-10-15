@@ -2154,8 +2154,6 @@ window.MickeyStudio = (function () {
 
     try {
       const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-      const geminiKey = document.getElementById('voice-gemini-key-input')?.value.trim() || localStorage.getItem('mickey_gemini_key') || '';
-      
       const res = await gatewayFetch('generate_tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2164,8 +2162,7 @@ window.MickeyStudio = (function () {
           performance: personaId,
           gender: gender,
           dialect: document.getElementById('voice-dialect-select')?.value || 'egyptian',
-          engine: engine,
-          geminiKey: geminiKey
+          engine: engine
         })
       });
 
@@ -2277,8 +2274,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const s2Voice = document.getElementById('podcast-speaker2-voice')?.value || 'mariam';
     const dialect = document.getElementById('podcast-dialect-select')?.value || 'egyptian';
     const engine = document.getElementById('podcast-engine-select')?.value || 'gemini';
-    const geminiKey = document.getElementById('voice-gemini-key-input')?.value.trim() || localStorage.getItem('mickey_gemini_key') || '';
-
     const btn = document.getElementById('btn-generate-podcast');
     btn.disabled = true;
     showToast('جاري إنتاج أصوات المتحاورين ودمج الحلقة...', 'info');
@@ -2311,8 +2306,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
             performance: speakerVoice,
             gender: speakerGender,
             dialect,
-            engine,
-            geminiKey
+            engine
           })
         });
 
@@ -2390,8 +2384,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const mood = document.getElementById('book-mood-select')?.value || 'mystery';
     const pace = Number(document.getElementById('book-pace-select')?.value) || 1.0;
     const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-    const geminiKey = document.getElementById('voice-gemini-key-input')?.value.trim() || localStorage.getItem('mickey_gemini_key') || '';
-
     const btn = document.getElementById('btn-generate-audiobook');
     btn.disabled = true;
     showToast('جاري تسجيل الفصل الصوتي بصوت الراوي المختار...', 'info');
@@ -2407,7 +2399,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
           dialect: 'fusha',
           rate: pace,
           engine,
-          geminiKey,
           style: `Audiobook chapter reading for "${bookTitle} - ${chapterTitle}". Atmospheric mood: ${mood}. Professional literary storytelling narration with proper dramatic pauses.`
         })
       });
@@ -2528,8 +2519,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (actionsBar) actionsBar.classList.add('opacity-0', 'pointer-events-none');
     
     const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-    const geminiKey = localStorage.getItem('mickey_gemini_key') || '';
-
     statusPill.textContent = engine === 'gemini' ? 'جاري التوليد عبر استوديو Gemini 3.8 Flash TTS…' : 'جاري التوليد عبر Edge Neural TTS السريع…';
     try {
       const response = await gatewayFetch('generate_tts', {
@@ -2538,8 +2527,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         body: JSON.stringify({
           text, voice, style, rate, pitch, dialect, gender, performance, age, warmth, emotion, intensity,
           engine,
-          geminiKey,
-          apiKey: geminiKey,
           model: 'gemini-3.8-flash-tts',
           input: [{ type: 'user_input', content: [{ type: 'text', text, annotations: [{ type: 'speech_metadata', style }] }] }],
           response_format: { type: 'audio', mime_type: 'audio/wav', sample_rate: 24000 },
@@ -2620,24 +2607,21 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const input = document.getElementById('voice-gemini-key-input');
     const status = document.getElementById('voice-gemini-key-status');
     const val = input ? input.value.trim() : '';
-    if (!val) {
-      localStorage.removeItem('mickey_gemini_key');
-      if (status) status.textContent = 'تم مسح المفتاح';
-      showToast('تم مسح مفتاح Gemini من الخزنة.', 'info');
-      return;
-    }
-    localStorage.setItem('mickey_gemini_key', val);
     try {
-      await gatewayFetch('save_gemini_key', {
+      const response = await gatewayFetch('save_gemini_key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ geminiKey: val, action: 'save_gemini_key' })
       });
-      if (status) status.textContent = '✓ محفوظ في هذا المتصفح';
-      showToast('تم حفظ مفتاح Google Gemini في هذا المتصفح.', 'success');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || 'تعذر حفظ المفتاح في Firestore.');
+      if (input) input.value = '';
+      localStorage.removeItem('mickey_gemini_key');
+      if (status) status.textContent = val ? `✓ محفوظ في Firestore (${data.masked_key})` : 'تم حذف المفتاح من Firestore';
+      showToast(data.message || (val ? 'تم حفظ مفتاح Google Gemini بشكل آمن في Firestore.' : 'تم حذف مفتاح Gemini من Firestore.'), 'success');
     } catch (e) {
-      if (status) status.textContent = '✓ محفوظ بالخزنة';
-      showToast('تم حفظ مفتاح Gemini في الخزنة بنجاح.', 'success');
+      if (status) status.textContent = 'تعذر الحفظ في Firestore';
+      showToast(e.message || 'تعذر حفظ مفتاح Gemini في Firestore.', 'error');
     }
   }
 
@@ -4126,6 +4110,20 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     return profile;
   }
 
+  async function migrateLegacyGeminiKey(user) {
+    const legacyKey = localStorage.getItem('mickey_gemini_key') || '';
+    if (!legacyKey || !user) return;
+    const response = await gatewayFetch('save_gemini_key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ geminiKey: legacyKey, action: 'save_gemini_key' })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) throw new Error(data.error || 'تعذر نقل مفتاح Gemini إلى Firestore.');
+    localStorage.removeItem('mickey_gemini_key');
+    showToast('تم نقل مفتاح Gemini القديم إلى Firestore وحذفه من هذا المتصفح.', 'success');
+  }
+
   function updateGuestBadge() {
     const badge = document.getElementById('guest-usage-badge');
     const text = document.getElementById('guest-remaining-text');
@@ -4453,6 +4451,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
             try {
               STATE.user = user;
               await ensureActiveProfile(user);
+              try { await migrateLegacyGeminiKey(user); }
+              catch (migrationError) { showToast(migrationError.message || 'تعذر نقل مفتاح Gemini إلى Firestore.', 'warning'); }
               updateAuthUI(user);
               renderAccountModal();
               await completePendingExtensionPair(user);
