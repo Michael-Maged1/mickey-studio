@@ -23,8 +23,8 @@ window.MickeyStudio = (function () {
     // Image Studio State
     image: {
       model: 'flux',
-      width: 1024,
-      height: 1024,
+      width: 1280,
+      height: 720,
       seed: Math.floor(Math.random() * 9999999),
       batchCount: 1,
       selectedStyle: 'hyper-real',
@@ -772,7 +772,7 @@ window.MickeyStudio = (function () {
 
       // Route 2: Cloudflare FLUX
       if (STATE.image.model === 'cloudflare-flux') {
-        statusPill.textContent = 'جاري التوليد عبر FLUX.1-schnell على Cloudflare...';
+        statusPill.textContent = 'جاري التوليد عبر FLUX.2 klein 4B على Cloudflare...';
         const blob = await generateWithCloudflareFlux(finalPrompt, STATE.image.width, STATE.image.height);
         const imageUrl = URL.createObjectURL(blob);
         STATE.image.lastGeneratedBlob = blob;
@@ -788,10 +788,10 @@ window.MickeyStudio = (function () {
         laserScanner.classList.add('hidden');
         resultGrid.classList.remove('hidden');
         actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-        statusPill.textContent = 'اكتمل التوليد (FLUX.1-schnell / Cloudflare)';
+        statusPill.textContent = 'اكتمل التوليد (FLUX.2 klein 4B / Cloudflare)';
         statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-200';
         SFX.playSuccess();
-        showToast('تم توليد الصورة عبر FLUX.1-schnell بنجاح.', 'success');
+        showToast('تم توليد الصورة عبر FLUX.2 klein 4B بنجاح.', 'success');
         return;
       }
 

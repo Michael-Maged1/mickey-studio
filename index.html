@@ -199,7 +199,7 @@
             <select id="image-model-select" onchange="MickeyStudio.updateModelTag(this.value)" class="w-full p-2.5 text-xs">
               <option value="flux" selected>🌟 FLUX.1 Photorealistic (فائق الواقعية — مجاني وسريع)</option>
               <option value="nano-banana">💎 Google Nano Banana 2.1 — دقة 2K (Gemini API)</option>
-              <option value="cloudflare-flux">☁️ FLUX.1-schnell (Cloudflare AI)</option>
+              <option value="cloudflare-flux">☁️ FLUX.2 klein 4B (Cloudflare AI — يدعم الأبعاد)</option>
               <option value="zimage-hf">🚀 Z-Image-Turbo (Hugging Face — سريع وتجريبي)</option>
             </select>
             <label class="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-300 cursor-pointer pt-1">
@@ -212,13 +212,13 @@
           <div class="space-y-2">
             <label class="text-xs font-medium text-zinc-400 block">الأبعاد</label>
             <div class="grid grid-cols-3 gap-1.5" id="image-ratio-selector">
-              <button type="button" onclick="MickeyStudio.selectRatio(this, 1024, 1024)" class="ratio-btn pill-option active py-2 text-center flex-col">
-                <span class="font-mono text-xs">1:1</span>
-                <span class="text-[10px] text-zinc-400">مربع</span>
-              </button>
-              <button type="button" onclick="MickeyStudio.selectRatio(this, 1280, 720)" class="ratio-btn pill-option py-2 text-center flex-col">
+              <button type="button" onclick="MickeyStudio.selectRatio(this, 1280, 720)" class="ratio-btn pill-option active py-2 text-center flex-col">
                 <span class="font-mono text-xs">16:9</span>
                 <span class="text-[10px] text-zinc-400">عرضي</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.selectRatio(this, 1024, 1024)" class="ratio-btn pill-option py-2 text-center flex-col">
+                <span class="font-mono text-xs">1:1</span>
+                <span class="text-[10px] text-zinc-400">مربع</span>
               </button>
               <button type="button" onclick="MickeyStudio.selectRatio(this, 720, 1280)" class="ratio-btn pill-option py-2 text-center flex-col">
                 <span class="font-mono text-xs">9:16</span>
