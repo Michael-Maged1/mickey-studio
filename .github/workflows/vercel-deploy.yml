@@ -1,0 +1,20 @@
+name: Deploy Vercel site
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel deployment
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          test -n "$VERCEL_DEPLOY_HOOK"
+          curl --fail --silent --show-error --request POST "$VERCEL_DEPLOY_HOOK"
