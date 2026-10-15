@@ -94,7 +94,7 @@ async function generateFluxImage(ctx) {
   const seed = Number.isInteger(Number(body.seed)) ? Number(body.seed) : Math.floor(Math.random() * 2147483647);
   try {
     const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-      prompt, width, height, steps: 4, seed
+      prompt, steps: 4, seed
     });
     if (!result || typeof result.image !== 'string') {
       return json({ error: 'لم يُرجع نموذج FLUX صورة. أعد المحاولة.' }, 502, ctx.headers);
