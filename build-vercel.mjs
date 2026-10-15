@@ -5,6 +5,7 @@ await mkdir(output, { recursive: true });
 for (const file of ['index.html', 'admin.html', 'app.js', 'style.css']) {
   await cp(new URL(`./${file}`, import.meta.url), new URL(`./dist/${file}`, import.meta.url));
 }
+await cp(new URL('./assets/', import.meta.url), new URL('./dist/assets/', import.meta.url), { recursive: true });
 
 const configuredApi = (process.env.MICKEY_API_BASE_URL || '').trim();
 let apiBase = '';
