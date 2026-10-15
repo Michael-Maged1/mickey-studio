@@ -109,7 +109,7 @@ window.MickeyStudio = (function () {
 
     // Settings (API Vault)
     settings: {
-      cloudflareWorkerUrl: localStorage.getItem('mickey_cloudflare_worker_url') || '',
+      cloudflareWorkerUrl: localStorage.getItem('mickey_cloudflare_worker_url') || 'https://mickey-studio-api.kma279500.workers.dev',
       gradioSpace: localStorage.getItem('mickey_gradio_space') || 'Lightricks/LTX-Video',
       sfxEnabled: localStorage.getItem('mickey_sfx_enabled') !== 'false'
     }
