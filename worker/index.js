@@ -268,10 +268,16 @@ async function generateImage(ctx) {
   if (!prompt) return json({ success: false, error: 'الوصف فارغ' }, 400, ctx.headers);
   const keys = await activeKeys(ctx.env);
   if (!keys.length) return json({ success: false, error: 'محرك Nano Banana غير مهيأ: أضف مفتاح Gemini صالحًا من إعدادات المنصة.' }, 503, ctx.headers);
-  const aspectRatio = ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(ctx.body.aspectRatio) ? ctx.body.aspectRatio : '1:1';
+  const aspectRatio = {
+    '1:1': 'ASPECT_RATIO_ONE_BY_ONE',
+    '16:9': 'ASPECT_RATIO_SIXTEEN_BY_NINE',
+    '9:16': 'ASPECT_RATIO_NINE_BY_SIXTEEN',
+    '4:3': 'ASPECT_RATIO_FOUR_BY_THREE',
+    '3:4': 'ASPECT_RATIO_THREE_BY_FOUR'
+  }[ctx.body.aspectRatio] || 'ASPECT_RATIO_ONE_BY_ONE';
   const models = [
-    { id: 'gemini-nano-banana-2.1', imageSize: '2K' },
-    { id: 'gemini-3.1-flash-image', imageSize: '2K' },
+    { id: 'gemini-nano-banana-2.1', imageSize: 'IMAGE_SIZE_TWO_K' },
+    { id: 'gemini-3.1-flash-image', imageSize: 'IMAGE_SIZE_TWO_K' },
     { id: 'gemini-2.5-flash-image', imageSize: '' },
   ];
   let lastError = '';
