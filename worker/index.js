@@ -95,8 +95,16 @@ async function generateFluxImage(ctx) {
   }
 
   try {
-    const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-      prompt, steps: 4
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('width', String(width));
+    form.append('height', String(height));
+    const serializedForm = new Response(form);
+    const result = await env.AI.run('@cf/black-forest-labs/flux-2-klein-4b', {
+      multipart: {
+        body: serializedForm.body,
+        contentType: serializedForm.headers.get('content-type') || 'multipart/form-data'
+      }
     });
     if (!result || typeof result.image !== 'string') {
       return json({ error: 'لم يُرجع نموذج FLUX صورة. أعد المحاولة.' }, 502, ctx.headers);
