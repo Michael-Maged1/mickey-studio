@@ -154,7 +154,7 @@
               <h2 class="text-base font-bold text-white">مجمع تدوير مفاتيح Google Gemini API الذكي (Multi-Key Failover Pool)</h2>
             </div>
             <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
-              تُحفظ على الخادم حصرياً وتُدار من قبل الأدمن فقط. عند نفاد كريدت أو حصة أي مفتاح (429 / Quota Exceeded)، يقوم السيرفر بالتحويل فورياً وتلقائياً للمفتاح التالي دون توقف للمستخدمين.
+              تُحفظ في Firestore داخل ملف حساب الأدمن، مع نسخة تشغيل خاصة في Cloudflare KV، ولا تُعرض للمستخدمين إلا بصورة مخفية. عند نفاد حصة مفتاح، ينتقل الخادم تلقائياً للمفتاح التالي.
             </p>
           </div>
           <div class="flex items-center gap-2">
@@ -499,7 +499,7 @@
         renderGeminiPool(data.gemini_pool || []);
         if (keysInput) keysInput.value = '';
         if (labelInput) labelInput.value = '';
-        showToast(`تمت إضافة المفاتيح بنجاح إلى حوض التدوير (${data.added_count || 1} مفتاح).`, 'success');
+        showToast(`تم حفظ المفاتيح في Firestore ومخزن الخادم (${data.added_count || 1} مفتاح).`, 'success');
       } catch (err) {
         showToast(`تعذر إضافة المفاتيح: ${err.message}`, 'error');
       } finally {
