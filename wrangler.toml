@@ -6,7 +6,7 @@ workers_dev = true
 
 [[kv_namespaces]]
 binding = "MICKEY_STATE"
-id = "REPLACE_WITH_CLOUDFLARE_KV_NAMESPACE_ID"
+id = "2dcfe2752b3d44638db77d9cd533394c"
 
 [vars]
 FIREBASE_PROJECT_ID = "mickey-gemini-studio"

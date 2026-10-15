@@ -4,9 +4,8 @@ The frontend is published as a static Vercel site. The API is a Cloudflare Worke
 
 ## Cloudflare Worker
 
-1. Create a KV namespace named `MICKEY_STATE`.
-2. Replace the placeholder namespace ID in `wrangler.toml` with its ID.
-3. Deploy `worker/index.js` as `mickey-studio-api` with Wrangler or Cloudflare's Git integration.
+1. The `MICKEY_STATE` KV namespace has been created for this project and its ID is configured in `wrangler.toml`.
+2. Deploy `worker/index.js` as `mickey-studio-api` with Wrangler or Cloudflare's Git integration.
 4. Add `GEMINI_API_KEY` as a Worker secret, or sign in to the site's admin page and add keys there. Do not put provider keys in GitHub or in `wrangler.toml`.
 5. Set `ALLOWED_ORIGINS` to the published Vercel origin and any custom site domain.
 
