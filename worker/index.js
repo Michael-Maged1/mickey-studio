@@ -1,7 +1,7 @@
 const FIREBASE_PROJECT = 'mickey-gemini-studio';
 const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg';
 const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_TTS_MODEL = 'gemini-3.8-flash-tts';
 
 export default {
   async fetch(request, env) {
@@ -66,6 +66,7 @@ function corsHeaders(request, env) {
     'Access-Control-Allow-Origin': allowed ? origin : (origin ? '' : '*'),
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-API-Key, X-Anonymous-ID, X-Generation-Permit',
+    'Access-Control-Expose-Headers': 'X-TTS-Engine',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -212,7 +213,7 @@ async function getGeminiKeys(env) {
     gemini_pool: pool.map(({ key, ...item }) => ({ ...item, masked_key: maskKey(key) })),
     available_models: [
       { id: 'gemini-3.8-flash-tts', name: 'Gemini Flash TTS', type: 'tts' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash Audio', type: 'tts' },
+      { id: 'gemini-3.8-flash-lite-tts', name: 'Gemini Flash-Lite TTS', type: 'tts' },
       { id: 'gemini-nano-banana-2.1', name: 'Google Nano Banana 2.1', type: 'image' }
     ]
   };
@@ -265,26 +266,37 @@ async function generateTts(ctx) {
   const dialect = dialects[String(data.dialect || '').toLowerCase()] || 'Egyptian Arabic';
   const style = String(data.style || `Speak in ${dialect}, with a ${female ? 'feminine' : 'masculine'} voice. Read the supplied Arabic text verbatim; do not translate it or say these directions aloud.`);
   const errors = [];
-  if ((data.engine || 'gemini') !== 'neural') {
+  const engine = data.engine === 'neural' ? 'neural' : 'gemini';
+  if (engine === 'gemini') {
     for (const key of await keysForRequest(ctx)) {
-      const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${style}\n\nRead the following Arabic text aloud with exact authentic ${dialect} dialect and natural expressiveness. Do NOT translate or add commentary, speak only the text:\n${text}` }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } })
+      const result = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          model: GEMINI_TTS_MODEL,
+          input: [{ type: 'user_input', content: [{ type: 'text', text, annotations: [{ type: 'speech_metadata', style }] }] }],
+          response_format: { type: 'audio' },
+          generation_config: { speech_config: [{ voice }] }
+        })
       });
       const response = await readJson(result);
-      const audio = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data)?.inlineData;
-      if (result.ok && audio?.data) return audioResponse(audio.data, audio.mimeType || 'audio/L16;rate=24000', ctx.headers, 'Google Gemini TTS');
+      const audio = response.output_audio?.data || (response.steps || [])
+        .flatMap(step => step.content || [])
+        .reverse()
+        .find(item => item.type === 'audio' && item.data)?.data;
+      if (result.ok && audio) return audioResponse(audio, response.output_audio?.mime_type || 'audio/wav', ctx.headers, 'Gemini 3.8 Flash TTS');
       errors.push(response.error?.message || `Gemini (${result.status})`);
     }
+    return json({ success: false, error: errors[0] || 'لا يوجد مفتاح Gemini صالح. أضف مفتاح Gemini API ثم أعد المحاولة.' }, 502, ctx.headers);
   }
-  // Free fallback engines may return MP3, but do not silently hide a configured Gemini failure.
+  // The free fallback is Google Translate TTS and does not support Gemini voice or gender selection.
   const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(text.slice(0, 200))}`;
   const fallback = await fetch(fallbackUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }).catch(() => null);
   if (fallback?.ok) {
     const bytes = await fallback.arrayBuffer();
-    if (bytes.byteLength > 100) return new Response(bytes, { status: 200, headers: { ...ctx.headers, 'Content-Type': 'audio/mpeg', 'X-TTS-Engine': 'Neural TTS' } });
+    if (bytes.byteLength > 100) return new Response(bytes, { status: 200, headers: { ...ctx.headers, 'Content-Type': 'audio/mpeg', 'X-TTS-Engine': 'Google Translate TTS' } });
   }
-  return json({ success: false, error: errors[0] || 'تعذر توليد الصوت. أضف مفتاح Gemini API في إعدادات Cloudflare.' }, 502, ctx.headers);
+  return json({ success: false, error: 'تعذر توليد الصوت عبر Google Translate TTS.' }, 502, ctx.headers);
 }
 function audioResponse(base64, mime, headers, engine) {
   const raw = Uint8Array.from(atob(base64.replace(/^data:[^,]+,/, '')), c => c.charCodeAt(0));
