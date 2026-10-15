@@ -542,7 +542,7 @@ window.MickeyStudio = (function () {
     return await response.blob();
   }
 
-  async function generateWithCloudflareFlux(prompt, width, height, seed) {
+  async function generateWithCloudflareFlux(prompt, width, height) {
     const workerUrl = String(STATE.settings.cloudflareWorkerUrl || '').trim().replace(/\/$/, '');
     if (!workerUrl) throw new Error('أضف رابط Cloudflare Worker من الإعدادات أولًا. انشر مجلد cloudflare-worker الموجود في الموقع ثم انسخ رابطه هنا.');
     let parsedUrl;
@@ -554,7 +554,7 @@ window.MickeyStudio = (function () {
     const response = await fetch(`${workerUrl}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, width, height, seed })
+      body: JSON.stringify({ prompt, width, height })
     });
     if (!response.ok) {
       let message = '';
@@ -768,7 +768,7 @@ window.MickeyStudio = (function () {
       // Route 2: Cloudflare FLUX
       if (STATE.image.model === 'cloudflare-flux') {
         statusPill.textContent = 'جاري التوليد عبر FLUX.1-schnell على Cloudflare...';
-        const blob = await generateWithCloudflareFlux(finalPrompt, STATE.image.width, STATE.image.height, seedVal);
+        const blob = await generateWithCloudflareFlux(finalPrompt, STATE.image.width, STATE.image.height);
         const imageUrl = URL.createObjectURL(blob);
         STATE.image.lastGeneratedBlob = blob;
         STATE.image.lastGeneratedUrl = imageUrl;
