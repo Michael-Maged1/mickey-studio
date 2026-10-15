@@ -1,0 +1,2014 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mickey Studio // استوديو الذكاء الاصطناعي</title>
+  <meta name="description" content="منصة Mickey Studio لتوليد الصور وإنتاج الفيديوهات وإزالة الخلفيات وتحسين الصور والتعليق الصوتي.">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#09090B">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<text y=%2226%22 font-size=%2226%22>⚡</text></svg>">
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zinc: {
+              950: '#09090B',
+              900: '#121215',
+              850: '#18181B',
+              800: '#27272A',
+              700: '#3F3F46',
+            }
+          },
+          fontFamily: {
+            sans: ['Readex Pro', 'Cairo', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts & FontAwesome 6 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Minimalist Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+
+<body class="bg-[#09090B] text-zinc-100 h-screen w-screen overflow-hidden flex flex-row font-sans selection:bg-zinc-700 selection:text-white">
+
+  <!-- ===================================================================
+       1. RIGHT SIDEBAR NAVIGATION (240px - Sleek Minimalist Dock)
+       =================================================================== -->
+  <aside class="w-60 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11] p-4 z-40 select-none">
+    
+    <!-- Top Branding & Navigation -->
+    <div class="space-y-6">
+      
+      <!-- Minimalist Logo -->
+      <div class="flex items-center gap-2.5 px-2 py-1 cursor-pointer" onclick="MickeyStudio.switchTab('image-studio')">
+        <div class="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-black font-black text-sm">
+          <span>M</span>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold tracking-tight text-white leading-none">MICKEY STUDIO</h1>
+          <p class="text-[11px] text-zinc-400 mt-0.5">استوديو الذكاء الاصطناعي</p>
+        </div>
+      </div>
+
+      <!-- Navigation Links (5 Clean Studios) -->
+      <nav class="space-y-1">
+        
+        <button onclick="MickeyStudio.switchTab('image-studio')" id="tab-btn-image-studio" class="sidebar-nav-item active">
+          <i class="fa-regular fa-image"></i>
+          <span>توليد الصور</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('video-studio')" id="tab-btn-video-studio" class="sidebar-nav-item">
+          <i class="fa-solid fa-film"></i>
+          <span>استوديو الفيديو</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('photo-lab')" id="tab-btn-photo-lab" class="sidebar-nav-item">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>تعديل وتكبير الصور</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('voice-studio')" id="tab-btn-voice-studio" class="sidebar-nav-item">
+          <i class="fa-solid fa-microphone"></i>
+          <span>التعليق الصوتي</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('podcast-studio')" id="tab-btn-podcast-studio" class="sidebar-nav-item">
+          <i class="fa-solid fa-podcast"></i>
+          <span>استوديو البودكاست</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('audiobook-studio')" id="tab-btn-audiobook-studio" class="sidebar-nav-item">
+          <i class="fa-solid fa-book-open"></i>
+          <span>استوديو الكتب والروايات</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('transcribe-studio')" id="tab-btn-transcribe-studio" class="sidebar-nav-item">
+          <i class="fa-solid fa-file-audio"></i>
+          <span>تفريغ وتحليل الصوت</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('vault-gallery')" id="tab-btn-vault-gallery" class="sidebar-nav-item justify-between">
+          <span class="flex items-center gap-3">
+            <i class="fa-regular fa-folder"></i>
+            <span>معرض أعمالي</span>
+          </span>
+          <span id="vault-count-badge" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">0</span>
+        </button>
+
+        <button onclick="MickeyStudio.switchTab('developer-api')" id="tab-btn-developer-api" class="sidebar-nav-item justify-between group">
+          <span class="flex items-center gap-3">
+            <i class="fa-solid fa-code text-cyan-400 group-hover:text-cyan-300 transition-colors"></i>
+            <span>بوابة المطورين (API)</span>
+          </span>
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">مجاناً</span>
+        </button>
+
+      </nav>
+
+    </div>
+
+    <!-- Bottom Controls & Account -->
+    <div class="pt-4 border-t border-white/5 space-y-2">
+      
+      <div class="flex items-center justify-end px-1">
+        <button id="btn-toggle-sfx" onclick="MickeyStudio.toggleSound()" class="text-zinc-500 hover:text-zinc-200 p-1.5 transition-colors" title="كتم / تشغيل الصوت">
+          <i class="fa-solid fa-volume-high text-xs" id="sfx-icon"></i>
+        </button>
+      </div>
+
+      <!-- Account entry point -->
+      <div id="auth-container" class="space-y-2">
+        <button id="btn-google-login" onclick="MickeyStudio.openAccountModal()" class="w-full btn-secondary text-xs py-2 justify-center">
+          <i class="fa-solid fa-user text-xs text-zinc-400"></i>
+          <span id="auth-btn-text">تسجيل الدخول أو حساب جديد</span>
+        </button>
+
+        <div id="guest-usage-badge" class="px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-white/5 text-[10px] text-zinc-400 flex items-center justify-between">
+          <span class="text-zinc-500">تجربة الضيف:</span>
+          <span id="guest-remaining-text" class="font-mono text-cyan-400 font-bold">5 من 5</span>
+        </div>
+      </div>
+
+    </div>
+
+  </aside>
+
+  <!-- ===================================================================
+       2. MAIN WORKSPACE (Remaining Full Height Canvas)
+       =================================================================== -->
+  <main class="flex-1 h-full overflow-hidden flex flex-col bg-[#09090B]">
+
+    <!-- ===============================================================
+         STUDIO 1: توليد الصور (IMAGE STUDIO)
+         =============================================================== -->
+    <section id="section-image-studio" class="studio-section h-full flex flex-row overflow-hidden">
+      
+      <!-- Left Panel: Controls Column (380px) -->
+      <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+        
+        <div class="space-y-5">
+          
+          <!-- Prompt Textarea -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label for="image-prompt-input" class="text-xs font-semibold text-zinc-300">وصف الصورة</label>
+              
+              <!-- Enhance Prompt Button -->
+              <button type="button" onclick="MickeyStudio.enhancePrompt('image')" id="btn-enhance-image-prompt" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                <span>تحسين تلقائي ✨</span>
+              </button>
+            </div>
+            <textarea id="image-prompt-input" rows="4" placeholder="اكتب وصف المشهد بالتفصيل..." class="w-full p-3 text-xs resize-none text-zinc-100 placeholder:text-zinc-600 focus:ring-0"></textarea>
+          </div>
+
+          <!-- Quick Photographic Styles -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-zinc-400 block">أسلوب التصوير الواقعي</label>
+            <div class="flex flex-wrap gap-1.5" id="image-style-tags">
+              <button type="button" onclick="MickeyStudio.selectStyle(this, 'hyper-real')" class="pill-option active">واقعي فائق (RAW)</button>
+              <button type="button" onclick="MickeyStudio.selectStyle(this, 'portrait')" class="pill-option">بورتريه 85mm</button>
+              <button type="button" onclick="MickeyStudio.selectStyle(this, 'cinematic')" class="pill-option">لقطة سينمائية</button>
+              <button type="button" onclick="MickeyStudio.selectStyle(this, 'product')" class="pill-option">تصوير منتجات</button>
+              <button type="button" onclick="MickeyStudio.selectStyle(this, 'landscape')" class="pill-option">طبيعة خلابة</button>
+            </div>
+          </div>
+
+          <!-- Model Dropdown -->
+          <div class="space-y-2">
+            <label for="image-model-select" class="text-xs font-medium text-zinc-400 block">محرك التوليد</label>
+            <select id="image-model-select" onchange="MickeyStudio.updateModelTag(this.value)" class="w-full p-2.5 text-xs">
+              <option value="flux" selected>🌟 FLUX.1 Photorealistic (فائق الواقعية — مجاني وسريع)</option>
+              <option value="nano-banana">💎 Google Imagen 3 — دقة 2K فائقة (Gemini API)</option>
+              <option value="cloudflare-flux">☁️ FLUX.1-schnell (Cloudflare AI)</option>
+              <option value="zimage-hf">🚀 Z-Image-Turbo (Hugging Face — سريع وتجريبي)</option>
+            </select>
+            <label class="flex items-start gap-2 text-[10px] leading-relaxed text-zinc-300 cursor-pointer pt-1">
+              <input id="auto-prompt-boost" type="checkbox" checked class="mt-0.5 accent-cyan-400">
+              <span>تحسين وترجمة ذكية للواقعية الفائقة (إضافة تفاصيل العدسة، الإضاءة، وخامات الجلد تلقائياً)</span>
+            </label>
+          </div>
+
+          <!-- Aspect Ratio Toggle -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-zinc-400 block">الأبعاد</label>
+            <div class="grid grid-cols-3 gap-1.5" id="image-ratio-selector">
+              <button type="button" onclick="MickeyStudio.selectRatio(this, 1024, 1024)" class="ratio-btn pill-option active py-2 text-center flex-col">
+                <span class="font-mono text-xs">1:1</span>
+                <span class="text-[10px] text-zinc-400">مربع</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.selectRatio(this, 1280, 720)" class="ratio-btn pill-option py-2 text-center flex-col">
+                <span class="font-mono text-xs">16:9</span>
+                <span class="text-[10px] text-zinc-400">عرضي</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.selectRatio(this, 720, 1280)" class="ratio-btn pill-option py-2 text-center flex-col">
+                <span class="font-mono text-xs">9:16</span>
+                <span class="text-[10px] text-zinc-400">طولي</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Seed & Variations (Compact) -->
+          <div class="pt-2 border-t border-white/5 space-y-3 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-400">العدد:</span>
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="MickeyStudio.setBatchCount(this, 1)" class="batch-count-btn pill-option active px-2.5 py-1">1</button>
+                <button type="button" onclick="MickeyStudio.setBatchCount(this, 2)" class="batch-count-btn pill-option px-2.5 py-1">2</button>
+                <button type="button" onclick="MickeyStudio.setBatchCount(this, 4)" class="batch-count-btn pill-option px-2.5 py-1">4</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input type="number" id="image-seed-input" placeholder="Seed (عشوائي)" class="w-full p-2 text-xs font-mono">
+              <button type="button" onclick="MickeyStudio.randomizeSeed()" class="btn-secondary px-3 py-2 text-xs" title="رقم عشوائي">
+                <i class="fa-solid fa-dice text-zinc-400"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Generate Button -->
+        <button type="button" id="btn-generate-image" onclick="MickeyStudio.generateImage()" class="w-full btn-primary py-3 font-semibold text-sm">
+          <span>توليد الصورة</span>
+          <i class="fa-solid fa-arrow-left text-xs"></i>
+        </button>
+
+      </div>
+
+      <!-- Right Area: Preview Canvas (Remaining space) -->
+      <div class="flex-1 h-full flex flex-col items-center justify-center p-8 relative overflow-hidden bg-[#09090B]">
+        
+        <!-- Status Pill (Minimal) -->
+        <div class="absolute top-4 right-4 z-20">
+          <span id="image-status-pill" class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400">جاهز للأمر</span>
+        </div>
+
+        <!-- Center Viewport -->
+        <div id="image-display-viewport" class="relative w-full h-full flex items-center justify-center">
+          
+          <!-- Minimalist Scanner Loading Indicator -->
+          <div id="image-laser-scanner" class="minimal-scanner hidden">
+            <div class="scanner-beam"></div>
+            <div class="text-center space-y-2 z-10">
+              <div class="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+              <p class="text-xs text-zinc-300 font-medium">جاري معالجة وتوليد الصورة...</p>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div id="image-empty-state" class="text-center space-y-2 max-w-xs text-zinc-500">
+            <i class="fa-regular fa-image text-4xl stroke-[1] text-zinc-600 block mb-3"></i>
+            <h3 class="text-sm font-semibold text-zinc-300">لا توجد صورة معروضة</h3>
+            <p class="text-xs leading-relaxed">اكتب وصف المشهد في القائمة الجانبية ثم اضغط توليد.</p>
+          </div>
+
+          <!-- Result Grid Container -->
+          <div id="image-result-grid" class="w-full h-full flex items-center justify-center hidden"></div>
+
+        </div>
+
+        <!-- Floating Action Dock (Shows when image exists) -->
+        <div id="image-actions-bar" class="absolute bottom-6 z-30 floating-action-dock opacity-0 pointer-events-none">
+          <button type="button" onclick="MickeyStudio.downloadCurrentImage()" class="btn-primary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-download text-[11px]"></i>
+            <span>تحميل PNG</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.saveCurrentToVault('image')" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-regular fa-bookmark text-[11px]"></i>
+            <span>حفظ</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.showUsedPromptModal()" class="btn-secondary text-xs py-1.5 px-3" title="مشاهدة البرومبت الواقعي المستخدم">
+            <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
+            <span>البرومبت المُحسّن</span>
+          </button>
+          <div class="w-[1px] h-4 bg-white/10 mx-1"></div>
+          <button type="button" onclick="MickeyStudio.transferToVideoStudio()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-film text-[11px]"></i>
+            <span>تحويل لفيديو</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.transferToPhotoLab()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
+            <span>تحسين الصور / تفريغ</span>
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         STUDIO 2: استوديو الفيديو (VIDEO STUDIO)
+         =============================================================== -->
+    <section id="section-video-studio" class="studio-section h-full flex flex-row overflow-hidden hidden">
+      
+      <!-- Left Panel: Controls Column (380px) -->
+      <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+        
+        <div class="space-y-5">
+          
+          <!-- Source Frame Dropzone -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold text-zinc-300">الصورة المصدر</label>
+              <button type="button" onclick="MickeyStudio.useLastGeneratedImageForVideo()" id="btn-use-last-image-video" class="text-xs text-zinc-400 hover:text-white transition-colors">
+                استخدام آخر صورة
+              </button>
+            </div>
+
+            <div id="video-image-dropzone" onclick="document.getElementById('video-file-input').click()" class="border border-dashed border-white/10 hover:border-white/30 rounded-xl p-4 text-center cursor-pointer transition-colors bg-white/[0.02]">
+              <input type="file" id="video-file-input" accept="image/*" class="hidden" onchange="MickeyStudio.handleVideoImageUpload(this)">
+              <div id="video-source-preview" class="hidden">
+                <img id="video-source-img" src="" alt="المصدر" class="max-h-32 mx-auto rounded-lg object-contain">
+                <p class="text-[11px] text-zinc-400 mt-2 font-mono">تم تحميل الصورة بنجاح</p>
+              </div>
+              <div id="video-source-empty" class="space-y-1 py-3 text-zinc-500">
+                <i class="fa-solid fa-arrow-up-from-bracket text-lg"></i>
+                <p class="text-xs text-zinc-300">اختر صورة أو اسحبها هنا</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera Motion Options -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-zinc-400 block">حركة الكاميرا</label>
+            <div class="grid grid-cols-2 gap-1.5" id="camera-motion-selector">
+              <button type="button" onclick="MickeyStudio.selectCameraMotion(this, 'zoom-in')" class="cam-motion-btn pill-option active py-2 text-right justify-start">
+                <i class="fa-solid fa-magnifying-glass-plus text-xs"></i>
+                <span>اقتراب</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.selectCameraMotion(this, 'zoom-out')" class="cam-motion-btn pill-option py-2 text-right justify-start">
+                <i class="fa-solid fa-magnifying-glass-minus text-xs"></i>
+                <span>ابتعاد</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.selectCameraMotion(this, 'pan-horizontal')" class="cam-motion-btn pill-option py-2 text-right justify-start">
+                <i class="fa-solid fa-arrows-left-right text-xs"></i>
+                <span>مسح أفقي</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.selectCameraMotion(this, 'shake-3d')" class="cam-motion-btn pill-option py-2 text-right justify-start">
+                <i class="fa-solid fa-hand text-xs"></i>
+                <span>اهتزاز 3D</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Atmosphere FX Dropdown -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-zinc-400 block">المؤثرات الجوية</label>
+            <select id="video-particles-select" class="w-full p-2.5 text-xs">
+              <option value="neon-sparks" selected>شرارات متطايرة</option>
+              <option value="cyber-rain">مطر رقمي</option>
+              <option value="cosmic-dust">غبار كوني</option>
+              <option value="none">بدون جزيئات (حركة نقية)</option>
+            </select>
+          </div>
+
+          <!-- Audio Soundtrack Dropdown -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-medium text-zinc-400">الصوت المرافق</label>
+              <span id="video-attached-audio-badge" class="text-[10px] text-zinc-400 hidden">صوت مدمج</span>
+            </div>
+            <select id="video-soundtrack-select" class="w-full p-2.5 text-xs">
+              <option value="none">بدون صوت</option>
+              <option value="cyber-ambient">موسيقى محيطية</option>
+              <option value="epic-space">موسيقى ملحمية</option>
+              <option value="voiceover-custom" id="option-custom-voiceover" disabled>التعليق الصوتي المولد</option>
+            </select>
+          </div>
+
+          <!-- Video Duration -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-zinc-400 block">مدة الفيديو</label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="MickeyStudio.setVideoDuration(this, 3)" class="video-dur-btn pill-option active flex-1">3 ثوانٍ</button>
+              <button type="button" onclick="MickeyStudio.setVideoDuration(this, 5)" class="video-dur-btn pill-option flex-1">5 ثوانٍ</button>
+              <button type="button" onclick="MickeyStudio.setVideoDuration(this, 8)" class="video-dur-btn pill-option flex-1">8 ثوانٍ</button>
+            </div>
+          </div>
+
+          <!-- Engine Switcher (Minimal) -->
+          <div class="flex items-center gap-1.5 pt-2 border-t border-white/5">
+            <button type="button" onclick="MickeyStudio.setVideoEngine('canvas')" id="btn-engine-canvas" class="pill-option active flex-1 text-center justify-center text-[11px]">محرك فوري</button>
+            <button type="button" onclick="MickeyStudio.setVideoEngine('gradio')" id="btn-engine-gradio" class="pill-option flex-1 text-center justify-center text-[11px]">ZeroGPU سحابي</button>
+          </div>
+
+        </div>
+
+        <!-- Render Button -->
+        <button type="button" id="btn-render-video" onclick="MickeyStudio.renderVideo()" class="w-full btn-primary py-3 font-semibold text-sm">
+          <span>إنتاج الفيديو</span>
+          <i class="fa-solid fa-play text-xs"></i>
+        </button>
+
+      </div>
+
+      <!-- Right Area: Preview Canvas -->
+      <div class="flex-1 h-full flex flex-col items-center justify-center p-8 relative overflow-hidden bg-[#09090B]">
+        
+        <div class="absolute top-4 right-4 z-20 flex items-center gap-2">
+          <span id="video-render-progress" class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400">جاهز للإنتاج</span>
+        </div>
+
+        <div id="video-preview-wrapper" class="relative w-full h-full flex items-center justify-center">
+          
+          <div id="video-laser-scanner" class="minimal-scanner hidden">
+            <div class="scanner-beam"></div>
+            <div class="text-center space-y-2 z-10">
+              <div class="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+              <p class="text-xs text-zinc-300 font-medium">جاري تقديم الإطارات وتسجيل الفيديو...</p>
+              <p id="video-render-counter" class="text-[11px] text-zinc-500 font-mono">0%</p>
+            </div>
+          </div>
+
+          <div id="video-empty-state" class="text-center space-y-2 max-w-xs text-zinc-500">
+            <i class="fa-solid fa-film text-4xl text-zinc-600 block mb-3"></i>
+            <h3 class="text-sm font-semibold text-zinc-300">مشغل الفيديو</h3>
+            <p class="text-xs leading-relaxed">اختر صورة وحدد حركة الكاميرا ثم اضغط إنتاج الفيديو.</p>
+          </div>
+
+          <canvas id="motion-render-canvas" class="hidden max-h-[500px] w-auto mx-auto rounded-xl shadow-2xl"></canvas>
+          <video id="final-rendered-video" controls class="hidden max-h-[500px] w-auto mx-auto rounded-xl shadow-2xl" loop playsinline></video>
+
+        </div>
+
+        <!-- Floating Dock -->
+        <div id="video-actions-bar" class="absolute bottom-6 z-30 floating-action-dock opacity-0 pointer-events-none">
+          <button type="button" onclick="MickeyStudio.downloadCurrentVideo()" class="btn-primary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-download text-[11px]"></i>
+            <span>تحميل الفيديو</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.saveCurrentToVault('video')" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-regular fa-bookmark text-[11px]"></i>
+            <span>حفظ</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.toggleVideoPlayback()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-rotate-right text-[11px]"></i>
+            <span>إعادة التشغيل</span>
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         STUDIO 3: تعديل وتكبير الصور (PHOTO LAB)
+         =============================================================== -->
+    <section id="section-photo-lab" class="studio-section h-full flex flex-col overflow-hidden hidden">
+      
+      <!-- Top Sub-Nav (Minimalist Switcher) -->
+      <div class="h-12 border-b border-white/5 flex items-center justify-between px-6 bg-[#0E0E11]/40">
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="MickeyStudio.setPhotoLabTab('bg-remover')" id="btn-subtab-bg-remover" class="pill-option active text-xs">
+            إزالة الخلفية
+          </button>
+          <button type="button" onclick="MickeyStudio.setPhotoLabTab('upscaler')" id="btn-subtab-upscaler" class="pill-option text-xs">
+            تحسين الصور بالذكاء الاصطناعي
+          </button>
+        </div>
+      </div>
+
+      <!-- Content Area -->
+      <div class="flex-1 flex flex-row overflow-hidden">
+        
+        <!-- View A: Background Remover -->
+        <div id="photolab-view-bg-remover" class="w-full h-full flex flex-row overflow-hidden">
+          
+          <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+            <div class="space-y-5">
+              
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <label class="text-xs font-semibold text-zinc-300">الصورة المراد تفريغها</label>
+                  <button type="button" onclick="MickeyStudio.useLastImageForPhotoLab()" class="text-xs text-zinc-400 hover:text-white transition-colors">
+                    استخدام آخر صورة
+                  </button>
+                </div>
+                <div id="bg-dropzone" onclick="document.getElementById('bg-file-input').click()" class="border border-dashed border-white/10 hover:border-white/30 rounded-xl p-4 text-center cursor-pointer bg-white/[0.02]">
+                  <input type="file" id="bg-file-input" accept="image/*" class="hidden" onchange="MickeyStudio.handleBgImageUpload(this)">
+                  <div id="bg-upload-preview" class="hidden">
+                    <img id="bg-upload-img" src="" alt="المعاينة" class="max-h-32 mx-auto rounded-lg object-contain">
+                    <p class="text-[11px] text-zinc-400 mt-2 font-mono">تم اختيار الصورة</p>
+                  </div>
+                  <div id="bg-upload-empty" class="space-y-1 py-3 text-zinc-500">
+                    <i class="fa-solid fa-arrow-up-from-bracket text-lg"></i>
+                    <p class="text-xs text-zinc-300">اختر صورة أو اسحبها هنا</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Replacement Background Choice -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-400 block">نمط الخلفية</label>
+                <div class="grid grid-cols-3 gap-1.5" id="bg-replace-options">
+                  <button type="button" onclick="MickeyStudio.setBgMode(this, 'transparent')" class="bg-mode-btn pill-option active py-2 text-center justify-center">شفافة PNG</button>
+                  <button type="button" onclick="MickeyStudio.setBgMode(this, 'cyberpunk')" class="bg-mode-btn pill-option py-2 text-center justify-center">سايبربانك</button>
+                  <button type="button" onclick="MickeyStudio.setBgMode(this, 'neon-solid')" class="bg-mode-btn pill-option py-2 text-center justify-center">لون مصمت</button>
+                </div>
+                <p class="text-[11px] leading-relaxed text-zinc-500">تُرسل الصورة إلى خدمة BiRefNet عامة على Hugging Face لإزالة الخلفية.</p>
+              </div>
+
+            </div>
+
+            <button type="button" id="btn-process-bg" onclick="MickeyStudio.removeBackground()" class="w-full btn-primary py-3 font-semibold text-sm">
+              <span>إزالة الخلفية</span>
+              <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+            </button>
+          </div>
+
+          <div class="flex-1 h-full flex flex-col items-center justify-center p-8 relative overflow-hidden bg-[#09090B]">
+            <div class="absolute top-4 right-4 z-20">
+              <span id="bg-process-status" class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400">جاهز للتفريغ</span>
+            </div>
+
+            <div id="bg-viewport" class="relative w-full h-full flex items-center justify-center rounded-xl transparent-checkered-bg overflow-hidden">
+              <div id="bg-laser-scanner" class="minimal-scanner hidden">
+                <div class="scanner-beam"></div>
+                <div class="text-center space-y-2 z-10">
+                  <div class="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+                  <p class="text-xs text-zinc-300 font-medium">جاري فصل العناصر وعزل الخلفية...</p>
+                </div>
+              </div>
+
+              <div id="bg-result-empty" class="text-center space-y-2 max-w-xs text-zinc-500 bg-[#09090B]/80 p-6 rounded-xl border border-white/5">
+                <i class="fa-solid fa-shapes text-3xl text-zinc-600 block mb-2"></i>
+                <h3 class="text-sm font-semibold text-zinc-300">معاينة الصورة المفرغة</h3>
+                <p class="text-xs">اختر صورة واضغط إزالة الخلفية لتحميلها بصيغة PNG شفافة.</p>
+              </div>
+
+              <canvas id="bg-canvas-result" class="hidden max-h-[480px] w-auto mx-auto object-contain"></canvas>
+            </div>
+
+            <div id="bg-actions-bar" class="absolute bottom-6 z-30 floating-action-dock opacity-0 pointer-events-none">
+              <button type="button" onclick="MickeyStudio.downloadBgResult()" class="btn-primary text-xs py-1.5 px-3">
+                <i class="fa-solid fa-download text-[11px]"></i>
+                <span>تحميل PNG شفافة</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.saveBgResultToVault()" class="btn-secondary text-xs py-1.5 px-3">
+                <i class="fa-regular fa-bookmark text-[11px]"></i>
+                <span>حفظ</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- View B: AI Upscaler -->
+        <div id="photolab-view-upscaler" class="w-full h-full flex flex-row overflow-hidden hidden">
+          
+          <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+            <div class="space-y-5">
+              
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <label class="text-xs font-semibold text-zinc-300">الصورة المراد تكبيرها</label>
+                  <button type="button" onclick="MickeyStudio.useLastImageForPhotoLab()" class="text-xs text-zinc-400 hover:text-white transition-colors">
+                    استخدام آخر صورة
+                  </button>
+                </div>
+                <div id="upscale-dropzone" onclick="document.getElementById('upscale-file-input').click()" class="border border-dashed border-white/10 hover:border-white/30 rounded-xl p-4 text-center cursor-pointer bg-white/[0.02]">
+                  <input type="file" id="upscale-file-input" accept="image/*" class="hidden" onchange="MickeyStudio.handleUpscaleImageUpload(this)">
+                  <div id="upscale-upload-preview" class="hidden">
+                    <img id="upscale-upload-img" src="" alt="المعاينة" class="max-h-32 mx-auto rounded-lg object-contain">
+                    <p class="text-[11px] text-zinc-400 mt-2 font-mono">تم اختيار الصورة</p>
+                  </div>
+                  <div id="upscale-upload-empty" class="space-y-1 py-3 text-zinc-500">
+                    <i class="fa-solid fa-arrow-up-from-bracket text-lg"></i>
+                    <p class="text-xs text-zinc-300">اختر صورة أو اسحبها هنا</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Multipliers -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-400 block">معامل التكبير</label>
+                <div class="grid grid-cols-2 gap-1.5" id="upscale-multipliers">
+                  <button type="button" onclick="MickeyStudio.setUpscaleMultiplier(this, 2)" class="upscale-mul-btn pill-option active py-2 text-center justify-center font-mono">2X</button>
+                  <button type="button" onclick="MickeyStudio.setUpscaleMultiplier(this, 4)" class="upscale-mul-btn pill-option py-2 text-center justify-center font-mono">4X</button>
+                </div>
+              </div>
+
+              <!-- AI upscaler model -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-400 block">نوع الصورة</label>
+                <select id="upscale-content-mode" class="w-full p-2.5 text-xs">
+                  <option value="RealESRGAN_x4plus" selected>صور واقعية</option>
+                  <option value="RealESRGAN_x4plus_anime_6B">أنمي ورسوم</option>
+                </select>
+                <p class="text-[11px] leading-relaxed text-zinc-500">تُعالج الصور عبر خدمة Hugging Face عامة؛ قد تنتظر في الطابور أو تتوقف مؤقتًا.</p>
+              </div>
+
+            </div>
+
+            <button type="button" id="btn-process-upscale" onclick="MickeyStudio.processUpscale()" class="w-full btn-primary py-3 font-semibold text-sm">
+              <span>تكبير الجودة فوراً</span>
+              <i class="fa-solid fa-maximize text-xs"></i>
+            </button>
+          </div>
+
+          <div class="flex-1 h-full flex flex-col items-center justify-center p-8 relative overflow-hidden bg-[#09090B]">
+            <div class="absolute top-4 right-4 z-20">
+              <span id="upscale-process-status" class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400">جاهز للمقارنة</span>
+            </div>
+
+            <div id="upscale-slider-viewport" class="relative w-full h-full flex items-center justify-center">
+              <div id="upscale-laser-scanner" class="minimal-scanner hidden">
+                <div class="scanner-beam"></div>
+                <div class="text-center space-y-2 z-10">
+                  <div class="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+                  <p class="text-xs text-zinc-300 font-medium">جاري تحسين الصورة بنموذج الذكاء الاصطناعي...</p>
+                </div>
+              </div>
+
+              <div id="upscale-empty-state" class="text-center space-y-2 max-w-xs text-zinc-500">
+                <i class="fa-solid fa-expand text-3xl text-zinc-600 block mb-2"></i>
+                <h3 class="text-sm font-semibold text-zinc-300">مقارنة الجودة (قبل / بعد)</h3>
+                <p class="text-xs">اختر صورة، ثم قارن النتيجة الأصلية بالنسخة المحسّنة.</p>
+              </div>
+
+              <div id="active-compare-container" class="compare-container hidden">
+                <img id="img-compare-original" class="compare-image-original" src="" alt="قبل">
+                <div id="wrapper-compare-upscaled" class="compare-upscaled-wrapper">
+              <img id="img-compare-upscaled" class="compare-image-upscaled" src="" alt="بعد التحسين">
+                </div>
+                <div id="handle-compare-slider" class="compare-slider-handle">
+                  <i class="fa-solid fa-arrows-left-right text-[10px]"></i>
+                </div>
+                <span class="absolute bottom-3 right-3 z-10 text-[10px] px-2 py-0.5 rounded bg-black/70 text-zinc-400">قبل</span>
+                <span class="absolute bottom-3 left-3 z-10 text-[10px] px-2 py-0.5 rounded bg-black/70 text-white font-semibold">بعد التحسين</span>
+              </div>
+            </div>
+
+            <div id="upscale-actions-bar" class="absolute bottom-6 z-30 floating-action-dock opacity-0 pointer-events-none">
+              <button type="button" onclick="MickeyStudio.downloadUpscaledResult()" class="btn-primary text-xs py-1.5 px-3">
+                <i class="fa-solid fa-download text-[11px]"></i>
+                <span>تحميل الصورة المحسّنة</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.saveUpscaledToVault()" class="btn-secondary text-xs py-1.5 px-3">
+                <i class="fa-regular fa-bookmark text-[11px]"></i>
+                <span>حفظ</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         STUDIO 4: التعليق الصوتي (VOICE STUDIO)
+         =============================================================== -->
+    <section id="section-voice-studio" class="studio-section h-full flex flex-row overflow-hidden hidden">
+      
+      <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+        <div class="space-y-5">
+          
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label for="voice-text-input" class="text-xs font-semibold text-zinc-300">النص</label>
+              <div class="flex items-center gap-3"><button type="button" onclick="MickeyStudio.generateAiScript()" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors"><i class="fa-solid fa-pen-nib text-[10px]"></i><span>نص مقترح</span></button><button type="button" onclick="MickeyStudio.refineVoiceScript()" id="btn-refine-voice-script" class="text-xs text-cyan-300 hover:text-white flex items-center gap-1 transition-colors"><i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i><span>تحسين النص</span></button></div>
+            </div>
+            <textarea id="voice-text-input" rows="5" placeholder="اكتب النص المراد تحويله إلى صوت..." class="w-full p-3 text-xs resize-none text-zinc-100 placeholder:text-zinc-600 focus:ring-0"></textarea>
+          </div>
+
+          <!-- محرك التوليد الصوتي (Gemini 3.8 Flash TTS الافتراضي + Edge Neural TTS) -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label for="voice-engine-select" class="text-xs font-semibold text-zinc-300">محرك التوليد الصوتي</label>
+              <span id="voice-engine-badge" class="text-[10px] text-cyan-400 font-mono">WAV استوديو سينمائي (افتراضي)</span>
+            </div>
+            <select id="voice-engine-select" onchange="MickeyStudio.onVoiceEngineChanged()" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100 font-semibold focus:outline-none focus:border-cyan-500">
+              <option value="gemini" selected>✨ Gemini 3.8 Flash TTS (استوديو سينمائي WAV · الافتراضي)</option>
+              <option value="neural">⚡ Edge Neural TTS (مجاني وسريع بلا حدود · v2.7.2)</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-2"><label for="voice-dialect-select" class="text-xs font-medium text-zinc-400 block">اللهجة</label><select id="voice-dialect-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="egyptian" selected>المصرية</option><option value="saudi">السعودية</option><option value="levantine">الشامية</option><option value="iraqi">العراقية</option><option value="algerian">الجزائرية</option><option value="moroccan">المغربية</option><option value="tunisian">التونسية</option><option value="gulf">الخليجية</option><option value="fusha">الفصحى</option></select></div>
+            <div class="space-y-2"><label for="voice-gender-select" class="text-xs font-medium text-zinc-400 block">نوع الصوت</label><select id="voice-gender-select" onchange="MickeyStudio.onVoiceGenderChanged()" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="male" selected>رجالي</option><option value="female">نسائي</option></select></div>
+            <div class="space-y-2"><label for="voice-age-select" class="text-xs font-medium text-zinc-400 block">الطابع العمري</label><select id="voice-age-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="adult" selected>بالغ</option><option value="senior">كبير السن</option><option value="cartoon">شخصية كرتونية</option></select></div>
+          </div>
+          <div class="space-y-2"><label for="voice-performance-select" class="text-xs font-medium text-zinc-400 block">الشخصية</label><select id="voice-performance-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="yusuf" selected>يوسف · وثائقي قوي</option><option value="malik">مالك · إعلاني سريع</option><option value="rami">رامي · بودكاست هادئ</option><option value="saif">سيف · درامي عاطفي</option><option value="zaid">زيد · راوٍ قصصي</option><option value="neutral">متوازن</option></select></div>
+          <div class="grid grid-cols-2 gap-3"><div class="space-y-2"><label for="voice-warmth-select" class="text-xs font-medium text-zinc-400 block">دفء الصوت</label><select id="voice-warmth-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="cool">بارد ورزين</option><option value="balanced" selected>متوازن</option><option value="warm">دافئ وإنساني</option></select></div><div class="space-y-2"><label for="voice-emotion-select" class="text-xs font-medium text-zinc-400 block">الانفعال</label><select id="voice-emotion-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="calm">هادئ</option><option value="medium" selected>متوسط</option><option value="strong">قوي</option></select></div><div class="space-y-2 col-span-2"><label for="voice-intensity-select" class="text-xs font-medium text-zinc-400 block">التأثير الدرامي</label><select id="voice-intensity-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="light">خفيف</option><option value="medium" selected>متوسط</option><option value="strong">قوي</option></select></div></div>
+          <p id="voice-engine-desc-hint" class="text-[10px] leading-relaxed text-zinc-500">يستخدم Gemini 3.8 Flash TTS لتوليد WAV بنبرة ولهجة وأداء موجّه. يمكنك أيضاً التبديل إلى Edge Neural TTS المجاني بلا حدود.</p>
+
+          <!-- Rate & Pitch Controls -->
+          <div class="space-y-3 pt-2 border-t border-white/5">
+            <div>
+              <div class="flex items-center justify-between text-xs text-zinc-400 mb-1">
+                <span>سرعة القراءة</span>
+                <span id="label-voice-rate" class="font-mono text-zinc-200">1.0x</span>
+              </div>
+              <input type="range" id="voice-rate-slider" min="0.7" max="1.3" step="0.05" value="1.0" oninput="document.getElementById('label-voice-rate').textContent = Number(this.value).toFixed(2).replace(/0$/, '') + 'x'" class="w-full accent-white">
+            </div>
+            <div>
+              <div class="flex items-center justify-between text-xs text-zinc-400 mb-1">
+                <span>نبرة الصوت</span>
+                <span id="label-voice-pitch" class="font-mono text-zinc-200">1.0</span>
+              </div>
+              <input type="range" id="voice-pitch-slider" min="0.7" max="1.3" step="0.05" value="1.0" oninput="document.getElementById('label-voice-pitch').textContent = Number(this.value).toFixed(2).replace(/0$/, '')" class="w-full accent-white">
+            </div>
+          </div>
+
+        </div>
+
+        <button type="button" id="btn-generate-voice" onclick="MickeyStudio.generateVoiceover()" class="w-full btn-primary py-3 font-semibold text-sm">
+          <span>توليد التعليق الصوتي</span>
+          <i class="fa-solid fa-microphone text-xs"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 h-full flex flex-col items-center justify-start p-8 relative overflow-y-auto bg-[#09090B] space-y-8 scrollbar-thin">
+        <div class="absolute top-4 right-4 z-20">
+          <span id="voice-process-status" class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400">جاهز للتسجيل</span>
+        </div>
+
+        <div id="voice-player-viewport" class="relative w-full max-w-2xl flex flex-col items-center justify-center space-y-6 pt-2">
+          
+          <!-- Laser Scanner / Generation Loader -->
+          <div id="voice-laser-scanner" class="minimal-scanner hidden">
+            <div class="scanner-beam"></div>
+            <div class="text-center space-y-3 z-10 p-6 bg-zinc-950/80 rounded-2xl border border-cyan-500/30 backdrop-blur-md">
+              <div class="w-10 h-10 border-2 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin mx-auto"></div>
+              <div class="space-y-1">
+                <p class="text-xs text-cyan-300 font-semibold">جاري هندسة النبرات الصوتية...</p>
+                <p class="text-[11px] text-zinc-500 font-mono">Neural Speech Synthesis Engine</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div id="voice-empty-state" class="text-center space-y-3 max-w-sm text-zinc-500 p-8 rounded-2xl border border-dashed border-white/5 bg-zinc-900/20">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-zinc-900/80 border border-white/10 flex items-center justify-center text-zinc-400 text-2xl shadow-inner">
+              <i class="fa-solid fa-microphone-lines"></i>
+            </div>
+            <h3 class="text-sm font-semibold text-zinc-200">استوديو التعليق الصوتي الذكي</h3>
+            <p class="text-xs leading-relaxed text-zinc-400">اكتب النص في اللوحة الجانبية واضغط <span class="text-white font-medium">"توليد التعليق الصوتي"</span> للاستماع وتنزيل ملف WAV.</p>
+          </div>
+
+          <!-- Active Futuristic Audio Player Card -->
+          <div id="voice-active-controls" class="w-full max-w-2xl bg-[#242629] text-white rounded-[26px] p-5 shadow-2xl space-y-4 border border-white/5 hidden transition-all duration-300">
+            
+            <!-- Top Audio Track Row: Play Button + Sine Envelope Waveform + Duration -->
+            <div class="flex items-center gap-3.5">
+              
+              <button type="button" id="btn-custom-play" onclick="MickeyStudio.toggleCustomPlay()" class="w-12 h-12 min-w-[48px] min-h-[48px] rounded-full border-2 border-[#5da7eb] p-0.5 flex items-center justify-center hover:scale-105 active:scale-95 transition-all focus:outline-none" title="تشغيل / إيقاف">
+                <div class="w-full h-full rounded-full bg-[#d6dbdf] flex items-center justify-center text-zinc-900 shadow-md">
+                  <i id="icon-custom-play" class="fa-solid fa-play text-sm ml-0.5"></i>
+                </div>
+              </button>
+
+              <div class="flex-1 h-14 relative cursor-pointer flex items-center" id="waveform-container" title="اضغط للتخطي إلى أي موضع في الصوت">
+                <canvas id="audio-spectrum-canvas" width="600" height="56" class="w-full h-full block"></canvas>
+              </div>
+
+              <div class="text-xs font-mono font-medium text-zinc-200 tracking-wide select-none whitespace-nowrap pl-1">
+                <span id="audio-time-current">0:00</span> <span class="text-zinc-500">/</span> <span id="audio-time-total">0:00</span>
+              </div>
+
+            </div>
+
+            <!-- Bottom Controls Row -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-white/5">
+              
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="MickeyStudio.toggleMute()" id="btn-volume-icon" class="text-zinc-400 hover:text-white transition-colors" title="كتم / تشغيل الصوت">
+                  <i id="volume-icon" class="fa-solid fa-volume-high text-xs"></i>
+                </button>
+                <input type="range" id="audio-volume-slider" min="0" max="1" step="0.05" value="1" oninput="MickeyStudio.setVolume(this.value)" class="w-24 h-1.5 bg-zinc-700 accent-[#5da7eb] rounded-lg cursor-pointer" title="مستوى الصوت">
+              </div>
+
+              <div class="flex items-center gap-2">
+                
+                <button type="button" id="btn-audio-speed" onclick="MickeyStudio.cycleAudioSpeed()" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs font-mono font-semibold text-zinc-200 border border-white/5 transition-colors" title="تغيير سرعة التشغيل">
+                  1.0x
+                </button>
+
+                <button type="button" onclick="MickeyStudio.skipAudio(-10)" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs text-zinc-300 border border-white/5 flex items-center gap-1 transition-colors" title="ترجيع 10 ثواني">
+                  <i class="fa-solid fa-rotate-left text-[11px]"></i>
+                  <span class="font-mono text-[11px]">-10ث</span>
+                </button>
+
+                <button type="button" onclick="MickeyStudio.skipAudio(10)" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs text-zinc-300 border border-white/5 flex items-center gap-1 transition-colors" title="تقديم 10 ثواني">
+                  <span class="font-mono text-[11px]">+10ث</span>
+                  <i class="fa-solid fa-rotate-right text-[11px]"></i>
+                </button>
+
+                <button type="button" id="btn-audio-loop" onclick="MickeyStudio.toggleAudioLoop()" class="p-1.5 rounded-full text-zinc-400 hover:text-zinc-200 transition-colors" title="تكرار المقطع">
+                  <i class="fa-solid fa-repeat text-xs"></i>
+                </button>
+
+                <button type="button" id="btn-player-download" onclick="MickeyStudio.downloadCurrentAudio()" class="py-1.5 px-4 rounded-full bg-[#5da7eb] hover:bg-[#4a97dd] text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-sky-500/20 transition-all ml-1">
+                  <i class="fa-solid fa-arrow-down-to-line text-xs"></i>
+                  <span>تنزيل WAV</span>
+                </button>
+
+              </div>
+
+            </div>
+
+            <!-- Hidden native audio element -->
+            <audio id="final-rendered-audio" preload="auto" referrerpolicy="no-referrer" class="hidden"></audio>
+          </div>
+
+        </div>
+
+        <!-- ===============================================================
+             معرض النخب الصوتية (SAVIO STUDIO STYLE VOICE GALLERY)
+             =============================================================== -->
+        <div class="w-full max-w-4xl space-y-3 pt-6 border-t border-white/5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-users-viewfinder text-cyan-400"></i>
+                <span>معرض النخب الصوتية</span>
+              </h3>
+              <p class="text-[11px] text-zinc-400 mt-0.5">نماذج أصوات ذكاء اصطناعي واقعية · اضغط للاختيار أو الاستماع للمعاينة</p>
+            </div>
+            <div class="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900 border border-white/10" id="voice-gallery-filter">
+              <button type="button" onclick="MickeyStudio.filterVoiceGallery('all')" id="btn-filter-all" class="px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition-colors">الكل</button>
+              <button type="button" onclick="MickeyStudio.filterVoiceGallery('male')" id="btn-filter-male" class="px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition-colors">ذكر</button>
+              <button type="button" onclick="MickeyStudio.filterVoiceGallery('female')" id="btn-filter-female" class="px-3 py-1 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors">أنثى</button>
+            </div>
+          </div>
+
+          <!-- Dynamic Character Cards Container -->
+          <div id="voice-gallery-cards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- ===============================================================
+             STUDIOS QUICK LAUNCHER (استوديوهات متخصصة مدعومة بنماذج Gemini)
+             =============================================================== -->
+        <div class="w-full max-w-4xl space-y-3 pt-6 border-t border-white/5">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-300 border border-cyan-500/30 font-mono">STUDIOS</span>
+              <h3 class="text-sm font-bold text-white">أدوات الإنتاج المتخصصة</h3>
+            </div>
+            <p class="text-[11px] text-zinc-400 mt-0.5">استوديوهات ذكية مدعومة بنماذج Gemini لإنتاج أنواع المحتوى المتقدمة بنقرة واحدة.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <!-- Card 1: Transcript Studio -->
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-cyan-500/30 transition-all flex flex-col justify-between space-y-3 group">
+              <div class="space-y-2">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-lg">
+                  <i class="fa-solid fa-file-waveform"></i>
+                </div>
+                <div>
+                  <span class="text-[10px] font-bold text-cyan-400 font-mono">TRANSCRIPT STUDIO</span>
+                  <h4 class="text-xs font-bold text-white">استوديو تفريغ وتحليل الصوت</h4>
+                </div>
+                <p class="text-[11px] text-zinc-400 leading-relaxed">تفريغ فائق الدقة مع تصدير SRT، علامات تايم لاين، وتحليل متقدم لنبرات الصوت والمشاعر.</p>
+              </div>
+              <button type="button" onclick="MickeyStudio.switchTab('transcribe-studio')" class="w-full btn-secondary text-xs py-2 justify-center group-hover:border-cyan-500/50 group-hover:text-cyan-300">
+                <span>فتح الاستوديو</span>
+                <i class="fa-solid fa-arrow-left text-[10px]"></i>
+              </button>
+            </div>
+
+            <!-- Card 2: Podcast Studio -->
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-purple-500/30 transition-all flex flex-col justify-between space-y-3 group">
+              <div class="space-y-2">
+                <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg">
+                  <i class="fa-solid fa-podcast"></i>
+                </div>
+                <div>
+                  <span class="text-[10px] font-bold text-purple-400 font-mono">PODCAST STUDIO</span>
+                  <h4 class="text-xs font-bold text-white">استوديو البودكاست</h4>
+                </div>
+                <p class="text-[11px] text-zinc-400 leading-relaxed">إنتاج حوار ثنائي واقعي بين مقدم وضيف مع توزيع تلقائي للأدوار وتزامن صوتي كامل.</p>
+              </div>
+              <button type="button" onclick="MickeyStudio.switchTab('podcast-studio')" class="w-full btn-secondary text-xs py-2 justify-center group-hover:border-purple-500/50 group-hover:text-purple-300">
+                <span>فتح الاستوديو</span>
+                <i class="fa-solid fa-arrow-left text-[10px]"></i>
+              </button>
+            </div>
+
+            <!-- Card 3: Audiobook Studio -->
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 transition-all flex flex-col justify-between space-y-3 group">
+              <div class="space-y-2">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
+                  <i class="fa-solid fa-book-open"></i>
+                </div>
+                <div>
+                  <span class="text-[10px] font-bold text-amber-400 font-mono">AUDIOBOOK STUDIO</span>
+                  <h4 class="text-xs font-bold text-white">استوديو الكتب والروايات الصوتية</h4>
+                </div>
+                <p class="text-[11px] text-zinc-400 leading-relaxed">إنتاج فصول صوتية متكاملة بأداء قصصي رصين ومؤثرات درامية تحاكي كبار الرواة.</p>
+              </div>
+              <button type="button" onclick="MickeyStudio.switchTab('audiobook-studio')" class="w-full btn-secondary text-xs py-2 justify-center group-hover:border-amber-500/50 group-hover:text-amber-300">
+                <span>فتح الاستوديو</span>
+                <i class="fa-solid fa-arrow-left text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating Bottom Dock Action Bar -->
+        <div id="voice-actions-bar" class="sticky bottom-4 z-30 floating-action-dock opacity-0 pointer-events-none transition-opacity duration-300">
+          <button type="button" onclick="MickeyStudio.downloadCurrentAudio()" class="btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold">
+            <i class="fa-solid fa-download text-[11px]"></i>
+            <span>تنزيل WAV</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.saveAudioToVault()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-regular fa-bookmark text-[11px]"></i>
+            <span>حفظ</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.transferAudioToVideoStudio()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-film text-[11px]"></i>
+            <span>إرسال لاستوديو الفيديو</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         STUDIO: استوديو البودكاست (PODCAST STUDIO)
+         =============================================================== -->
+    <section id="section-podcast-studio" class="studio-section h-full flex flex-row overflow-hidden hidden">
+      <!-- Left Controls Column (380px) -->
+      <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+        <div class="space-y-4">
+          <!-- Heading -->
+          <div class="flex items-center justify-between pb-2 border-b border-white/5">
+            <div>
+              <span class="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block">PODCAST STUDIO</span>
+              <h2 class="text-sm font-bold text-white">استوديو البودكاست الثنائي</h2>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">Gemini 3.8</span>
+          </div>
+
+          <!-- Quick Topic & Auto Script Generator -->
+          <div class="space-y-1.5 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+            <div class="flex items-center justify-between">
+              <label for="podcast-topic-input" class="text-xs font-semibold text-zinc-300">موضوع حلقة البودكاست</label>
+              <button type="button" onclick="MickeyStudio.generatePodcastScript()" id="btn-gen-podcast-script" class="text-xs text-cyan-300 hover:text-white flex items-center gap-1 transition-colors">
+                <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                <span>توليد حوار ذكي ✨</span>
+              </button>
+            </div>
+            <input type="text" id="podcast-topic-input" placeholder="مثال: مستقبل الذكاء الاصطناعي في المونتاج وصناعة الفيديو" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500">
+          </div>
+
+          <!-- Speakers Setup -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <!-- Speaker 1 (المحاور) -->
+            <div class="p-2.5 rounded-xl bg-zinc-900/60 border border-white/5 space-y-2">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-sky-400">
+                <i class="fa-solid fa-microphone-lines text-[10px]"></i>
+                <span>المتحدث 1 (المحاور)</span>
+              </div>
+              <input type="text" id="podcast-speaker1-name" value="المحاور" class="w-full p-1.5 text-xs bg-zinc-950 border border-white/10 rounded text-zinc-200">
+              <select id="podcast-speaker1-voice" class="w-full p-1.5 text-xs bg-zinc-950 border border-white/10 rounded text-zinc-200">
+                <optgroup label="أصوات رجالية">
+                  <option value="rami" selected>رامي · بودكاست هادئ</option>
+                  <option value="yusuf">يوسف · وثائقي قوي</option>
+                  <option value="malik">مالك · إعلاني سريع</option>
+                </optgroup>
+                <optgroup label="أصوات نسائية">
+                  <option value="sama">سما · بودكاست واجتماعي</option>
+                  <option value="laila">ليلى · إعلان وتسويق</option>
+                  <option value="mariam">مريم · صوت قصصي</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <!-- Speaker 2 (الضيف) -->
+            <div class="p-2.5 rounded-xl bg-zinc-900/60 border border-white/5 space-y-2">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                <i class="fa-solid fa-user-group text-[10px]"></i>
+                <span>المتحدث 2 (الضيف)</span>
+              </div>
+              <input type="text" id="podcast-speaker2-name" value="الضيف" class="w-full p-1.5 text-xs bg-zinc-950 border border-white/10 rounded text-zinc-200">
+              <select id="podcast-speaker2-voice" class="w-full p-1.5 text-xs bg-zinc-950 border border-white/10 rounded text-zinc-200">
+                <optgroup label="أصوات نسائية">
+                  <option value="mariam" selected>مريم · صوت قصصي</option>
+                  <option value="sama">سما · بودكاست واجتماعي</option>
+                  <option value="farida">فريدة · وثائقي رصين</option>
+                </optgroup>
+                <optgroup label="أصوات رجالية">
+                  <option value="zaid">زيد · راوٍ قصصي</option>
+                  <option value="yusuf">يوسف · وثائقي قوي</option>
+                  <option value="saif">سيف · درامي عاطفي</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dialog Script Textarea -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label for="podcast-dialog-input" class="text-xs font-semibold text-zinc-300">سيناريو الحوار</label>
+              <span class="text-[10px] text-zinc-500 font-mono">يدعم [المحاور] و [الضيف]</span>
+            </div>
+            <textarea id="podcast-dialog-input" rows="7" placeholder="المحاور: أهلاً بكم في حلقة جديدة من البودكاست...&#10;الضيف: مرحباً بك وسعيد جداً بوجودي معكم اليوم..." class="w-full p-3 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100 font-mono resize-none focus:outline-none focus:border-cyan-500"></textarea>
+          </div>
+
+          <!-- Engine & Dialect -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label class="text-[11px] text-zinc-400 block mb-1">المحرك</label>
+              <select id="podcast-engine-select" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-200">
+                <option value="gemini" selected>✨ Gemini 3.8 Flash</option>
+                <option value="neural">⚡ Edge Neural (مجاني)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] text-zinc-400 block mb-1">اللهجة</label>
+              <select id="podcast-dialect-select" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-200">
+                <option value="egyptian" selected>المصرية</option>
+                <option value="saudi">السعودية</option>
+                <option value="levantine">الشامية</option>
+                <option value="fusha">الفصحى</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Generate Button -->
+        <button type="button" id="btn-generate-podcast" onclick="MickeyStudio.generatePodcastAudio()" class="w-full btn-primary py-3 font-semibold text-sm">
+          <span>إنتاج حلقة البودكاست كاملة</span>
+          <i class="fa-solid fa-podcast text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Right Preview Area -->
+      <div class="flex-1 h-full flex flex-col items-center justify-center p-8 relative overflow-y-auto bg-[#09090B] space-y-6">
+        <div id="podcast-empty-view" class="text-center space-y-2 max-w-md">
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 text-2xl">
+            <i class="fa-solid fa-podcast"></i>
+          </div>
+          <h3 class="text-base font-bold text-white">استوديو البودكاست الصوتي الثنائي</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">اكتب الحوار بين المحاور والضيف أو اضغط "توليد حوار ذكي" لتوليد حلقة بودكاست متكاملة بأصوات واقعية ومزامنة فورية.</p>
+        </div>
+
+        <!-- Podcast Audio Player Card (Active when generated) -->
+        <div id="podcast-active-player" class="w-full max-w-2xl bg-[#242629] text-white rounded-[26px] p-6 shadow-2xl space-y-4 border border-white/5 hidden">
+          <div class="flex items-center justify-between border-b border-white/5 pb-2">
+            <span class="text-xs font-bold text-cyan-300">🎙️ حلقة البودكاست الجاهزة</span>
+            <span id="podcast-duration-badge" class="text-xs font-mono text-zinc-400"></span>
+          </div>
+          <audio id="podcast-audio-element" controls class="w-full rounded-lg"></audio>
+          <div class="flex items-center justify-between pt-2">
+            <button type="button" onclick="MickeyStudio.downloadPodcastAudio()" class="btn-primary text-xs py-2 px-4 flex items-center gap-2 bg-[#5da7eb] text-zinc-950 font-bold">
+              <i class="fa-solid fa-download"></i>
+              <span>تنزيل ملف البودكاست WAV</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.savePodcastToVault()" class="btn-secondary text-xs py-2 px-4 flex items-center gap-2">
+              <i class="fa-regular fa-bookmark"></i>
+              <span>حفظ في المعرض</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===============================================================
+         STUDIO: استوديو الكتب والروايات الصوتية (AUDIOBOOK STUDIO)
+         =============================================================== -->
+    <section id="section-audiobook-studio" class="studio-section h-full flex flex-row overflow-hidden hidden">
+      <!-- Left Controls Column (380px) -->
+      <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+        <div class="space-y-4">
+          <!-- Heading -->
+          <div class="flex items-center justify-between pb-2 border-b border-white/5">
+            <div>
+              <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">AUDIOBOOK STUDIO</span>
+              <h2 class="text-sm font-bold text-white">استوديو الكتب والروايات الصوتية</h2>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">Gemini 3.8</span>
+          </div>
+
+          <!-- Book & Chapter Metadata -->
+          <div class="space-y-2 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+            <div>
+              <label for="book-title-input" class="text-[11px] font-semibold text-zinc-400 block mb-1">عنوان الرواية أو الكتاب</label>
+              <input type="text" id="book-title-input" placeholder="مثال: حكايات القاهرة القديمة" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-100">
+            </div>
+            <div>
+              <label for="chapter-title-input" class="text-[11px] font-semibold text-zinc-400 block mb-1">عنوان الفصل أو الجزء</label>
+              <input type="text" id="chapter-title-input" placeholder="الفصل الأول: هبوب العاصفة" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-100">
+            </div>
+          </div>
+
+          <!-- Narrator & Tone Selection -->
+          <div class="space-y-2">
+            <label for="book-narrator-select" class="text-xs font-semibold text-zinc-300 block">الراوي القصصي</label>
+            <select id="book-narrator-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100 font-semibold">
+              <optgroup label="نخبة الراويات (أصوات نسائية)">
+                <option value="mariam" selected>مريم · صوت قصصي دافئ وإنساني</option>
+                <option value="farida">فريدة · وثائقي ورواية تاريخية رصينة</option>
+                <option value="salma">سلمى · أداء درامي عاطفي مؤثر</option>
+              </optgroup>
+              <optgroup label="نخبة الرواة (أصوات رجالية)">
+                <option value="zaid">زيد · حكواتي وسرد تشويقي ممتع</option>
+                <option value="yusuf">يوسف · صوت ملحمي عميق</option>
+                <option value="saif">سيف · انفعال مسرحي متقن</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <!-- Ambient Mood & Pacing -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label class="text-[11px] text-zinc-400 block mb-1">الجو الدرامي</label>
+              <select id="book-mood-select" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-200">
+                <option value="mystery" selected>غموض وتشويق</option>
+                <option value="epic">ملحمي وتاريخي</option>
+                <option value="warm">دافئ وتأملي</option>
+                <option value="dramatic">درامي متصاعد</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] text-zinc-400 block mb-1">سرعة الإلقاء</label>
+              <select id="book-pace-select" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-200">
+                <option value="0.9">هادئ ومتأني (0.9x)</option>
+                <option value="1.0" selected>طبيعي معتدل (1.0x)</option>
+                <option value="1.1">سريع وسلس (1.1x)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Chapter Script Textarea -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label for="book-chapter-text" class="text-xs font-semibold text-zinc-300">نص الفصل</label>
+              <span id="book-word-count" class="text-[10px] text-zinc-500 font-mono">0 كلمة</span>
+            </div>
+            <textarea id="book-chapter-text" rows="8" placeholder="اكتب أو الصق نص الفصل هنا... يراعى استخدام علامات الترقيم لضمان وقفات درامية متقنة." class="w-full p-3 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100 font-serif leading-relaxed resize-none focus:outline-none focus:border-cyan-500" oninput="document.getElementById('book-word-count').textContent = (this.value.trim().split(/\s+/).filter(Boolean).length) + ' كلمة'"></textarea>
+          </div>
+        </div>
+
+        <!-- Generate Button -->
+        <button type="button" id="btn-generate-audiobook" onclick="MickeyStudio.generateAudiobookChapter()" class="w-full btn-primary py-3 font-semibold text-sm">
+          <span>تسجيل وإنتاج الفصل الصوتي</span>
+          <i class="fa-solid fa-book-open text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Right Preview Area -->
+      <div class="flex-1 h-full flex flex-col items-center justify-center p-8 relative overflow-y-auto bg-[#09090B] space-y-6">
+        <div id="audiobook-empty-view" class="text-center space-y-2 max-w-md">
+          <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-2xl">
+            <i class="fa-solid fa-book-open"></i>
+          </div>
+          <h3 class="text-base font-bold text-white">استوديو الكتب والروايات الصوتية</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">حوّل نصوص الكتب والمقالات إلى فصول مسموعة بجودة استوديو إنتاج إذاعي احترافي مع ضبط الوقفات ونبرات السرد.</p>
+        </div>
+
+        <!-- Audiobook Player Card (Active when generated) -->
+        <div id="audiobook-active-player" class="w-full max-w-2xl bg-[#242629] text-white rounded-[26px] p-6 shadow-2xl space-y-4 border border-white/5 hidden">
+          <div class="flex items-center justify-between border-b border-white/5 pb-2">
+            <div>
+              <span id="audiobook-player-book" class="text-xs font-bold text-amber-300 block"></span>
+              <span id="audiobook-player-chapter" class="text-[11px] text-zinc-400"></span>
+            </div>
+            <span id="audiobook-duration-badge" class="text-xs font-mono text-zinc-400"></span>
+          </div>
+          <audio id="audiobook-audio-element" controls class="w-full rounded-lg"></audio>
+          <div class="flex items-center justify-between pt-2">
+            <button type="button" onclick="MickeyStudio.downloadAudiobookAudio()" class="btn-primary text-xs py-2 px-4 flex items-center gap-2 bg-[#5da7eb] text-zinc-950 font-bold">
+              <i class="fa-solid fa-download"></i>
+              <span>تنزيل الفصل WAV</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.saveAudiobookToVault()" class="btn-secondary text-xs py-2 px-4 flex items-center gap-2">
+              <i class="fa-regular fa-bookmark"></i>
+              <span>حفظ في المعرض</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===============================================================
+         STUDIO 5: تفريغ وتحليل الصوت (AUDIO TRANSCRIBE & ANALYSIS STUDIO)
+         =============================================================== -->
+    <section id="section-transcribe-studio" class="studio-section h-full flex flex-row overflow-hidden hidden">
+      
+      <!-- Left Panel: Controls Column (380px) -->
+      <div class="w-96 h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/60 p-5 overflow-y-auto space-y-5">
+        <div class="space-y-5">
+          
+          <!-- Mode Switcher: File Upload vs. Live Mic -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold text-zinc-300">مصدر الصوت العربي</label>
+              <button type="button" onclick="MickeyStudio.loadSampleArabicAudio()" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors" title="تحميل عينة صوتية لتجربة فورية">
+                <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                <span>عينة تجريبية 🎧</span>
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5" id="transcribe-source-modes">
+              <button type="button" onclick="MickeyStudio.setTranscribeMode('upload')" id="btn-mode-upload" class="pill-option active py-2 text-center justify-center">
+                <i class="fa-solid fa-arrow-up-from-bracket text-xs"></i>
+                <span>رفع ملف صوت/فيديو</span>
+              </button>
+              <button type="button" onclick="MickeyStudio.setTranscribeMode('record')" id="btn-mode-record" class="pill-option py-2 text-center justify-center">
+                <i class="fa-solid fa-microphone text-xs"></i>
+                <span>تسجيل مباشر بالمايك</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Upload Dropzone (View 1) -->
+          <div id="transcribe-upload-container" class="space-y-2">
+            <div id="transcribe-dropzone" onclick="document.getElementById('transcribe-file-input').click()" class="border border-dashed border-white/10 hover:border-white/30 rounded-xl p-4 text-center cursor-pointer transition-colors bg-white/[0.02]">
+              <input type="file" id="transcribe-file-input" accept="audio/*,video/*" class="hidden" onchange="MickeyStudio.handleTranscribeFileUpload(this)">
+              <div id="transcribe-file-preview" class="hidden space-y-2 py-2">
+                <div class="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto text-lg">
+                  <i class="fa-solid fa-file-audio"></i>
+                </div>
+                <div>
+                  <p id="transcribe-file-name" class="text-xs font-medium text-white truncate max-w-[220px] mx-auto">audio_file.mp3</p>
+                  <p id="transcribe-file-size" class="text-[11px] text-zinc-500 font-mono mt-0.5">2.4 MB</p>
+                </div>
+                <button type="button" onclick="event.stopPropagation(); MickeyStudio.clearTranscribeFile()" class="text-[10px] text-red-400 hover:text-red-300">
+                  <i class="fa-solid fa-xmark ml-1"></i> إزالة الملف
+                </button>
+              </div>
+              <div id="transcribe-upload-empty" class="space-y-1 py-3 text-zinc-500">
+                <i class="fa-solid fa-file-arrow-up text-2xl text-zinc-400"></i>
+                <p class="text-xs text-zinc-300 font-medium">اسحب ملف الصوت أو اضغط للاختيار</p>
+                <p class="text-[10px] text-zinc-500 font-mono">يدعم MP3, WAV, M4A, OGG, WEBM, MP4</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Mic Recorder (View 2) -->
+          <div id="transcribe-record-container" class="space-y-3 hidden">
+            <div class="border border-white/10 rounded-xl p-4 bg-zinc-900/50 flex flex-col items-center justify-center space-y-3">
+              <div class="relative flex items-center justify-center">
+                <div id="rec-pulse-ring" class="absolute w-16 h-16 rounded-full bg-red-500/20 animate-ping hidden"></div>
+                <button type="button" id="btn-toggle-record" onclick="MickeyStudio.toggleLiveRecording()" class="w-14 h-14 rounded-full bg-red-500/90 hover:bg-red-500 text-white flex items-center justify-center text-xl shadow-lg transition-transform active:scale-95 z-10">
+                  <i class="fa-solid fa-microphone" id="rec-btn-icon"></i>
+                </button>
+              </div>
+              <div class="text-center">
+                <div id="rec-timer" class="font-mono text-sm font-bold text-white tracking-wider">00:00</div>
+                <p id="rec-status-label" class="text-[11px] text-zinc-400 mt-0.5">اضغط على المايك لبدء التسجيل المباشر</p>
+              </div>
+              <div id="rec-live-meter" class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden flex items-center hidden">
+                <div id="rec-volume-bar" class="h-full bg-gradient-to-r from-emerald-500 to-red-500 w-0 transition-all duration-75"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dialect & Language Selection -->
+          <div class="space-y-2">
+            <label for="transcribe-dialect-select" class="text-xs font-medium text-zinc-400 block">اللهجة العربية المستهدفة</label>
+            <select id="transcribe-dialect-select" class="w-full p-2.5 text-xs">
+              <option value="auto" selected>🌐 كشف تلقائي (الذكاء الاصطناعي يحدد اللهجة)</option>
+              <option value="fusha">📖 اللغة العربية الفصحى المعاصرة (MSA)</option>
+              <option value="egyptian">🇪🇬 اللهجة المصرية (دارجة وإعلامية)</option>
+              <option value="gulf">🇸🇦 اللهجة الخليجية (سعودية، إماراتية، كويتية)</option>
+              <option value="levantine">🇱🇧 اللهجة الشامية (سورية، لبنانية، أردنية)</option>
+              <option value="maghrebi">🇲🇦 اللهجة المغاربية (مغربية، جزائرية، تونسية)</option>
+              <option value="bilingual">🌍 عربي + إنجليزي مختلط (Bilingual)</option>
+            </select>
+          </div>
+
+          <!-- AI Model Selection -->
+          <div class="space-y-2">
+            <label for="transcribe-engine-select" class="text-xs font-medium text-zinc-400 block">محرك التفريغ والتحليل</label>
+            <select id="transcribe-engine-select" class="w-full p-2.5 text-xs">
+              <option value="gemini-multimodal" selected>💎 Google Gemini 1.5 / 2.0 Flash (فائق الدقة + تحليل مشاعر وتوقيتات)</option>
+              <option value="whisper-large">⚡ Whisper Large-v3 (نموذج ويسبر عالي الدقة)</option>
+              <option value="webspeech-live">🎙️ محرك المتصفح المباشر (تفريغ لحظي مجاني بلا قيود)</option>
+            </select>
+          </div>
+
+          <!-- Analysis Features (Checkboxes) -->
+          <div class="space-y-2 pt-2 border-t border-white/5">
+            <label class="text-xs font-medium text-zinc-400 block">خيارات التحليل المتقدم</label>
+            <div class="space-y-1.5 text-xs">
+              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
+                <input type="checkbox" id="transcribe-opt-srt" checked class="w-3.5 h-3.5 accent-white">
+                <span>توليد ملف ترجمة تزامني (SRT لبريمير)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
+                <input type="checkbox" id="transcribe-opt-summary" checked class="w-3.5 h-3.5 accent-white">
+                <span>ملخص تنفيذي وأبرز النقاط المستخلصة</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
+                <input type="checkbox" id="transcribe-opt-tone" checked class="w-3.5 h-3.5 accent-white">
+                <span>تحليل نبرة الصوت، المشاعر، وسرعة الإلقاء</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
+                <input type="checkbox" id="transcribe-opt-punct" checked class="w-3.5 h-3.5 accent-white">
+                <span>ضبط علامات الترقيم (فواصل، نقاط، استفهام)</span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Transcribe Action Button -->
+        <button type="button" id="btn-process-transcribe" onclick="MickeyStudio.processAudioTranscription()" class="w-full btn-primary py-3 font-semibold text-sm">
+          <span>بدء تفريغ وتحليل الصوت</span>
+          <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Right Area: Preview Canvas & Dashboard -->
+      <div class="flex-1 h-full flex flex-col p-6 relative overflow-hidden bg-[#09090B]">
+        
+        <!-- Status Pill -->
+        <div class="absolute top-4 right-4 z-20">
+          <span id="transcribe-status-pill" class="text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400">جاهز للتفريغ والتحليل</span>
+        </div>
+
+        <!-- Center Workspace Viewport -->
+        <div id="transcribe-viewport" class="relative w-full h-full flex flex-col justify-center items-center overflow-hidden">
+          
+          <!-- Scanner Beam Indicator -->
+          <div id="transcribe-laser-scanner" class="minimal-scanner hidden">
+            <div class="scanner-beam"></div>
+            <div class="text-center space-y-2 z-10">
+              <div class="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto"></div>
+              <p class="text-xs text-zinc-300 font-medium">جاري تحليل الموجات الصوتية وتفريغ الكلام العربي...</p>
+              <p class="text-[11px] text-zinc-500 font-mono">التعرف على الكلمات واللهجة وعلامات الترقيم</p>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div id="transcribe-empty-state" class="text-center space-y-2 max-w-md text-zinc-500">
+            <div class="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center mx-auto mb-3 text-zinc-400 text-2xl">
+              <i class="fa-solid fa-microphone-lines"></i>
+            </div>
+            <h3 class="text-base font-semibold text-zinc-200">استوديو تفريغ وتحليل الصوت العربي</h3>
+            <p class="text-xs leading-relaxed text-zinc-400">ارفع ملفاً صوتياً أو سجّل صوتك مباشرة لتحويل الكلام العربي إلى نص فوري دقيق، مع استخراج التوقيتات لملفات SRT لبريمير، وتلخيص الأفكار الرئيسية، وتحليل نبرة الصوت والمشاعر.</p>
+          </div>
+
+          <!-- Results Dashboard Container -->
+          <div id="transcribe-results-container" class="w-full h-full flex flex-col space-y-4 overflow-hidden hidden">
+            
+            <!-- Audio Player Bar -->
+            <div class="p-3 rounded-xl bg-[#121215] border border-white/5 flex items-center justify-between gap-4">
+              <div class="flex items-center gap-3 flex-1 min-w-0">
+                <div class="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center text-white shrink-0">
+                  <i class="fa-solid fa-volume-high text-xs"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p id="transcribe-audio-title" class="text-xs font-semibold text-white truncate">تسجيل_صوتي.mp3</p>
+                  <p id="transcribe-audio-meta" class="text-[10px] text-zinc-400 font-mono">صوت عربي مفرغ بنجاح</p>
+                </div>
+              </div>
+              <audio id="transcribe-audio-player" controls class="h-8 max-w-sm rounded-lg"></audio>
+            </div>
+
+            <!-- 4 Metrics Overview Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              <div class="p-3 rounded-xl bg-[#121215] border border-white/5 space-y-1">
+                <span class="text-[10px] text-zinc-400 block font-medium">اللهجة المكتشفة</span>
+                <p id="metric-dialect" class="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  <i class="fa-solid fa-language text-zinc-400 text-[11px]"></i>
+                  <span>فصحى معاصرة</span>
+                </p>
+              </div>
+
+              <div class="p-3 rounded-xl bg-[#121215] border border-white/5 space-y-1">
+                <span class="text-[10px] text-zinc-400 block font-medium">إجمالي الكلمات والسرعة</span>
+                <p id="metric-words" class="text-xs font-bold text-white flex items-center gap-1.5 font-mono truncate">
+                  <i class="fa-solid fa-align-right text-zinc-400 text-[11px]"></i>
+                  <span>145 كلمة (~130 ك/د)</span>
+                </p>
+              </div>
+
+              <div class="p-3 rounded-xl bg-[#121215] border border-white/5 space-y-1">
+                <span class="text-[10px] text-zinc-400 block font-medium">نبرة الصوت والمشاعر</span>
+                <p id="metric-tone" class="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  <i class="fa-solid fa-chart-line text-zinc-400 text-[11px]"></i>
+                  <span>حماسية وتشويقية</span>
+                </p>
+              </div>
+
+              <div class="p-3 rounded-xl bg-[#121215] border border-white/5 space-y-1">
+                <span class="text-[10px] text-zinc-400 block font-medium">محرك الذكاء الاصطناعي</span>
+                <p id="metric-provider" class="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  <i class="fa-solid fa-microchip text-zinc-400 text-[11px]"></i>
+                  <span>Gemini Flash</span>
+                </p>
+              </div>
+            </div>
+
+            <!-- Sub-Tabs Switcher -->
+            <div class="flex items-center justify-between border-b border-white/5 pb-2">
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="MickeyStudio.setTranscribeOutputTab('transcript')" id="tab-out-transcript" class="pill-option active text-xs">
+                  <i class="fa-solid fa-file-lines text-xs"></i>
+                  <span>النص المفرغ الكامل</span>
+                </button>
+                <button type="button" onclick="MickeyStudio.setTranscribeOutputTab('srt')" id="tab-out-srt" class="pill-option text-xs">
+                  <i class="fa-solid fa-closed-captioning text-xs"></i>
+                  <span>ملف ترجمة لبريمير (SRT)</span>
+                </button>
+                <button type="button" onclick="MickeyStudio.setTranscribeOutputTab('insights')" id="tab-out-insights" class="pill-option text-xs">
+                  <i class="fa-solid fa-brain text-xs"></i>
+                  <span>الملخص الذكي والنقاط المستخلصة</span>
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="MickeyStudio.copyTranscribeCurrentText()" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors px-2 py-1 rounded hover:bg-white/5">
+                  <i class="fa-regular fa-copy text-[11px]"></i>
+                  <span>نسخ</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab 1: Full Transcript -->
+            <div id="view-transcribe-transcript" class="flex-1 overflow-y-auto pr-1">
+              <textarea id="transcribe-text-output" rows="12" class="w-full h-full p-4 text-sm leading-relaxed resize-none text-zinc-100 placeholder:text-zinc-600 focus:ring-0 font-sans bg-zinc-900/40 border border-white/5 rounded-xl select-all" dir="rtl"></textarea>
+            </div>
+
+            <!-- Tab 2: SRT Subtitles -->
+            <div id="view-transcribe-srt" class="flex-1 overflow-y-auto pr-1 hidden">
+              <textarea id="transcribe-srt-output" rows="12" class="w-full h-full p-4 text-xs leading-relaxed resize-none text-emerald-300 font-mono bg-zinc-900/60 border border-white/5 rounded-xl select-all" dir="ltr"></textarea>
+            </div>
+
+            <!-- Tab 3: AI Insights & Summary -->
+            <div id="view-transcribe-insights" class="flex-1 overflow-y-auto space-y-4 pr-1 hidden">
+              <div class="p-4 rounded-xl bg-[#121215] border border-white/5 space-y-2">
+                <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                  <span>الملخص التنفيذي للمحتوى</span>
+                </h4>
+                <p id="transcribe-summary-text" class="text-xs text-zinc-300 leading-relaxed"></p>
+              </div>
+
+              <div class="p-4 rounded-xl bg-[#121215] border border-white/5 space-y-2">
+                <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-list-check text-indigo-400"></i>
+                  <span>أهم الأفكار والنقاط المستخلصة</span>
+                </h4>
+                <ul id="transcribe-key-points-list" class="space-y-1.5 text-xs text-zinc-300 list-disc list-inside"></ul>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Floating Action Dock -->
+        <div id="transcribe-actions-bar" class="absolute bottom-6 z-30 floating-action-dock opacity-0 pointer-events-none">
+          <button type="button" onclick="MickeyStudio.copyTranscribeCurrentText()" class="btn-primary text-xs py-1.5 px-3">
+            <i class="fa-regular fa-copy text-[11px]"></i>
+            <span>نسخ النص</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.downloadTranscribeTxt()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-file-arrow-down text-[11px]"></i>
+            <span>تحميل TXT</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.downloadTranscribeSrt()" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-solid fa-closed-captioning text-[11px]"></i>
+            <span>تحميل SRT لبريمير</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.saveCurrentToVault('transcribe')" class="btn-secondary text-xs py-1.5 px-3">
+            <i class="fa-regular fa-bookmark text-[11px]"></i>
+            <span>حفظ</span>
+          </button>
+          <div class="w-[1px] h-4 bg-white/10 mx-1"></div>
+          <button type="button" onclick="MickeyStudio.transferTranscribeToImageStudio()" class="btn-secondary text-xs py-1.5 px-3" title="استخدام النص المفرغ كوصف لتوليد مشهد">
+            <i class="fa-regular fa-image text-[11px]"></i>
+            <span>توليد صورة للمشهد</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.transferTranscribeToVoiceStudio()" class="btn-secondary text-xs py-1.5 px-3" title="إرسال النص إلى استوديو التعليق الصوتي">
+            <i class="fa-solid fa-microphone text-[11px]"></i>
+            <span>إعادة نطق بصوت جديد</span>
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         STUDIO 6: معرض أعمالي (VAULT GALLERY)
+         =============================================================== -->
+    <section id="section-vault-gallery" class="studio-section h-full flex flex-col overflow-hidden hidden">
+      
+      <!-- Top Filters & Search Toolbar -->
+      <div class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-[#0E0E11]/40">
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="MickeyStudio.filterVault('all')" id="vault-filter-all" class="vault-filter-btn pill-option active text-xs">الكل (<span id="vault-count-all">0</span>)</button>
+          <button type="button" onclick="MickeyStudio.filterVault('image')" id="vault-filter-image" class="vault-filter-btn pill-option text-xs">صور (<span id="vault-count-images">0</span>)</button>
+          <button type="button" onclick="MickeyStudio.filterVault('video')" id="vault-filter-video" class="vault-filter-btn pill-option text-xs">فيديوهات (<span id="vault-count-videos">0</span>)</button>
+          <button type="button" onclick="MickeyStudio.filterVault('audio')" id="vault-filter-audio" class="vault-filter-btn pill-option text-xs">صوتيات (<span id="vault-count-audios">0</span>)</button>
+          <button type="button" onclick="MickeyStudio.filterVault('transcribe')" id="vault-filter-transcribe" class="vault-filter-btn pill-option text-xs">تفريغات (<span id="vault-count-transcripts">0</span>)</button>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="relative w-64">
+            <input type="text" id="vault-search-input" oninput="MickeyStudio.searchVault(this.value)" placeholder="بحث بالاسم أو الوصف..." class="w-full px-3 py-1.5 text-xs pl-7">
+            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-[10px] text-zinc-500"></i>
+          </div>
+          <button type="button" onclick="MickeyStudio.exportVaultBackup()" class="btn-secondary text-xs py-1.5 px-3">
+            <span>تصدير نسخة</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.clearVaultConfirm()" class="btn-secondary text-xs py-1.5 px-2.5 text-red-400 hover:text-red-300">
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Assets Grid -->
+      <div class="flex-1 overflow-y-auto p-6">
+        <div id="vault-items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+
+        <div id="vault-empty-view" class="h-full flex flex-col items-center justify-center text-center space-y-2 text-zinc-500">
+          <i class="fa-regular fa-folder-open text-4xl text-zinc-600 block mb-2"></i>
+          <h3 class="text-sm font-semibold text-zinc-300">الخزنة فارغة</h3>
+          <p class="text-xs">احفظ أعمالك من الاستوديوهات لتجدها هنا دائماً.</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ===============================================================
+         STUDIO 7: بوابة المطورين وخدمات الـ API المجانية (DEVELOPER API PORTAL)
+         =============================================================== -->
+    <section id="section-developer-api" class="studio-section h-full flex flex-col overflow-y-auto hidden bg-[#09090B] p-6 lg:p-8 space-y-6">
+      
+      <!-- Top Hero Header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/5">
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-code"></i>
+            </span>
+            <h2 class="text-xl font-bold text-white tracking-tight">بوابة المطورين والـ API المجاني</h2>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              مجاني 100% للجميع
+            </span>
+          </div>
+          <p class="text-xs text-zinc-400 max-w-2xl leading-relaxed">
+            استخدم قدرات الذكاء الاصطناعي (توليد الصور، تحويل النص إلى صوت عصبي واقعي، تفريغ الصوت وتحليله، وهندسة الأوامر) مباشرة في مواقعك، تطبيقاتك، وإضافات Adobe Premiere Pro مجاناً وبدون أي قيود أو اشتراكات.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="MickeyStudio.copyDeveloperApiKey()" class="btn-primary text-xs py-2 px-3.5">
+            <i class="fa-regular fa-copy"></i>
+            <span>نسخ المفتاح النشط</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.copyApiBaseUrl()" class="btn-secondary text-xs py-2 px-3">
+            <i class="fa-solid fa-link"></i>
+            <span>نسخ Base URL</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Feature Badges -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5">
+          <i class="fa-solid fa-bolt text-amber-400 text-sm"></i>
+          <div>
+            <div class="text-xs font-semibold text-white">استجابة فائقة السرعة</div>
+            <div class="text-[10px] text-zinc-500">REST API مع معالجة غير متزامنة</div>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5">
+          <i class="fa-solid fa-gift text-cyan-400 text-sm"></i>
+          <div>
+            <div class="text-xs font-semibold text-white">مجاني وغير محدود</div>
+            <div class="text-[10px] text-zinc-500">بدون بطاقة دفع أو شروط مخفية</div>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5">
+          <i class="fa-solid fa-shield-halved text-emerald-400 text-sm"></i>
+          <div>
+            <div class="text-xs font-semibold text-white">CORS مفتوح بالكامل</div>
+            <div class="text-[10px] text-zinc-500">طلب مباشر من المتصفح والتطبيقات</div>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5">
+          <i class="fa-solid fa-clapperboard text-purple-400 text-sm"></i>
+          <div>
+            <div class="text-xs font-semibold text-white">جاهز لـ Premiere Pro</div>
+            <div class="text-[10px] text-zinc-500">توليد وإدراج للتايملاين مباشرة</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Key & Base URL Credentials Card -->
+      <div class="rounded-2xl bg-[#0E0E11] border border-white/5 p-5 space-y-4 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-key text-cyan-400 text-xs"></i>
+              <span>مفتاح الوصول المجاني (Developer API Key)</span>
+            </h3>
+            <p class="text-[11px] text-zinc-400 mt-0.5">يُمنح المفتاح فوراً لمشروعك، ويكون صالحاً لجميع نقاط النهاية (Endpoints).</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-[11px] text-emerald-400 font-medium">نشط · صلاحيات كاملة</span>
+          </div>
+        </div>
+
+        <!-- Key Input Row -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div class="relative flex-1">
+            <input id="dev-api-key-input" type="password" readonly class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-cyan-300 font-mono tracking-wider focus:outline-none select-all" value="" placeholder="جاري تجهيز مفتاحك...">
+          </div>
+          <button type="button" onclick="MickeyStudio.toggleApiKeyVisibility()" class="btn-secondary text-xs px-3 py-2.5" title="إظهار / إخفاء المفتاح">
+            <i class="fa-solid fa-eye text-xs" id="dev-api-key-eye-icon"></i>
+            <span class="mr-1">إظهار</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.copyDeveloperApiKey()" class="btn-primary text-xs px-4 py-2.5">
+            <i class="fa-regular fa-copy"></i>
+            <span>نسخ المفتاح</span>
+          </button>
+          <button type="button" onclick="MickeyStudio.regenerateDeveloperApiKey()" class="btn-secondary text-xs px-3 py-2.5 text-zinc-400 hover:text-white" title="توليد مفتاح جديد">
+            <i class="fa-solid fa-arrows-rotate"></i>
+            <span>توليد جديد</span>
+          </button>
+        </div>
+
+        <!-- Base URL and Auth Header Note -->
+        <div class="pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-zinc-500 text-[11px]">رابط الـ API الأساسي (Base URL):</span>
+            <code id="dev-api-base-url" class="font-mono text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/30 text-[11px] select-all">/api.php</code>
+            <button type="button" onclick="MickeyStudio.copyApiBaseUrl()" class="text-zinc-500 hover:text-zinc-300 p-1" title="نسخ الرابط"><i class="fa-regular fa-copy text-xs"></i></button>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] text-zinc-400">
+            <span class="text-zinc-500">ترويسة التحقق:</span>
+            <code class="font-mono text-zinc-300 bg-white/5 px-2 py-0.5 rounded">Authorization: Bearer YOUR_KEY</code>
+            <span class="text-zinc-500">أو</span>
+            <code class="font-mono text-zinc-300 bg-white/5 px-2 py-0.5 rounded">?api_key=YOUR_KEY</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Two-Column Grid: Left Docs/Snippets, Right Interactive Tester -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left: Endpoint Docs & Code Snippets (7 Cols) -->
+        <div class="lg:col-span-7 space-y-4">
+          
+          <!-- Endpoint Selection Tabs -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-zinc-300 block">اختر الخدمة البرمجية (Endpoint):</label>
+            <div id="dev-api-endpoint-tabs" class="flex flex-wrap gap-1.5 bg-[#0E0E11] p-1.5 rounded-xl border border-white/5">
+              <button type="button" onclick="MickeyStudio.selectApiDocEndpoint('generate_tts')" id="doc-tab-generate_tts" class="pill-option active text-xs">
+                <i class="fa-solid fa-microphone ml-1 text-cyan-400"></i> التعليق الصوتي
+              </button>
+              <button type="button" onclick="MickeyStudio.selectApiDocEndpoint('generate_image')" id="doc-tab-generate_image" class="pill-option text-xs">
+                <i class="fa-regular fa-image ml-1 text-purple-400"></i> توليد الصور
+              </button>
+              <button type="button" onclick="MickeyStudio.selectApiDocEndpoint('enhance_prompt')" id="doc-tab-enhance_prompt" class="pill-option text-xs">
+                <i class="fa-solid fa-wand-magic-sparkles ml-1 text-amber-400"></i> تحسين الأوصاف
+              </button>
+              <button type="button" onclick="MickeyStudio.selectApiDocEndpoint('transcribe_audio')" id="doc-tab-transcribe_audio" class="pill-option text-xs">
+                <i class="fa-solid fa-file-audio ml-1 text-emerald-400"></i> تفريغ الصوت
+              </button>
+              <button type="button" onclick="MickeyStudio.selectApiDocEndpoint('status')" id="doc-tab-status" class="pill-option text-xs">
+                <i class="fa-solid fa-heart-pulse ml-1 text-zinc-400"></i> فحص الخادم
+              </button>
+            </div>
+          </div>
+
+          <!-- Endpoint Details Container (Populated dynamically) -->
+          <div id="dev-api-doc-details" class="rounded-2xl bg-[#0E0E11] border border-white/5 p-5 space-y-3">
+            <!-- Dynamic content from renderApiEndpointDetails() -->
+          </div>
+
+          <!-- Code Snippets Generator Card -->
+          <div class="rounded-2xl bg-[#0E0E11] border border-white/5 p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-zinc-400 text-xs"></i>
+                <h4 class="text-xs font-bold text-white">أكواد الاستدعاء الجاهزة (Code Snippets)</h4>
+              </div>
+              <button type="button" onclick="MickeyStudio.copyCurrentCodeSnippet()" class="btn-secondary text-[11px] py-1 px-2.5">
+                <i class="fa-regular fa-copy"></i>
+                <span>نسخ الكود</span>
+              </button>
+            </div>
+
+            <!-- Snippet Language Tabs -->
+            <div id="dev-api-lang-tabs" class="flex items-center gap-1.5 border-b border-white/5 pb-2">
+              <button type="button" onclick="MickeyStudio.setApiSnippetLang('curl')" id="snippet-tab-curl" class="pill-option active text-[11px]">cURL</button>
+              <button type="button" onclick="MickeyStudio.setApiSnippetLang('javascript')" id="snippet-tab-javascript" class="pill-option text-[11px]">JavaScript</button>
+              <button type="button" onclick="MickeyStudio.setApiSnippetLang('python')" id="snippet-tab-python" class="pill-option text-[11px]">Python</button>
+              <button type="button" onclick="MickeyStudio.setApiSnippetLang('premiere')" id="snippet-tab-premiere" class="pill-option text-[11px]">Premiere Pro (UXP)</button>
+            </div>
+
+            <!-- Code Block Output -->
+            <pre class="bg-black/80 rounded-xl p-4 overflow-x-auto text-[11px] font-mono text-emerald-400 border border-white/5 max-h-64 leading-relaxed select-all" dir="ltr"><code id="dev-api-code-snippet"></code></pre>
+          </div>
+
+        </div>
+
+        <!-- Right: Live API Tester Console (5 Cols) -->
+        <div class="lg:col-span-5 space-y-4">
+          
+          <div class="rounded-2xl bg-[#0E0E11] border border-white/5 p-5 space-y-4 shadow-xl">
+            <div class="flex items-center justify-between border-b border-white/5 pb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                <h3 class="text-sm font-bold text-white">مختبر التجربة المباشر (Live Playground)</h3>
+              </div>
+              <span id="dev-api-test-badge" class="text-[10px] font-mono text-zinc-400 px-2 py-0.5 rounded bg-zinc-800">جاهز للإرسال</span>
+            </div>
+
+            <!-- JSON Payload Input -->
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <label for="dev-api-test-body" class="font-medium text-zinc-300">محتوى الطلب (JSON Body):</label>
+                <span class="text-[10px] text-zinc-500">عدّل البيانات حسب رغبتك</span>
+              </div>
+              <textarea id="dev-api-test-body" rows="7" class="w-full bg-black/70 border border-white/10 rounded-xl p-3 text-[11px] font-mono text-zinc-200 focus:outline-none focus:border-cyan-400 resize-y" dir="ltr"></textarea>
+            </div>
+
+            <!-- Execute Live Test Button -->
+            <button id="btn-execute-api-test" type="button" onclick="MickeyStudio.executeLiveApiTest()" class="w-full btn-primary py-2.5 text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-white/5">
+              <i class="fa-solid fa-paper-plane text-xs"></i>
+              <span>🚀 إرسال طلب تجريبي مباشر (Send Test Request)</span>
+            </button>
+
+            <!-- Test Response Card -->
+            <div id="dev-api-test-result-box" class="space-y-2 pt-2 border-t border-white/5 hidden">
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="text-zinc-400 text-[11px]">الاستجابة:</span>
+                  <span id="dev-api-response-status" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">200 OK</span>
+                  <span id="dev-api-response-time" class="px-2 py-0.5 rounded text-[10px] font-mono text-zinc-400 bg-zinc-800">120ms</span>
+                </div>
+                <button type="button" onclick="MickeyStudio.copyApiTestResponse()" class="text-zinc-400 hover:text-white text-[11px] flex items-center gap-1">
+                  <i class="fa-regular fa-copy"></i>
+                  <span>نسخ الرد</span>
+                </button>
+              </div>
+
+              <pre class="bg-black/90 rounded-xl p-3.5 overflow-x-auto text-[10px] font-mono text-zinc-300 border border-white/5 max-h-60 leading-relaxed select-all" dir="ltr"><code id="dev-api-response-code">// سيظهر رد الخادم هنا...</code></pre>
+            </div>
+
+          </div>
+
+          <!-- Quick Integration Guide -->
+          <div class="rounded-2xl bg-white/[0.02] border border-white/5 p-4 space-y-2 text-xs">
+            <h4 class="font-bold text-zinc-200 flex items-center gap-1.5">
+              <i class="fa-regular fa-circle-question text-cyan-400"></i>
+              <span>كيف أربط الـ API في مشروعي؟</span>
+            </h4>
+            <ol class="space-y-1.5 text-zinc-400 text-[11px] list-decimal list-inside leading-relaxed">
+              <li>انسخ <strong class="text-zinc-200">مفتاح الوصول (API Key)</strong> من الأعلى.</li>
+              <li>أرسل طلب <code class="font-mono text-cyan-300">POST</code> إلى رابط الـ API مع تضمين الترويسة <code class="font-mono text-zinc-300">Authorization: Bearer YOUR_KEY</code>.</li>
+              <li>ستتلقى النتائج بصيغة JSON متوافقة فورياً مع أي لغة برمجة أو محرر فيديو.</li>
+            </ol>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <div id="modal-account" class="fixed inset-0 z-[70] minimal-modal-backdrop flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121215] border border-white/10 rounded-3xl max-w-md w-full max-h-[92vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-white/5">
+        <div>
+          <p class="text-[11px] text-cyan-400 font-medium">بوابة حساب Mickey Studio</p>
+          <h2 class="text-base font-bold text-white mt-0.5">تسجيل الدخول أو إنشاء حساب</h2>
+        </div>
+        <button type="button" onclick="MickeyStudio.closeAccountModal()" class="w-7 h-7 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Auth Fields View (When signed out) -->
+      <div id="account-auth-fields" class="space-y-4">
+        
+        <!-- Auth Method Tabs -->
+        <div class="grid grid-cols-3 gap-1 bg-[#18181B] p-1 rounded-xl border border-white/5 text-[11px] font-medium">
+          <button type="button" onclick="MickeyStudio.switchAuthTab('email')" id="auth-tab-email" class="py-1.5 rounded-lg bg-white/10 text-white font-semibold transition">
+            <i class="fa-regular fa-envelope ml-1"></i> البريد
+          </button>
+          <button type="button" onclick="MickeyStudio.switchAuthTab('google')" id="auth-tab-google" class="py-1.5 rounded-lg text-zinc-400 hover:text-white transition">
+            <i class="fa-brands fa-google ml-1"></i> Google
+          </button>
+          <button type="button" onclick="MickeyStudio.switchAuthTab('phone')" id="auth-tab-phone" class="py-1.5 rounded-lg text-zinc-400 hover:text-white transition">
+            <i class="fa-solid fa-phone ml-1"></i> الهاتف
+          </button>
+        </div>
+
+        <!-- 1. Email Tab Panel -->
+        <div id="auth-panel-email" class="space-y-3">
+          <div>
+            <label class="block text-xs text-zinc-300 font-medium mb-1">البريد الإلكتروني</label>
+            <input id="account-email" type="email" autocomplete="email" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition" placeholder="name@example.com" dir="ltr">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-300 font-medium mb-1">كلمة المرور</label>
+            <input id="account-password" type="password" autocomplete="current-password" minlength="8" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition" placeholder="8 أحرف على الأقل" dir="ltr">
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button type="button" onclick="MickeyStudio.signInWithEmail()" class="btn-secondary text-xs py-2.5 justify-center font-semibold">
+              <i class="fa-solid fa-right-to-bracket ml-1.5"></i> تسجيل الدخول
+            </button>
+            <button type="button" onclick="MickeyStudio.createEmailAccount()" class="btn-primary text-xs py-2.5 justify-center font-semibold">
+              <i class="fa-solid fa-user-plus ml-1.5"></i> إنشاء حساب
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Google Tab Panel -->
+        <div id="auth-panel-google" class="hidden space-y-3 py-2 text-center">
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            سجل دخولك بنقرة واحدة باستخدام حساب Google. ستحصل فورياً على الخطة المجانية غير المحدودة.
+          </p>
+          <button type="button" onclick="MickeyStudio.signInWithGoogle()" class="w-full py-3 rounded-xl border border-white/15 hover:border-white/30 bg-white/5 hover:bg-white/10 text-xs font-semibold text-white transition flex items-center justify-center gap-2.5 shadow-lg">
+            <i class="fa-brands fa-google text-red-400 text-sm"></i>
+            <span>المتابعة بحساب Google</span>
+          </button>
+        </div>
+
+        <!-- 3. Phone Tab Panel (Phone + Password OR SMS) -->
+        <div id="auth-panel-phone" class="hidden space-y-3">
+          <div>
+            <label class="block text-xs text-zinc-300 font-medium mb-1">رقم الهاتف</label>
+            <input id="account-phone" type="tel" autocomplete="tel" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition" placeholder="+201xxxxxxxxx أو 01xxxxxxxxx" dir="ltr">
+          </div>
+
+          <div>
+            <label class="block text-xs text-zinc-300 font-medium mb-1">كلمة المرور (للتسجيل والدخول السريع)</label>
+            <input id="account-phone-password" type="password" minlength="8" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition" placeholder="8 أحرف أو أرقام على الأقل" dir="ltr">
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button type="button" onclick="MickeyStudio.signInWithPhonePassword()" class="btn-secondary text-xs py-2 justify-center font-semibold">
+              <i class="fa-solid fa-right-to-bracket ml-1.5"></i> دخول برقم الهاتف
+            </button>
+            <button type="button" onclick="MickeyStudio.createPhonePasswordAccount()" class="btn-primary text-xs py-2 justify-center font-semibold">
+              <i class="fa-solid fa-user-plus ml-1.5"></i> تسجيل برقم الهاتف
+            </button>
+          </div>
+
+          <!-- Optional SMS OTP Fallback -->
+          <div class="border-t border-white/10 pt-3 space-y-2">
+            <div class="text-[11px] text-zinc-400 text-center font-medium">أو التحقق عبر رمز SMS</div>
+            <div id="phone-recaptcha-container"></div>
+            <button type="button" onclick="MickeyStudio.sendPhoneCode()" class="w-full btn-secondary text-xs py-2 justify-center">
+              <i class="fa-solid fa-comment-sms ml-1.5"></i> إرسال رمز التحقق SMS
+            </button>
+            <div id="phone-code-row" class="hidden space-y-2 mt-2">
+              <input id="account-phone-code" type="text" inputmode="numeric" autocomplete="one-time-code" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono text-center tracking-widest" placeholder="رمز SMS" dir="ltr">
+              <button type="button" onclick="MickeyStudio.verifyPhoneCode()" class="btn-primary w-full text-xs py-2 justify-center font-semibold">
+                تأكيد رمز SMS والدخول
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/20 text-[11px] text-cyan-300 leading-relaxed">
+          <i class="fa-solid fa-shield-halved ml-1 text-cyan-400"></i>
+          يمكن للضيف تجربة الموقع <strong>5 مرات</strong> فقط. عند إنشاء حساب تحصل فورياً على <strong>الخطة المجانية غير المحدودة</strong>!
+        </div>
+
+      </div>
+
+      <!-- Profile View (When signed in) -->
+      <div id="account-profile-fields" class="hidden space-y-4">
+        <div class="rounded-2xl bg-white/[0.03] border border-white/5 p-4 space-y-3">
+          <div class="flex items-center gap-3">
+            <div id="account-profile-avatar" class="w-10 h-10 rounded-xl bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-sm text-white shadow-inner">
+              M
+            </div>
+            <div>
+              <div id="account-profile-name" class="font-bold text-white text-sm">مستخدم Mickey Studio</div>
+              <div id="account-profile-email" class="text-xs text-zinc-400 font-mono mt-0.5"></div>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-white/5 flex items-center justify-between">
+            <div class="text-[11px] text-zinc-400">الخطة الحالية:</div>
+            <div id="account-plan" class="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+              <i class="fa-solid fa-infinity text-[10px]"></i>
+              <span>الخطة المجانية · استخدام غير محدود</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-zinc-400 text-[11px]">حالة الحساب:</span>
+            <span id="account-status" class="text-emerald-400 font-semibold text-[11px]">الحساب نشط ✓</span>
+          </div>
+        </div>
+
+        <!-- Admin Direct Link (Shown only for michaelmagednew@gmail.com) -->
+        <a id="admin-dashboard-link" href="admin.html" target="_blank" class="hidden w-full py-2.5 rounded-xl border border-cyan-500/30 hover:border-cyan-500/60 bg-cyan-950/20 hover:bg-cyan-900/40 text-cyan-300 text-xs font-semibold text-center transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-user-shield"></i>
+          <span>فتح لوحة الإدارة (Admin Dashboard) ↗</span>
+        </a>
+
+        <!-- زر نسخ كود ربط إضافة Premiere Pro المباشر -->
+        <button type="button" onclick="MickeyStudio.copyPremierePairToken()" class="w-full py-2.5 rounded-xl border border-indigo-500/30 hover:border-indigo-500/60 bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-300 text-xs font-semibold text-center transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/20">
+          <i class="fa-solid fa-link"></i>
+          <span>نسخ كود ربط إضافة Premiere Pro ⚡</span>
+        </button>
+
+        <button type="button" onclick="MickeyStudio.signOutAccount()" class="btn-secondary w-full text-xs py-2.5 justify-center text-red-300 hover:text-red-200">
+          <i class="fa-solid fa-right-from-bracket ml-1.5"></i> تسجيل الخروج
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="modal-admin" class="fixed inset-0 z-[75] minimal-modal-backdrop flex items-center justify-center p-4 hidden">
+    <div class="bg-[#121215] border border-white/10 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"><div class="flex items-center justify-between p-5 border-b border-white/10"><div><p class="text-xs text-emerald-300">إدارة Mickey Studio</p><h2 class="text-lg font-bold text-white">الحسابات</h2></div><button type="button" onclick="MickeyStudio.closeAdminDashboard()" class="btn-secondary px-3 py-1">×</button></div><div id="admin-user-list" class="p-5 overflow-y-auto space-y-2"><p class="text-sm text-zinc-400">جاري تحميل الحسابات…</p></div></div>
+  </div>
+
+
+
+  <!-- ===================================================================
+       MODAL 2: تحسين الوصف بالذكاء الاصطناعي ✨
+       =================================================================== -->
+  <div id="modal-prompt-architect" class="fixed inset-0 z-50 minimal-modal-backdrop flex items-center justify-center p-4 hidden">
+    <div class="bg-[#18181B] border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 modal-content-anim shadow-2xl">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-white/5">
+        <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+          <span>تحسين الوصف بالذكاء الاصطناعي</span>
+        </h3>
+        <button type="button" onclick="document.getElementById('modal-prompt-architect').classList.add('hidden')" class="w-7 h-7 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <span class="text-zinc-500 block mb-1">النص الأصلي:</span>
+          <div id="architect-original-text" class="p-2.5 rounded-lg bg-zinc-900 border border-white/5 text-zinc-300"></div>
+        </div>
+
+        <div>
+          <span class="text-zinc-200 font-medium block mb-1">الوصف المُحسّن الاحترافي:</span>
+          <div id="architect-enhanced-text" class="p-3 rounded-lg bg-zinc-900 border border-white/10 text-white font-mono leading-relaxed select-all"></div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+        <button type="button" onclick="document.getElementById('modal-prompt-architect').classList.add('hidden')" class="btn-secondary text-xs">إغلاق</button>
+        <button type="button" id="btn-apply-enhanced-prompt" class="btn-primary text-xs">تطبيق في حقل الوصف</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL 3: LIGHTBOX (معاينة بالحجم الكامل)
+       =================================================================== -->
+  <div id="modal-lightbox" class="fixed inset-0 z-50 minimal-modal-backdrop flex items-center justify-center p-4 hidden" onclick="MickeyStudio.closeLightbox()">
+    <div class="relative max-w-5xl max-h-[90vh] flex flex-col items-center justify-center" onclick="event.stopPropagation()">
+      <button type="button" onclick="MickeyStudio.closeLightbox()" class="absolute -top-10 left-0 w-8 h-8 rounded-full bg-white/10 text-white hover:bg-white/20 flex items-center justify-center text-xs">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div id="lightbox-content-container" class="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"></div>
+    </div>
+  </div>
+
+  <!-- Hidden compatibility elements -->
+  <span id="current-model-tag" class="hidden">FLUX</span>
+  <span id="hud-latency" class="hidden">12ms</span>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Main Application Script -->
+  <script src="app.js?v=2.4"></script>
+
+</body>
+</html>

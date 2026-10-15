@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mickey Studio // لوحة الإدارة والتحكم في الحسابات</title>
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#09090B">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<text y=%2226%22 font-size=%2226%22>⚡</text></svg>">
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zinc: {
+              950: '#09090B',
+              900: '#121215',
+              850: '#18181B',
+              800: '#27272A',
+              700: '#3F3F46',
+            }
+          },
+          fontFamily: {
+            sans: ['Readex Pro', 'Cairo', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts & FontAwesome 6 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+
+<body class="bg-[#09090B] text-zinc-100 min-h-screen font-sans selection:bg-zinc-700 selection:text-white flex flex-col">
+
+  <!-- Background Cyber Glow -->
+  <div class="fixed inset-0 pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-600 via-transparent to-transparent"></div>
+
+  <!-- Top Navigation Header -->
+  <header class="w-full border-b border-white/5 bg-[#0E0E11]/90 backdrop-blur sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-white to-zinc-400 flex items-center justify-center text-black font-black text-base shadow-lg shadow-white/5">
+        <span>M</span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold tracking-tight text-white leading-none">MICKEY STUDIO ADMIN</h1>
+          <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-semibold">
+            لوحة المسؤول
+          </span>
+        </div>
+        <p class="text-[11px] text-zinc-400 mt-1">إدارة المستخدمين وصلاحيات إضافة Premiere Pro</p>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="flex items-center gap-3">
+      <a href="index.html" class="px-3 py-1.5 rounded-xl border border-white/10 hover:border-white/25 bg-white/5 hover:bg-white/10 text-xs text-zinc-300 hover:text-white transition flex items-center gap-2">
+        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+        <span>العودة للمنصة</span>
+      </a>
+
+      <div id="admin-user-badge" class="hidden items-center gap-2 px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 text-emerald-300 text-xs">
+        <i class="fa-solid fa-user-shield text-xs"></i>
+        <span id="admin-email-text" class="font-mono text-[11px]">michaelmagednew@gmail.com</span>
+      </div>
+
+      <button id="btn-admin-logout" onclick="handleLogout()" class="hidden px-3 py-1.5 rounded-xl border border-red-500/30 hover:border-red-500/60 bg-red-950/20 text-red-300 hover:text-red-200 text-xs transition flex items-center gap-1.5">
+        <i class="fa-solid fa-right-from-bracket text-xs"></i>
+        <span>خروج</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 space-y-8 relative z-10">
+
+    <!-- 1. AUTH SCREEN (Shown if not logged in as Admin) -->
+    <div id="auth-section" class="max-w-md mx-auto my-12 bg-[#121215] border border-white/10 rounded-3xl p-8 space-y-6 shadow-2xl">
+      <div class="text-center space-y-2">
+        <div class="w-14 h-14 rounded-2xl bg-zinc-800 border border-white/10 mx-auto flex items-center justify-center text-2xl text-cyan-400 shadow-inner">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h2 class="text-xl font-bold text-white">تسجيل دخول المسؤول</h2>
+        <p class="text-xs text-zinc-400">سجل الدخول بحساب الإدارة المعتمد للوصول لكافة الصلاحيات وإدارة الحسابات.</p>
+        <div class="inline-block px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono mt-2">
+          مخصص لـ: michaelmagednew@gmail.com
+        </div>
+      </div>
+
+      <!-- Auth Error Alert -->
+      <div id="auth-error-box" class="hidden p-3.5 rounded-2xl bg-red-950/40 border border-red-500/30 text-red-300 text-xs space-y-1">
+        <div class="font-semibold flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span>خطأ في الصلاحيات</span>
+        </div>
+        <p id="auth-error-msg" class="text-[11px] text-red-400 leading-relaxed"></p>
+      </div>
+
+      <form id="admin-login-form" onsubmit="handleEmailLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs text-zinc-300 font-medium mb-1.5">البريد الإلكتروني</label>
+          <input id="login-email" type="email" value="michaelmagednew@gmail.com" required dir="ltr" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400 font-mono transition">
+        </div>
+
+        <div>
+          <label class="block text-xs text-zinc-300 font-medium mb-1.5">كلمة المرور</label>
+          <input id="login-password" type="password" required dir="ltr" placeholder="••••••••" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400 transition">
+        </div>
+
+        <button type="submit" id="btn-submit-login" class="w-full py-3 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition shadow-lg shadow-white/5 flex items-center justify-center gap-2">
+          <span>دخول المسؤول</span>
+          <i class="fa-solid fa-arrow-left text-[11px]"></i>
+        </button>
+      </form>
+
+      <div class="relative flex py-2 items-center">
+        <div class="flex-grow border-t border-white/10"></div>
+        <span class="flex-shrink mx-3 text-[11px] text-zinc-500">أو</span>
+        <div class="flex-grow border-t border-white/10"></div>
+      </div>
+
+      <button type="button" onclick="handleGoogleLogin()" class="w-full py-2.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-xs font-semibold text-white transition flex items-center justify-center gap-2.5">
+        <i class="fa-brands fa-google text-red-400"></i>
+        <span>المتابعة بحساب Google المعتمد</span>
+      </button>
+    </div>
+
+    <!-- 2. ADMIN DASHBOARD (Shown when verified as michaelmagednew@gmail.com) -->
+    <div id="dashboard-section" class="hidden space-y-8">
+
+      <!-- Gemini Multi-Key Failover Pool Section -->
+      <section class="rounded-3xl border border-cyan-500/30 bg-[#121215] p-6 shadow-2xl space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <div>
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-sm"><i class="fa-solid fa-arrows-rotate"></i></span>
+              <h2 class="text-base font-bold text-white">مجمع تدوير مفاتيح Google Gemini API الذكي (Multi-Key Failover Pool)</h2>
+            </div>
+            <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
+              تُحفظ على الخادم حصرياً وتُدار من قبل الأدمن فقط. عند نفاد كريدت أو حصة أي مفتاح (429 / Quota Exceeded)، يقوم السيرفر بالتحويل فورياً وتلقائياً للمفتاح التالي دون توقف للمستخدمين.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="gemini-pool-counter" class="rounded-full border border-cyan-500/30 bg-cyan-950/30 px-3.5 py-1 text-xs font-mono font-bold text-cyan-300">
+              <i class="fa-solid fa-spinner fa-spin mr-1"></i> جاري فحص الحوض…
+            </span>
+          </div>
+        </div>
+
+        <!-- Add Keys Form -->
+        <div class="p-5 rounded-2xl bg-black/40 border border-white/5 space-y-4">
+          <div class="flex items-center justify-between">
+            <label for="admin-multi-gemini-keys" class="text-xs font-bold text-zinc-200 flex items-center gap-2">
+              <i class="fa-solid fa-key text-emerald-400"></i>
+              <span>إضافة مفتاح أو عدة مفاتيح جديدة للحوض:</span>
+            </label>
+            <span class="text-[10px] text-zinc-500 font-mono">يقبل مفتاح واحد أو عدة مفاتيح (كل مفتاح في سطر)</span>
+          </div>
+
+          <textarea id="admin-multi-gemini-keys" rows="2" dir="ltr" placeholder="AIzaSy...&#10;AIzaSy... (ألصق مفتاحًا واحدًا أو عدة مفاتيح كل مفتاح في سطر جديد)" class="w-full rounded-xl border border-white/10 bg-[#161619] p-3 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-cyan-400 transition"></textarea>
+
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+            <input id="admin-gemini-key-label" type="text" placeholder="تسمية للمفتاح/المفاتيح (اختياري، مثلاً: حساب Google الثاني)" class="w-full sm:w-80 rounded-xl border border-white/10 bg-[#161619] px-3.5 py-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-cyan-400">
+
+            <div class="flex items-center gap-2">
+              <button id="btn-add-gemini-keys" type="button" onclick="handleAddGeminiKeys()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 text-black font-bold text-xs hover:from-emerald-300 hover:to-cyan-300 transition flex items-center gap-2 shadow-lg shadow-emerald-500/10 cursor-pointer">
+                <i class="fa-solid fa-plus text-[11px]"></i>
+                <span>إضافة إلى حوض التدوير</span>
+              </button>
+              <button id="btn-clear-gemini-pool" type="button" onclick="handleClearGeminiPool()" class="px-3.5 py-2.5 rounded-xl border border-red-500/20 bg-red-950/20 text-red-400 hover:bg-red-900/40 text-xs font-semibold transition cursor-pointer" title="حذف كافة مفاتيح Gemini من السيرفر">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Pool Table -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold text-zinc-300 flex items-center gap-2">
+              <i class="fa-solid fa-shield-halved text-cyan-400 text-xs"></i>
+              <span>المفاتيح النشطة في حوض التدوير (ترتيب الأولوية عند التوليد):</span>
+            </h3>
+            <button type="button" onclick="loadProviderKeysStatus()" class="text-[11px] text-zinc-400 hover:text-white flex items-center gap-1 transition cursor-pointer">
+              <i class="fa-solid fa-rotate-right text-[10px]"></i>
+              <span>تحديث</span>
+            </button>
+          </div>
+
+          <div class="overflow-x-auto rounded-2xl border border-white/5 bg-[#18181B]/60">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-white/[0.02] text-zinc-400 border-b border-white/5 font-semibold">
+                <tr>
+                  <th class="py-3 px-4">الأولوية</th>
+                  <th class="py-3 px-4">المفتاح المقنّع</th>
+                  <th class="py-3 px-4">التسمية</th>
+                  <th class="py-3 px-4">تاريخ الإضافة</th>
+                  <th class="py-3 px-4">الحالة</th>
+                  <th class="py-3 px-4 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="gemini-pool-table-body" class="divide-y divide-white/5">
+                <tr>
+                  <td colspan="6" class="py-8 text-center text-zinc-500">
+                    <i class="fa-solid fa-spinner fa-spin text-cyan-400 mr-2"></i> جاري تحميل المفاتيح…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Other Optional Secrets (Groq / HuggingFace) -->
+        <details class="group rounded-2xl border border-white/5 bg-black/20 p-4 transition">
+          <summary class="flex cursor-pointer items-center justify-between text-xs font-semibold text-zinc-400 hover:text-white">
+            <span class="flex items-center gap-2"><i class="fa-solid fa-sliders text-zinc-500"></i> مفاتيح إضافية اختيارية (Groq / Hugging Face)</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-zinc-500 transition-transform group-open:rotate-180"></i>
+          </summary>
+          <form id="provider-keys-form" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-3 border-t border-white/5">
+            <div class="space-y-2">
+              <label for="admin-groq-key" class="block text-xs font-medium text-zinc-300">Groq API Key (اختياري)</label>
+              <input id="admin-groq-key" type="password" autocomplete="new-password" dir="ltr" placeholder="اتركه فارغًا للإبقاء على المفتاح الحالي" class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-mono text-white">
+              <label class="flex items-center gap-2 text-[11px] text-red-300"><input id="clear-groq-key" type="checkbox" class="accent-red-400"> حذف المفتاح المحفوظ</label>
+            </div>
+            <div class="space-y-2">
+              <label for="admin-hf-key" class="block text-xs font-medium text-zinc-300">Hugging Face Token (اختياري)</label>
+              <input id="admin-hf-key" type="password" autocomplete="new-password" dir="ltr" placeholder="اتركه فارغًا للإبقاء على المفتاح الحالي" class="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-mono text-white">
+              <label class="flex items-center gap-2 text-[11px] text-red-300"><input id="clear-hf-key" type="checkbox" class="accent-red-400"> حذف المفتاح المحفوظ</label>
+            </div>
+            <div class="col-span-full flex justify-end">
+              <button id="btn-save-provider-keys" type="submit" class="rounded-xl bg-zinc-800 hover:bg-zinc-700 px-5 py-2 text-xs font-bold text-white transition">حفظ المفاتيح الإضافية</button>
+            </div>
+          </form>
+        </details>
+      </section>
+
+      <!-- Metrics Row -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Metric 1: Total Users -->
+        <div class="bg-[#121215] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between text-zinc-400">
+            <span class="text-xs font-medium">إجمالي الحسابات المسجلة</span>
+            <div class="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-users"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold font-mono text-white" id="stat-total-users">0</div>
+          <p class="text-[11px] text-zinc-400">كافة المستخدمين في خزانة Firebase</p>
+        </div>
+
+        <!-- Metric 2: Active Users -->
+        <div class="bg-[#121215] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between text-zinc-400">
+            <span class="text-xs font-medium">الحسابات النشطة</span>
+            <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-user-check"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold font-mono text-emerald-400" id="stat-active-users">0</div>
+          <p class="text-[11px] text-zinc-400">تتمتع بصلاحية استخدام المنصة والاضافة</p>
+        </div>
+
+        <!-- Metric 3: Suspended Users -->
+        <div class="bg-[#121215] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between text-zinc-400">
+            <span class="text-xs font-medium">الحسابات الموقوفة</span>
+            <div class="w-8 h-8 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-user-slash"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold font-mono text-red-400" id="stat-suspended-users">0</div>
+          <p class="text-[11px] text-zinc-400">معطلة ومحظورة من التوليد في Premiere</p>
+        </div>
+
+        <!-- Metric 4: Plan Status -->
+        <div class="bg-[#121215] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between text-zinc-400">
+            <span class="text-xs font-medium">الخطة التلقائية</span>
+            <div class="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-infinity"></i>
+            </div>
+          </div>
+          <div class="text-base font-bold text-purple-300">الخطة المجانية غير المحدودة</div>
+          <p class="text-[11px] text-zinc-400">مفعلة لجميع الحسابات المسجلة</p>
+        </div>
+      </div>
+
+      <!-- User Management Panel -->
+      <div class="bg-[#121215] border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/5">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-users-gear text-cyan-400"></i>
+              <span>إدارة الحسابات وصلاحيات الوصول</span>
+            </h2>
+            <p class="text-xs text-zinc-400 mt-1">يمكنك إيقاف أي حساب فوريًا؛ يتم تجميد عمل الإضافة لديه لحظياً ومنعه من استخدام أي خدمة.</p>
+          </div>
+
+          <!-- Search and Filter Bar -->
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-xs text-zinc-500"></i>
+              <input id="user-search-input" oninput="filterUsers()" type="text" placeholder="بحث بالبريد، الهاتف، أو UID..." class="bg-[#18181B] border border-white/10 rounded-xl pr-9 pl-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 w-64 transition">
+            </div>
+
+            <select id="user-status-filter" onchange="filterUsers()" class="bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-cyan-400 transition cursor-pointer">
+              <option value="all">كافة الحالات</option>
+              <option value="active">الحسابات النشطة فقط</option>
+              <option value="suspended">الحسابات الموقوفة فقط</option>
+            </select>
+
+            <button onclick="loadUsers()" title="تحديث القائمة" class="p-2 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 text-zinc-300 hover:text-white text-xs transition">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead>
+              <tr class="border-b border-white/5 text-zinc-400 font-medium">
+                <th class="py-3 px-4">المستخدم</th>
+                <th class="py-3 px-4">معرف الحساب (UID)</th>
+                <th class="py-3 px-4">الخطة</th>
+                <th class="py-3 px-4">تاريخ التسجيل</th>
+                <th class="py-3 px-4">الحالة</th>
+                <th class="py-3 px-4 text-center">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body" class="divide-y divide-white/[0.03]">
+              <tr>
+                <td colspan="6" class="py-12 text-center text-zinc-500">
+                  <div class="inline-flex items-center gap-2">
+                    <i class="fa-solid fa-spinner fa-spin text-cyan-400"></i>
+                    <span>جاري تحميل قائمة المستخدمين من Firebase...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Global Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-16 opacity-0 transition-all duration-300 pointer-events-none px-4 py-3 rounded-2xl border text-xs flex items-center gap-2.5 shadow-2xl">
+    <i id="toast-icon" class="text-sm"></i>
+    <span id="toast-text" class="font-medium"></span>
+  </div>
+
+  <script>
+    const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
+    const DEFAULT_CONFIG = {
+      apiKey: "AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg",
+      authDomain: "mickey-gemini-studio.firebaseapp.com",
+      projectId: "mickey-gemini-studio",
+      storageBucket: "mickey-gemini-studio.firebasestorage.app",
+      messagingSenderId: "539974179095",
+      appId: "1:539974179095:web:5e36791365e6a2cdefff52",
+      measurementId: "G-LH4V8X9TQ9"
+    };
+
+    let allUsers = [];
+
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+      firebase.initializeApp(DEFAULT_CONFIG);
+    }
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const apiUrl = new URL('api.php', window.location.href).href;
+
+    async function providerKeysRequest(action, payload = {}) {
+      const user = auth.currentUser;
+      if (!user) throw new Error('انتهت جلسة الأدمن. سجّل الدخول مجددًا.');
+      const idToken = await user.getIdToken(true);
+      const response = await fetch(`${apiUrl}?action=${encodeURIComponent(action)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action, idToken, ...payload })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || `تعذر تنفيذ الطلب (${response.status}).`);
+      return data;
+    }
+
+    let currentGeminiPool = [];
+
+    function renderGeminiPool(pool = []) {
+      currentGeminiPool = pool;
+      const counter = document.getElementById('gemini-pool-counter');
+      const tbody = document.getElementById('gemini-pool-table-body');
+      
+      const count = pool.length;
+      if (counter) {
+        if (count > 0) {
+          counter.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-1.5"></i> ${count} ${count === 1 ? 'مفتاح نشط' : 'مفاتيح نشطة'} في حوض التدوير`;
+          counter.className = 'rounded-full border border-emerald-500/30 bg-emerald-950/30 px-3.5 py-1 text-xs font-mono font-bold text-emerald-300';
+        } else {
+          counter.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400 mr-1.5"></i> لا توجد مفاتيح (يستخدم Edge Neural المجاني)`;
+          counter.className = 'rounded-full border border-amber-500/30 bg-amber-950/30 px-3.5 py-1 text-xs font-mono font-bold text-amber-300';
+        }
+      }
+
+      if (!tbody) return;
+      if (!pool.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-zinc-500">
+              لا توجد مفاتيح في حوض التدوير حالياً. أضف مفتاح Gemini واحد على الأقل للاستفادة من استوديو Flash TTS الفائق.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = pool.map((item, idx) => {
+        const isPrimary = idx === 0;
+        return `
+          <tr class="hover:bg-white/[0.02] transition">
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${isPrimary ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-bold' : 'bg-white/5 border border-white/10 text-zinc-400'} text-[11px] font-mono">
+                ${isPrimary ? '⭐ #1 رئيسي' : `#${idx + 1} احتياطي`}
+              </span>
+            </td>
+            <td class="py-3 px-4 font-mono text-zinc-200 text-xs" dir="ltr">
+              ${escapeHtml(item.masked_key || 'AIzaSy...')}
+            </td>
+            <td class="py-3 px-4 text-zinc-300 text-xs font-semibold">
+              ${escapeHtml(item.label || `مفتاح #${idx + 1}`)}
+            </td>
+            <td class="py-3 px-4 text-zinc-500 font-mono text-[11px]">
+              ${escapeHtml(item.added_at || '—')}
+            </td>
+            <td class="py-3 px-4">
+              <span id="key-status-badge-${item.id}" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold">
+                <i class="fa-solid fa-circle text-[6px]"></i> نشط
+              </span>
+            </td>
+            <td class="py-3 px-4 text-center">
+              <div class="flex items-center justify-center gap-2">
+                <button type="button" onclick="testGeminiKey('${item.id}')" class="px-2.5 py-1 rounded-lg border border-cyan-500/30 bg-cyan-950/20 hover:bg-cyan-900/40 text-cyan-300 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer" title="اختبار رصيد وصلاحية هذا المفتاح">
+                  <i class="fa-solid fa-bolt text-[10px]"></i>
+                  <span>فحص</span>
+                </button>
+                <button type="button" onclick="deleteGeminiKey('${item.id}')" class="px-2.5 py-1 rounded-lg border border-red-500/30 bg-red-950/20 hover:bg-red-900/40 text-red-400 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer" title="حذف هذا المفتاح من الحوض">
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                  <span>حذف</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function handleAddGeminiKeys() {
+      const keysInput = document.getElementById('admin-multi-gemini-keys');
+      const labelInput = document.getElementById('admin-gemini-key-label');
+      const keysVal = keysInput?.value.trim() || '';
+      const labelVal = labelInput?.value.trim() || '';
+
+      if (!keysVal) {
+        showToast('يرجى إدخال مفتاح Gemini API واحد على الأقل.', 'warning');
+        keysInput?.focus();
+        return;
+      }
+
+      const btn = document.getElementById('btn-add-gemini-keys');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[11px]"></i> جاري الإضافة…'; }
+
+      try {
+        const data = await providerKeysRequest('admin_save_provider_keys', {
+          geminiKeys: keysVal,
+          label: labelVal
+        });
+        renderGeminiPool(data.gemini_pool || []);
+        if (keysInput) keysInput.value = '';
+        if (labelInput) labelInput.value = '';
+        showToast(`تمت إضافة المفاتيح بنجاح إلى حوض التدوير (${data.added_count || 1} مفتاح).`, 'success');
+      } catch (err) {
+        showToast(`تعذر إضافة المفاتيح: ${err.message}`, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus text-[11px]"></i><span>إضافة إلى حوض التدوير</span>'; }
+      }
+    }
+
+    async function handleClearGeminiPool() {
+      if (!confirm('هل أنت متأكد من رغبتك في حذف كافة مفاتيح Google Gemini من حوض التدوير بالخادم؟')) return;
+      try {
+        const data = await providerKeysRequest('admin_save_provider_keys', { clearGemini: true });
+        renderGeminiPool(data.gemini_pool || []);
+        showToast('تم تفريغ حوض مفاتيح Gemini بالكامل.', 'info');
+      } catch (err) {
+        showToast(`تعذر تفريغ الحوض: ${err.message}`, 'error');
+      }
+    }
+
+    async function deleteGeminiKey(keyId) {
+      if (!confirm('هل أنت متأكد من حذف هذا المفتاح من حوض التدوير؟')) return;
+      try {
+        const data = await providerKeysRequest('admin_delete_gemini_key', { key_id: keyId });
+        renderGeminiPool(data.gemini_pool || []);
+        showToast('تم حذف المفتاح من حوض التدوير.', 'success');
+      } catch (err) {
+        showToast(`تعذر حذف المفتاح: ${err.message}`, 'error');
+      }
+    }
+
+    async function testGeminiKey(keyId) {
+      const badge = document.getElementById(`key-status-badge-${keyId}`);
+      if (badge) {
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-[10px] font-semibold';
+        badge.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[8px]"></i> فحص…';
+      }
+      try {
+        const data = await providerKeysRequest('admin_test_gemini_key', { key_id: keyId });
+        if (data.success) {
+          if (badge) {
+            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold';
+            badge.innerHTML = '<i class="fa-solid fa-circle-check text-[7px]"></i> نشط ورصيده متاح';
+          }
+          showToast(data.message || 'المفتاح نشط ورصيده متوفر ويعمل بكفاءة ✓', 'success');
+        } else {
+          if (badge) {
+            badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-semibold';
+            badge.innerHTML = '<i class="fa-solid fa-circle-xmark text-[7px]"></i> منتهي الحصة';
+          }
+          showToast(data.error || 'المفتاح منتهي الحصة أو غير صالح.', 'error');
+        }
+      } catch (err) {
+        showToast(`تعذر فحص المفتاح: ${err.message}`, 'error');
+      }
+    }
+
+    async function loadProviderKeysStatus() {
+      const counter = document.getElementById('gemini-pool-counter');
+      try {
+        const data = await providerKeysRequest('admin_get_provider_keys');
+        renderGeminiPool(data.gemini_pool || []);
+      } catch (error) {
+        if (counter) {
+          counter.textContent = error.message;
+          counter.className = 'rounded-full border border-red-500/30 bg-red-950/20 px-3 py-1 text-[11px] text-red-300';
+        }
+      }
+    }
+
+    const providerKeysForm = document.getElementById('provider-keys-form');
+    if (providerKeysForm) {
+      providerKeysForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        const button = document.getElementById('btn-save-provider-keys');
+        if (button) { button.disabled = true; button.textContent = 'جاري الحفظ على الخادم…'; }
+        const payload = {
+          groqKey: document.getElementById('admin-groq-key')?.value.trim() || '',
+          hfToken: document.getElementById('admin-hf-key')?.value.trim() || '',
+          clearGroq: document.getElementById('clear-groq-key')?.checked || false,
+          clearHuggingface: document.getElementById('clear-hf-key')?.checked || false
+        };
+        try {
+          await providerKeysRequest('admin_save_provider_keys', payload);
+          ['admin-groq-key','admin-hf-key'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+          ['clear-groq-key','clear-hf-key'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
+          showToast('تم حفظ إعدادات المفاتيح الإضافية على الخادم بأمان.', 'success');
+        } catch (error) { showToast(error.message || 'تعذر حفظ إعدادات المفاتيح.', 'error'); }
+        finally { if (button) { button.disabled = false; button.textContent = 'حفظ المفاتيح الإضافية'; } }
+      });
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      const icon = document.getElementById('toast-icon');
+      const text = document.getElementById('toast-text');
+
+      text.textContent = message;
+      if (type === 'success') {
+        toast.className = 'fixed bottom-6 right-6 z-50 transform translate-y-0 opacity-100 transition-all duration-300 px-4 py-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/90 text-emerald-200 text-xs flex items-center gap-2.5 shadow-2xl';
+        icon.className = 'fa-solid fa-circle-check text-emerald-400 text-sm';
+      } else if (type === 'error') {
+        toast.className = 'fixed bottom-6 right-6 z-50 transform translate-y-0 opacity-100 transition-all duration-300 px-4 py-3 rounded-2xl border border-red-500/30 bg-red-950/90 text-red-200 text-xs flex items-center gap-2.5 shadow-2xl';
+        icon.className = 'fa-solid fa-circle-xmark text-red-400 text-sm';
+      } else {
+        toast.className = 'fixed bottom-6 right-6 z-50 transform translate-y-0 opacity-100 transition-all duration-300 px-4 py-3 rounded-2xl border border-cyan-500/30 bg-[#121215]/95 text-cyan-200 text-xs flex items-center gap-2.5 shadow-2xl';
+        icon.className = 'fa-solid fa-circle-info text-cyan-400 text-sm';
+      }
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-16', 'opacity-0');
+      }, 4000);
+    }
+
+    // Monitor Auth State
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        const userEmail = (user.email || '').toLowerCase().trim();
+        if (userEmail === ADMIN_EMAIL) {
+          // Grant Admin Access
+          document.getElementById('auth-section').classList.add('hidden');
+          document.getElementById('dashboard-section').classList.remove('hidden');
+          document.getElementById('admin-user-badge').classList.remove('hidden');
+          document.getElementById('admin-user-badge').classList.add('flex');
+          document.getElementById('btn-admin-logout').classList.remove('hidden');
+          document.getElementById('admin-email-text').textContent = user.email;
+
+          loadProviderKeysStatus();
+          loadUsers();
+          showToast(`مرحبًا بك يا مسؤول Mickey Studio (${user.email})`, 'success');
+        } else {
+          // Reject Access
+          await auth.signOut();
+          showAuthError(`عذراً! الحساب (${userEmail}) لا يملك صلاحية المسؤول. هذا القسم مخصص حصرياً للمسؤول: ${ADMIN_EMAIL}`);
+        }
+      } else {
+        // Show Login Form
+        document.getElementById('auth-section').classList.remove('hidden');
+        document.getElementById('dashboard-section').classList.add('hidden');
+        document.getElementById('admin-user-badge').classList.add('hidden');
+        document.getElementById('btn-admin-logout').classList.add('hidden');
+      }
+    });
+
+    function showAuthError(msg) {
+      const box = document.getElementById('auth-error-box');
+      const text = document.getElementById('auth-error-msg');
+      box.classList.remove('hidden');
+      text.textContent = msg;
+    }
+
+    async function handleEmailLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      if (email.toLowerCase() !== ADMIN_EMAIL) {
+        showAuthError(`يجب تسجيل الدخول بالبريد المعتمد للمسؤول: ${ADMIN_EMAIL}`);
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-login');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...';
+
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (err) {
+        showAuthError(err.message || 'تعذر تسجيل الدخول. تحقق من كلمة المرور.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>دخول المسؤول</span><i class="fa-solid fa-arrow-left text-[11px]"></i>';
+      }
+    }
+
+    async function handleGoogleLogin() {
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const result = await auth.signInWithPopup(provider);
+        if (result.user.email.toLowerCase() !== ADMIN_EMAIL) {
+          await auth.signOut();
+          showAuthError(`حساب Google المختار ليس حساب المسؤول المعتمد (${ADMIN_EMAIL}).`);
+        }
+      } catch (err) {
+        showAuthError(err.message || 'تعذر تسجيل الدخول بحساب Google.');
+      }
+    }
+
+    async function handleLogout() {
+      await auth.signOut();
+      showToast('تم تسجيل الخروج بنجاح.', 'info');
+    }
+
+    // Load Users from Firestore
+    async function loadUsers() {
+      const tbody = document.getElementById('users-table-body');
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-12 text-center text-zinc-500">
+            <div class="inline-flex items-center gap-2">
+              <i class="fa-solid fa-spinner fa-spin text-cyan-400"></i>
+              <span>جاري تحميل الحسابات من Firestore...</span>
+            </div>
+          </td>
+        </tr>
+      `;
+
+      try {
+        const snapshot = await db.collection('users').get();
+        allUsers = [];
+
+        snapshot.forEach(doc => {
+          allUsers.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Update Stats
+        updateMetrics();
+        renderUsers(allUsers);
+      } catch (err) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-red-400">
+              تعذر تحميل بيانات المستخدمين: ${err.message}
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    function updateMetrics() {
+      const total = allUsers.length;
+      const active = allUsers.filter(u => (u.status || 'active') === 'active').length;
+      const suspended = allUsers.filter(u => u.status === 'suspended').length;
+
+      document.getElementById('stat-total-users').textContent = total;
+      document.getElementById('stat-active-users').textContent = active;
+      document.getElementById('stat-suspended-users').textContent = suspended;
+    }
+
+    function filterUsers() {
+      const query = (document.getElementById('user-search-input').value || '').toLowerCase().trim();
+      const statusFilter = document.getElementById('user-status-filter').value;
+
+      const filtered = allUsers.filter(user => {
+        const matchQuery = !query ||
+          (user.email || '').toLowerCase().includes(query) ||
+          (user.phoneNumber || '').toLowerCase().includes(query) ||
+          (user.displayName || '').toLowerCase().includes(query) ||
+          (user.id || '').toLowerCase().includes(query);
+
+        const currentStatus = user.status || 'active';
+        const matchStatus = statusFilter === 'all' || currentStatus === statusFilter;
+
+        return matchQuery && matchStatus;
+      });
+
+      renderUsers(filtered);
+    }
+
+    function renderUsers(users) {
+      const tbody = document.getElementById('users-table-body');
+      if (!users.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-10 text-center text-zinc-500">
+              لا توجد حسابات مطابقة لمعايير البحث.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = users.map(user => {
+        const status = user.status || 'active';
+        const isSuspended = status === 'suspended';
+        const plan = user.plan || 'free';
+        const emailOrPhone = user.email || user.phoneNumber || 'بدون بريد';
+        const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'مستخدم Mickey');
+        
+        // Format Date
+        let dateStr = '—';
+        if (user.createdAt) {
+          try {
+            const date = user.createdAt.toDate ? user.createdAt.toDate() : new Date(user.createdAt);
+            dateStr = date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+          } catch (_) {}
+        }
+
+        return `
+          <tr class="hover:bg-white/[0.02] transition">
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-xs text-white">
+                  ${user.photoURL ? `<img src="${user.photoURL}" class="w-full h-full rounded-full object-cover">` : displayName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div class="font-semibold text-white">${escapeHtml(displayName)}</div>
+                  <div class="text-[11px] text-zinc-400 font-mono">${escapeHtml(emailOrPhone)}</div>
+                </div>
+              </div>
+            </td>
+
+            <td class="py-3 px-4">
+              <span class="font-mono text-[10px] text-zinc-400 bg-white/5 px-2 py-1 rounded-md cursor-pointer hover:text-white" title="اضغط لنسخ UID" onclick="navigator.clipboard.writeText('${user.id}'); showToast('تم نسخ المعرف: ${user.id}', 'info')">
+                ${user.id.substring(0, 10)}… <i class="fa-regular fa-copy text-[9px] mr-1"></i>
+              </span>
+            </td>
+
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 font-medium text-[10px]">
+                <i class="fa-solid fa-infinity text-[8px]"></i>
+                <span>خطة مجانية غير محدودة</span>
+              </span>
+            </td>
+
+            <td class="py-3 px-4 text-zinc-400 font-mono text-[11px]">
+              ${dateStr}
+            </td>
+
+            <td class="py-3 px-4">
+              ${isSuspended
+                ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-semibold"><i class="fa-solid fa-circle text-[6px]"></i> موقوف</span>`
+                : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold"><i class="fa-solid fa-circle text-[6px]"></i> نشط</span>`
+              }
+            </td>
+
+            <td class="py-3 px-4 text-center">
+              ${isSuspended
+                ? `<button onclick="toggleUserStatus('${user.id}', 'active')" class="px-3 py-1.5 rounded-xl border border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-950/20 text-emerald-300 hover:bg-emerald-900/40 text-[11px] font-medium transition flex items-center gap-1.5 mx-auto">
+                    <i class="fa-solid fa-check text-[10px]"></i>
+                    <span>إعادة التفعيل</span>
+                  </button>`
+                : `<button onclick="toggleUserStatus('${user.id}', 'suspended')" class="px-3 py-1.5 rounded-xl border border-red-500/30 hover:border-red-500/60 bg-red-950/20 text-red-300 hover:bg-red-900/40 text-[11px] font-medium transition flex items-center gap-1.5 mx-auto">
+                    <i class="fa-solid fa-ban text-[10px]"></i>
+                    <span>إيقاف الحساب</span>
+                  </button>`
+              }
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function toggleUserStatus(userId, newStatus) {
+      const actionName = newStatus === 'suspended' ? 'إيقاف' : 'إعادة تفعيل';
+      if (!confirm(`هل أنت متأكد من رغبتك في ${actionName} هذا الحساب؟`)) return;
+
+      try {
+        await db.collection('users').doc(userId).update({
+          status: newStatus,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Update local object
+        const target = allUsers.find(u => u.id === userId);
+        if (target) target.status = newStatus;
+
+        updateMetrics();
+        filterUsers();
+        showToast(`تم ${actionName} الحساب بنجاح. ستتأثر صلاحياته فورياً في الموقع والإضافة.`, 'success');
+      } catch (err) {
+        showToast(`تعذر تحديث حالة الحساب: ${err.message}`, 'error');
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+
+</body>
+</html>
