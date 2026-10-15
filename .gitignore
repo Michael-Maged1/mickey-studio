@@ -1,0 +1,8 @@
+.env
+.env.*
+*.key
+*_key.txt
+gemini_keys.json
+api_keys.json
+.mickey-provider-keys.php
+*.log
