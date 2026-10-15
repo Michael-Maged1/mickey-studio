@@ -17,4 +17,7 @@ jobs:
           VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
         run: |
           test -n "$VERCEL_DEPLOY_HOOK"
-          curl --fail --silent --show-error --request POST "$VERCEL_DEPLOY_HOOK"
+          curl --fail --silent --show-error --request POST \
+            --header "Content-Type: application/json" \
+            --data '{}' \
+            "$VERCEL_DEPLOY_HOOK"
