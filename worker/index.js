@@ -61,9 +61,10 @@ function corsHeaders(request, env) {
   const origin = request.headers.get('Origin') || '';
   const configured = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
   const isVercelPreview = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
-  const allowed = configured.includes(origin) || isVercelPreview || /^chrome-extension:\/\/[a-p]{32}$/.test(origin) || /^moz-extension:\/\//.test(origin);
+  const allowed = configured.includes(origin) || isVercelPreview || /^chrome-extension:\/\/[a-p]{32}$/.test(origin) || /^moz-extension:\/\//.test(origin) || /^uxp:\/\//i.test(origin) || origin === 'null';
+  const allowOrigin = origin === 'null' ? '*' : (allowed ? origin : (origin ? '' : '*'));
   return {
-    'Access-Control-Allow-Origin': allowed ? origin : (origin ? '' : '*'),
+    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-API-Key, X-Anonymous-ID, X-Generation-Permit',
     'Access-Control-Expose-Headers': 'X-TTS-Engine',

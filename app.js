@@ -4282,34 +4282,17 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!pendingPairCode || !user?.refreshToken) return;
     const currentCode = pendingPairCode;
     try {
-      // 1. Direct write to Google Firestore auth_sessions (bypasses any host proxy or InfinityFree blocks)
-      try {
-        const pairDocId = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(currentCode))
-          .then(buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join(''));
-        if (window.firebase && firebase.firestore) {
-          await firebase.firestore().collection('auth_sessions').doc(pairDocId).set({
-            status: 'complete',
-            email: user.email || user.phoneNumber || '',
-            refreshToken: user.refreshToken,
-            expiresAt: Math.floor(Date.now() / 1000) + 600,
-            uid: user.uid
-          });
-        }
-      } catch (fsErr) {
-        console.warn('[DirectFirestorePairing] Warning:', fsErr);
-      }
-
-      // 2. Also notify api.php if reachable
-      try {
-        await accountRequest('pair_complete', { code: currentCode, refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
-      } catch (_) {}
+      // Complete through the Worker, which validates the signed-in account and
+      // encrypts the refresh token before storing it in Firestore.
+      await accountRequest('pair_complete', { code: currentCode, refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
       history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
       showToast('تم ربط الإضافة بحساب Mickey Studio بنجاح! ارجع إلى Premiere Pro.', 'success');
     } catch (error) {
-      showToast(error.message || 'تعذر إكمال ربط الإضافة.', 'error');
+      console.error('[ExtensionPairing] Could not complete secure pairing:', error);
+      showToast('تعذر إكمال الربط التلقائي. ما زال بإمكانك استخدام كود الربط اليدوي من إعدادات الإضافة.', 'error', 7000);
     }
   }
 
