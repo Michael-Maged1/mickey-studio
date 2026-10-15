@@ -734,13 +734,13 @@ window.MickeyStudio = (function () {
       }
       STATE.image.lastEnhancedPrompt = finalPrompt;
 
-      // Route 1: Google Imagen 3 through the server-side key proxy.
+      // Route 1: Gemini Nano Banana 2.1 through the server-side key proxy.
       if (STATE.image.model === 'nano-banana') {
-        statusPill.textContent = 'جاري التوليد عبر Google Imagen 3.0 (2K Ultra)...';
+        statusPill.textContent = 'جاري التوليد عبر Google Nano Banana 2.1 (2K)...';
         const aspectRatioStr = STATE.image.width > STATE.image.height ? '16:9' : STATE.image.height > STATE.image.width ? '9:16' : '1:1';
         const res = await gatewayFetch('generate_image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: finalPrompt, aspectRatio: aspectRatioStr }) });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success || !data.image_base64) throw new Error(data.error || 'تعذر التوليد عبر Google Imagen 3.');
+        if (!res.ok || !data.success || !data.image_base64) throw new Error(data.error || 'تعذر التوليد عبر Google Nano Banana 2.1.');
         const b64 = data.image_base64;
         const mime = data.mime_type || 'image/jpeg';
         const blob = base64ToBlob(b64, mime);
@@ -758,10 +758,10 @@ window.MickeyStudio = (function () {
         laserScanner.classList.add('hidden');
         resultGrid.classList.remove('hidden');
         actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-        statusPill.textContent = 'اكتمل التوليد (Google Imagen 3.0 Ultra)';
+        statusPill.textContent = 'اكتمل التوليد (Google Nano Banana 2.1)';
         statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-400';
         SFX.playSuccess();
-        showToast('تم توليد الصورة بأعلى دقة واقعية عبر Google Imagen 3.0!', 'success');
+        showToast('تم توليد الصورة عبر Google Nano Banana 2.1 بنجاح!', 'success');
         return;
       }
 
@@ -3595,7 +3595,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       method: 'POST',
       action: 'generate_image',
       tag: 'Visual AI',
-      description: 'توليد صور فوتوغرافية وسينمائية فائقة الدقة عبر محرك Google Imagen 3 أو FLUX مباشرة بجودة تصل إلى 2K.',
+      description: 'توليد صور فوتوغرافية وسينمائية فائقة الدقة عبر Google Nano Banana 2.1 أو FLUX مباشرة بجودة تصل إلى 2K.',
       headers: {
         'Authorization': 'Bearer mk_live_YOUR_KEY',
         'Content-Type': 'application/json'
@@ -3612,7 +3612,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       },
       sampleResponse: {
         success: true,
-        provider: 'Google Imagen 3.0 (2K Ultra)',
+        provider: 'Google Nano Banana 2.1 (2K)',
         mime_type: 'image/jpeg',
         image_base64: '...[base64_jpeg_bytes]...'
       }
