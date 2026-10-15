@@ -2519,7 +2519,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (actionsBar) actionsBar.classList.add('opacity-0', 'pointer-events-none');
     
     const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-    statusPill.textContent = engine === 'gemini' ? 'جاري التوليد عبر استوديو Gemini 3.8 Flash TTS…' : 'جاري التوليد عبر Edge Neural TTS السريع…';
+    statusPill.textContent = engine === 'gemini' ? 'جاري التوليد عبر استوديو Gemini 3.8 Flash TTS…' : 'جاري التوليد عبر Google Translate TTS…';
     try {
       const response = await gatewayFetch('generate_tts', {
         method: 'POST',
@@ -2568,9 +2568,10 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       activeControls.classList.remove('hidden');
       if (actionsBar) actionsBar.classList.remove('opacity-0', 'pointer-events-none');
       
-      const engineUsed = respJson?.engine_used || (isWav ? 'gemini' : 'neural');
+      const reportedEngine = response.headers.get('X-TTS-Engine') || '';
+      const engineUsed = respJson?.engine_used || (reportedEngine.includes('Gemini') || (!reportedEngine && isWav) ? 'gemini' : 'google-translate');
       const isGeminiEngine = engineUsed === 'gemini';
-      const engineTitle = isGeminiEngine ? 'Gemini 3.8 Flash TTS' : 'Edge Neural TTS';
+      const engineTitle = isGeminiEngine ? 'Gemini 3.8 Flash TTS' : 'Google Translate TTS';
       statusPill.textContent = `اكتمل · ${engineTitle} · ${dialectLabel} · ${genderLabel}`;
       
       setupCustomAudioPlayer(audioEl);
@@ -2593,13 +2594,13 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const badge = document.getElementById('voice-engine-badge');
     const descHint = document.getElementById('voice-engine-desc-hint');
     if (badge) {
-      badge.textContent = engine === 'gemini' ? 'WAV استوديو سينمائي (افتراضي)' : 'Edge Neural TTS (مجاني بلا حدود)';
+      badge.textContent = engine === 'gemini' ? 'WAV استوديو سينمائي (افتراضي)' : 'Google Translate TTS (مجاني)';
       badge.className = `text-[10px] font-mono ${engine === 'gemini' ? 'text-cyan-400' : 'text-sky-400'}`;
     }
     if (descHint) {
       descHint.textContent = engine === 'gemini'
         ? 'يستخدم Gemini 3.8 Flash TTS لتوليد WAV بنبرة ولهجة وأداء موجّه فائق الدقة (مدار تلقائياً عبر مفاتيح الخادم النشطة مع التدوير الذاتي).'
-        : 'يستخدم محرك Microsoft Edge Neural TTS لتوليد صوت طبيعي فوري ومجاني 100% بدون استهلاك رصيد.';
+        : 'يستخدم Google Translate TTS مجانًا. هذا الخيار لا يدعم اختيار شخصية الصوت أو ضمان نوعه.';
     }
   }
 

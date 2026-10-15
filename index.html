@@ -693,7 +693,7 @@
             <textarea id="voice-text-input" rows="5" placeholder="اكتب النص المراد تحويله إلى صوت..." class="w-full p-3 text-xs resize-none text-zinc-100 placeholder:text-zinc-600 focus:ring-0"></textarea>
           </div>
 
-          <!-- محرك التوليد الصوتي (Gemini 3.8 Flash TTS الافتراضي + Edge Neural TTS) -->
+          <!-- محرك التوليد الصوتي (Gemini TTS + Google Translate TTS المجاني) -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <label for="voice-engine-select" class="text-xs font-semibold text-zinc-300">محرك التوليد الصوتي</label>
@@ -701,7 +701,7 @@
             </div>
             <select id="voice-engine-select" onchange="MickeyStudio.onVoiceEngineChanged()" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100 font-semibold focus:outline-none focus:border-cyan-500">
               <option value="gemini" selected>✨ Gemini 3.8 Flash TTS (استوديو سينمائي WAV · الافتراضي)</option>
-              <option value="neural">⚡ Edge Neural TTS (مجاني وسريع بلا حدود · v2.7.2)</option>
+              <option value="neural">⚡ Google Translate TTS (مجاني — بدون تحكم بالشخصية)</option>
             </select>
           </div>
 
@@ -712,7 +712,7 @@
           </div>
           <div class="space-y-2"><label for="voice-performance-select" class="text-xs font-medium text-zinc-400 block">الشخصية</label><select id="voice-performance-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="yusuf" selected>يوسف · وثائقي قوي</option><option value="malik">مالك · إعلاني سريع</option><option value="rami">رامي · بودكاست هادئ</option><option value="saif">سيف · درامي عاطفي</option><option value="zaid">زيد · راوٍ قصصي</option><option value="neutral">متوازن</option></select></div>
           <div class="grid grid-cols-2 gap-3"><div class="space-y-2"><label for="voice-warmth-select" class="text-xs font-medium text-zinc-400 block">دفء الصوت</label><select id="voice-warmth-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="cool">بارد ورزين</option><option value="balanced" selected>متوازن</option><option value="warm">دافئ وإنساني</option></select></div><div class="space-y-2"><label for="voice-emotion-select" class="text-xs font-medium text-zinc-400 block">الانفعال</label><select id="voice-emotion-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="calm">هادئ</option><option value="medium" selected>متوسط</option><option value="strong">قوي</option></select></div><div class="space-y-2 col-span-2"><label for="voice-intensity-select" class="text-xs font-medium text-zinc-400 block">التأثير الدرامي</label><select id="voice-intensity-select" class="w-full p-2.5 text-xs bg-zinc-900 border border-white/10 rounded-xl text-zinc-100"><option value="light">خفيف</option><option value="medium" selected>متوسط</option><option value="strong">قوي</option></select></div></div>
-          <p id="voice-engine-desc-hint" class="text-[10px] leading-relaxed text-zinc-500">يستخدم Gemini 3.8 Flash TTS لتوليد WAV بنبرة ولهجة وأداء موجّه. يمكنك أيضاً التبديل إلى Edge Neural TTS المجاني بلا حدود.</p>
+          <p id="voice-engine-desc-hint" class="text-[10px] leading-relaxed text-zinc-500">يستخدم Gemini 3.8 Flash TTS لتوليد WAV بنبرة ولهجة وأداء موجّه. يمكنك أيضاً التبديل إلى Google Translate TTS المجاني.</p>
 
           <!-- Rate & Pitch Controls -->
           <div class="space-y-3 pt-2 border-t border-white/5">
@@ -1036,7 +1036,7 @@
               <label class="text-[11px] text-zinc-400 block mb-1">المحرك</label>
               <select id="podcast-engine-select" class="w-full p-2 text-xs bg-zinc-900 border border-white/10 rounded-lg text-zinc-200">
                 <option value="gemini" selected>✨ Gemini 3.8 Flash</option>
-                <option value="neural">⚡ Edge Neural (مجاني)</option>
+                <option value="neural">⚡ Google Translate TTS (مجاني)</option>
               </select>
             </div>
             <div>
