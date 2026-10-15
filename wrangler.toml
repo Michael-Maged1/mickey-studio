@@ -4,6 +4,9 @@ compatibility_date = "2025-01-01"
 
 workers_dev = true
 
+[ai]
+binding = "AI"
+
 [[kv_namespaces]]
 binding = "MICKEY_STATE"
 id = "2dcfe2752b3d44638db77d9cd533394c"

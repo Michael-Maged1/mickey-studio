@@ -14,6 +14,8 @@ export default {
       const headers = { ...cors, 'Cache-Control': 'no-store', 'Pragma': 'no-cache' };
       const context = { request, env, url, body, action, headers };
 
+      if (url.pathname === '/generate') return await generateFluxImage(context);
+
       if (['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'consume_generation'].includes(action)) {
         context.access = await enforceGenerationAccess(context);
       }
@@ -74,6 +76,47 @@ function json(data, status, headers) {
   h.set('Content-Type', 'application/json; charset=utf-8');
   return new Response(JSON.stringify(data), { status, headers: h });
 }
+
+async function generateFluxImage(ctx) {
+  const { request, env, body } = ctx;
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  if (!prompt || prompt.length > 2048) {
+    return json({ error: 'اكتب وصفًا للصورة لا يتجاوز 2048 حرفًا.' }, 400, ctx.headers);
+  }
+
+  const width = Number(body.width);
+  const height = Number(body.height);
+  const allowedSizes = new Set([720, 1024, 1280]);
+  if (!allowedSizes.has(width) || !allowedSizes.has(height)) {
+    return json({ error: 'الأبعاد المختارة غير مدعومة.' }, 400, ctx.headers);
+  }
+
+  const seed = Number.isInteger(Number(body.seed)) ? Number(body.seed) : Math.floor(Math.random() * 2147483647);
+  try {
+    const result = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+      prompt, width, height, steps: 4, seed
+    });
+    if (!result || typeof result.image !== 'string') {
+      return json({ error: 'لم يُرجع نموذج FLUX صورة. أعد المحاولة.' }, 502, ctx.headers);
+    }
+    const binary = atob(result.image);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    const cors = corsHeaders(request, env);
+    return new Response(bytes, {
+      status: 200,
+      headers: { ...cors, 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
+    });
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    const isQuota = /quota|neuron|daily limit|exceed/i.test(message);
+    return json({ error: isQuota
+      ? 'تم استهلاك الحصة اليومية المجانية في Cloudflare Workers AI.'
+      : 'تعذر الاتصال بنموذج Cloudflare AI. تحقق من تفعيل Workers AI ثم أعد المحاولة.'
+    }, isQuota ? 429 : 502, ctx.headers);
+  }
+}
+
 function fail(status, publicMessage) { const e = new Error(publicMessage); e.status = status; e.publicMessage = publicMessage; throw e; }
 function nowIso() { return new Date().toISOString(); }
 function envFirebaseKey(env) { return env.FIREBASE_WEB_API_KEY || DEFAULT_FIREBASE_API_KEY; }
