@@ -1046,6 +1046,8 @@ function handleTranscribeAudio($data) {
     $mimeType    = $data['mime_type'] ?? 'audio/webm';
     $activeKeys  = getActiveGeminiKeys();
     $dialect     = $data['dialect'] ?? 'auto';
+    $startSeconds = filter_var($data['start_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
+    $endSeconds = filter_var($data['end_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
     $hfToken     = (string)($GLOBALS['PROVIDER_KEYS']['hfToken'] ?? '');
 
     // If audio was uploaded via multipart/form-data
@@ -1076,11 +1078,14 @@ function handleTranscribeAudio($data) {
     if ($dialect !== 'auto') {
         $dialectGuide = "ملاحظة: المتحدث قد يتحدث بـ ({$dialect}). يرجى مراعاة الكلمات والمصطلحات الدارجة في هذه اللهجة بدقة.";
     }
+    if ($startSeconds !== false && $endSeconds !== false && $startSeconds >= 0 && $endSeconds > $startSeconds) {
+        $dialectGuide .= sprintf(' فرّغ الكلام الواقع فقط بين %.2f و%.2f ثانية من بداية الملف، وتجاهل ما قبل هذا النطاق وما بعده. اجعل توقيتات SRT نسبية إلى بداية النطاق.', $startSeconds, $endSeconds);
+    }
 
     // 1. Google Gemini Multimodal Audio Engine (Highest precision for Arabic) with Multi-Key Pool
     if (!empty($activeKeys)) {
         $promptInstruction = "أنت خبير فائق الذكاء في تفريغ وتحليل الصوت والكلام العربي بجميع لهجاته (الفصحى، المصرية، الخليجية، الشامية، المغاربية). "
-            . "استمع للصوت العربي المرفق جيداً، وقم بتفريغه وتحليله بدقة شديدة. "
+            . "استمع للصوت المرفق، سواء كان ملفاً صوتياً أو فيديو يحتوي على صوت، وقم بتفريغه وتحليله بدقة شديدة. "
             . $dialectGuide . " "
             . "المطلوب منك إخراج كائن JSON فقط (Strict valid JSON) بدون أي علامات markdown أو كتل برمجية، يحتوي على الحقول التالية حصراً:\n"
             . "{\n"
@@ -1120,7 +1125,7 @@ function handleTranscribeAudio($data) {
             ]
         ];
 
-        $candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+        $candidateModels = ['gemini-3.8-flash', 'gemini-3.6-flash'];
         foreach ($activeKeys as $apiKey) {
             foreach ($candidateModels as $modelName) {
                 $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$modelName}:generateContent?key=" . urlencode($apiKey);
