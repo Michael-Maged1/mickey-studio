@@ -573,6 +573,7 @@ audio::-webkit-media-controls-time-remaining-display {
 .motion-aspect-select:focus { border-color: rgba(251,146,60,.65); }
 .motion-preview-stage-wrap { align-items: center; display: flex; flex: 1 1 auto; justify-content: center; min-height: 120px; min-width: 0; width: 100%; }
 .motion-preview-stage { aspect-ratio: 16 / 9; background: radial-gradient(ellipse at 50% 110%, #293950 0, #141b2b 45%, #090b13 100%); border: 1px solid rgba(255,255,255,.13); border-radius: 8px; box-shadow: 0 24px 90px rgba(0,0,0,.42); container-type: inline-size; max-height: 100%; max-width: min(100%, 940px); overflow: hidden; position: relative; width: min(100%, calc((100vh - 390px) * 1.777)); }
+.motion-preview-canvas { display: block; height: 100%; object-fit: fill; width: 100%; }
 .motion-preview-grid { background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px); background-size: 7.5% 13.333%; inset: 0; pointer-events: none; position: absolute; }
 .motion-preview-glow { background: radial-gradient(circle, rgba(111,77,255,.26), transparent 64%); inset: -20%; pointer-events: none; position: absolute; }
 .motion-preview-layer { align-items: center; display: flex; inset: 0; justify-content: center; padding: 9%; position: absolute; text-align: center; white-space: pre-wrap; }
