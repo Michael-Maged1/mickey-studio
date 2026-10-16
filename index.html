@@ -196,7 +196,8 @@
         <div class="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
           <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">03</span>رد الذكاء الاصطناعي</h3>
           <textarea id="motion-json" rows="12" dir="ltr" spellcheck="false" class="w-full rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-xs" placeholder='{"version":1,"elements":[]}'></textarea>
-          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionOpenEditor()" id="motion-open-editor" class="motion-editor-cta hidden"><i class="fa-solid fa-arrow-up-left-from-circle ml-2"></i>الذهاب لواجهة التعديل</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs">انسخ طلب تصحيح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
+          <p class="text-[10px] leading-5 text-zinc-500">الصق هنا رد الذكاء الاصطناعي بصيغة JSON فقط. زر برومبت التصحيح ينسخ تعليمات لإرسالها إلى ChatGPT؛ بعد استلام الرد الجديد الصقه هنا.</p>
+          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionOpenEditor()" id="motion-open-editor" class="motion-editor-cta" aria-disabled="true" title="الصق رد JSON صالحاً لفتح المشهد في المحرر"><i class="fa-solid fa-arrow-up-left-from-circle ml-2"></i>الذهاب لواجهة التعديل</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs" title="انسخ البرومبت إلى الذكاء الاصطناعي، ولا تلصقه في حقل JSON">انسخ برومبت إصلاح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
           <p class="text-[10px] text-zinc-500">يجب أن تكون الإضافة مفتوحة ومسجلة الدخول بالحساب نفسه. المشهد المرسل يبقى متاحاً للاستلام لمدة 15 دقيقة.</p>
         </div>
       </div>
@@ -2095,7 +2096,7 @@
 
   <!-- Main Application Script -->
   <script src="api-config.js"></script>
-  <script src="app.js?v=4.0"></script>
+  <script src="app.js?v=4.1"></script>
 
 </body>
 </html>

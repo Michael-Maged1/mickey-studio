@@ -537,7 +537,9 @@ audio::-webkit-media-controls-time-remaining-display {
   transition: transform .18s ease, box-shadow .18s ease;
 }
 .motion-editor-cta:not(.hidden) { display: inline-flex; }
+.motion-editor-cta:not(.is-ready) { background: linear-gradient(135deg, #393a40, #292a2f); border-color: rgba(255,255,255,.16); box-shadow: none; color: #e4e4e7; }
 .motion-editor-cta:hover { box-shadow: 0 10px 32px rgba(249, 115, 22, .3); transform: translateY(-1px); }
+.motion-editor-cta:not(.is-ready):hover { box-shadow: none; transform: none; }
 .motion-editor-shell { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .motion-editor-header { align-items: center; background: rgba(16, 16, 19, .96); border-bottom: 1px solid var(--motion-line); display: flex; flex: 0 0 68px; justify-content: space-between; padding: 0 22px; }
 .motion-icon-button { align-items: center; background: #1c1c20; border: 1px solid var(--motion-line); border-radius: 10px; color: #b9b9c2; display: inline-flex; height: 36px; justify-content: center; transition: .16s; width: 36px; }
