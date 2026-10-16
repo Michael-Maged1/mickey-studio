@@ -43,6 +43,7 @@ export default {
         case 'motion_scene_submit': return await submitMotionScene(context);
         case 'motion_scene_poll': return await pollMotionScene(context);
         case 'motion_scene_ack': return await acknowledgeMotionScene(context);
+        case 'motion_audio_asset': return await motionAudioAsset(context);
         case 'admin_get_provider_keys': return await adminProviderKeys(context, false);
         case 'admin_save_provider_keys': return await adminProviderKeys(context, true);
         case 'admin_delete_gemini_key': return await deleteGeminiKey(context);
@@ -500,17 +501,26 @@ function validateMotionScene(scene) {
   const idPattern = /^[A-Za-z0-9_-]{1,80}$/;
   const mogrtIds = new Set(['bg_aurora', 'bg_grid', 'text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro', 'color_matte']);
   const sfxIds = new Set(['whoosh', 'pop', 'click', 'riser']);
+  const musicIds = new Set(['social_upbeat', 'kids_playful', 'tech_corporate', 'luxury_ambient', 'cyber_drive', 'cinematic_inspire', 'stats_pulse']);
+  const extendedSfxIds = new Set(['impact', 'sparkle', 'soft_whoosh', 'swipe', 'bass_hit', 'notification']);
   for (const [index, item] of scene.elements.entries()) {
-    if (!item || !['mogrt', 'color_matte', 'sfx'].includes(item.type)) fail(400, `نوع العنصر ${index + 1} غير مدعوم.`);
-    const assetId = item.type === 'sfx' ? item.sfxId : (item.type === 'mogrt' ? item.templateId : 'color_matte');
+    if (!item || !['graphic', 'mogrt', 'color_matte', 'sfx'].includes(item.type)) fail(400, `نوع العنصر ${index + 1} غير مدعوم.`);
+    const assetId = item.type === 'sfx' ? item.sfxId : (item.type === 'mogrt' || item.type === 'graphic' ? item.templateId : 'color_matte');
     if (!idPattern.test(String(assetId || ''))) fail(400, `معرّف الأصل في العنصر ${index + 1} غير صالح.`);
-    if (item.type === 'mogrt' && !mogrtIds.has(assetId)) fail(400, `قالب غير معروف في العنصر ${index + 1}.`);
-    if (item.type === 'sfx' && !sfxIds.has(assetId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
+    if ((item.type === 'mogrt' || item.type === 'graphic') && !mogrtIds.has(assetId)) fail(400, `قالب غير معروف في العنصر ${index + 1}.`);
+    if (item.type === 'sfx' && !sfxIds.has(assetId) && !extendedSfxIds.has(assetId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
     for (const key of ['trackIndex', 'startTime', 'duration']) {
       const value = Number(item[key]);
       if (!Number.isFinite(value) || value < 0 || (key === 'duration' && value === 0)) fail(400, `قيمة ${key} في العنصر ${index + 1} غير صالحة.`);
     }
     if (Number(item.startTime) + Number(item.duration) > 180) fail(400, `العنصر ${index + 1} يتجاوز حد مدة المشهد.`);
+  }
+  if (scene.music != null) {
+    if (!scene.music || !musicIds.has(String(scene.music.musicId || ''))) fail(400, 'اختيار موسيقى الخلفية غير معروف.');
+    const volume = Number(scene.music.volume);
+    if (!Number.isFinite(volume) || volume < 0.05 || volume > 0.8) fail(400, 'مستوى موسيقى الخلفية غير صالح.');
+    const duration = Number(scene.music.duration);
+    if (!Number.isFinite(duration) || duration < 1 || duration > 180) fail(400, 'مدة موسيقى الخلفية غير صالحة.');
   }
   const serialized = JSON.stringify(scene);
   if (serialized.length > 100000) fail(413, 'حجم المشهد أكبر من الحد المسموح.');
@@ -521,7 +531,6 @@ async function submitMotionScene(ctx) {
   const account = await authenticate(ctx);
   const scene = validateMotionScene(ctx.body.scene);
   const assetsBaseUrl = String(ctx.body.assetsBaseUrl || '').replace(/\/$/, '');
-  if (scene.elements.some(item => item.type !== 'sfx') && !/^https:\/\//i.test(assetsBaseUrl)) fail(400, 'أرسل رابط HTTPS عام لمكتبة أصول MOGRT.');
   const jobId = crypto.randomUUID();
   const record = { jobId, scene, assetsBaseUrl, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000 };
   await ctx.env.MICKEY_STATE.put(`motion_scene:${account.uid}`, JSON.stringify(record), { expirationTtl: 900 });
@@ -536,7 +545,25 @@ async function pollMotionScene(ctx) {
     if (record) await ctx.env.MICKEY_STATE.delete(key);
     return json({ success: true, status: 'empty' }, 200, ctx.headers);
   }
-  return json({ success: true, status: 'pending', jobId: record.jobId, scene: record.scene, assetsBaseUrl: record.assetsBaseUrl || '', createdAt: record.createdAt }, 200, ctx.headers);
+  return json({ success: true, status: 'pending', jobId: record.jobId, scene: record.scene, assetsBaseUrl: record.assetsBaseUrl || '', audioAssetEndpoint: `${ctx.url.origin}${ctx.url.pathname}`, createdAt: record.createdAt }, 200, ctx.headers);
+}
+
+async function motionAudioAsset(ctx) {
+  const kind = String(ctx.url.searchParams.get('kind') || '');
+  const id = String(ctx.url.searchParams.get('id') || '');
+  const musicIds = new Set(['social_upbeat', 'kids_playful', 'tech_corporate', 'luxury_ambient', 'cyber_drive', 'cinematic_inspire', 'stats_pulse']);
+  const sfxIds = new Set(['whoosh', 'pop', 'click', 'riser', 'impact', 'sparkle', 'soft_whoosh', 'swipe', 'bass_hit', 'notification']);
+  if (!['music', 'sfx'].includes(kind) || !(kind === 'music' ? musicIds : sfxIds).has(id)) return json({ success: false, error: 'ملف صوتي غير معروف.' }, 404, ctx.headers);
+  const base = String(ctx.env.MOTION_AUDIO_BASE_URL || 'https://mickey-studio-eta.vercel.app/assets/motion-audio').replace(/\/+$/, '');
+  let parsed;
+  try { parsed = new URL(base); } catch { return json({ success: false, error: 'رابط مكتبة الصوت غير مضبوط على الخادم.' }, 503, ctx.headers); }
+  if (parsed.protocol !== 'https:') return json({ success: false, error: 'يجب أن يكون مصدر ملفات الصوت HTTPS.' }, 503, ctx.headers);
+  const upstream = await fetch(`${base}/${kind}/${encodeURIComponent(id)}.wav`, { cf: { cacheTtl: 86400, cacheEverything: true } }).catch(() => null);
+  if (!upstream?.ok) return json({ success: false, error: `ملف الصوت ${id} غير متاح حالياً.` }, 404, ctx.headers);
+  const headers = new Headers(ctx.headers);
+  headers.set('Content-Type', 'audio/wav');
+  headers.set('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+  return new Response(await upstream.arrayBuffer(), { status: 200, headers });
 }
 
 async function acknowledgeMotionScene(ctx) {

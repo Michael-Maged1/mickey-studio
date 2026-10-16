@@ -11,6 +11,12 @@ The frontend is published as a static Vercel site. The API is a Cloudflare Worke
 
 The Worker URL should end in `/api.php`, for example `https://mickey-studio-api.<account-subdomain>.workers.dev/api.php`.
 
+## Motion audio library
+
+The repository includes original generated WAV music and sound effects under `assets/motion-audio/`. The Vercel build copies these assets to the public site, and the Worker serves them through the authenticated motion-scene audio endpoint. This works without an R2 bucket.
+
+To move delivery to Cloudflare R2 after enabling R2 for the account, upload the contents of `assets/motion-audio/` to a public R2-backed HTTPS domain while preserving the `music/` and `sfx/` folders. Set the Worker variable `MOTION_AUDIO_BASE_URL` to the public base URL ending in `/motion-audio` (for example, `https://assets.example.com/motion-audio`). The Worker will then fetch `<base>/<kind>/<id>.wav`; no extension update is needed. Keep the audio allowlist in `worker/index.js` aligned with the filenames.
+
 ## Vercel frontend
 
 1. Import the private GitHub repository and set the framework preset to **Other**.

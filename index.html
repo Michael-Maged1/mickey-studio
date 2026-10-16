@@ -178,7 +178,12 @@
             <select id="motion-style" class="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm"><option value="social">سوشيال ميديا</option><option value="kids">أطفال وكرتون</option><option value="tech">شرح تقني وواجهات</option><option value="luxury">فخامة ذهبي</option><option value="cyber">نيون سايبر</option><option value="marketing">تسويق وعروض</option><option value="stats">أرقام وإحصائيات</option></select>
             <label class="block text-xs text-zinc-400">الفكرة بالعربية</label>
             <textarea id="motion-idea" rows="5" maxlength="3000" class="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm" placeholder="اكتب فكرة المشهد والنصوص التي تريد ظهورها..."></textarea>
-            <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs text-zinc-400 mb-2">المدة (ثانية)</label><input id="motion-duration" type="number" min="1" max="180" value="15" class="w-full rounded-xl border border-white/10 bg-black/30 p-3"></div><div><label class="block text-xs text-zinc-400 mb-2">رابط أصول R2 العام</label><input id="motion-assets-url" type="url" placeholder="https://…r2.dev" class="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs" dir="ltr"></div></div>
+            <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs text-zinc-400 mb-2">المدة (ثانية)</label><input id="motion-duration" type="number" min="1" max="180" value="15" class="w-full rounded-xl border border-white/10 bg-black/30 p-3"></div><div class="flex items-end"><p class="w-full rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-3 text-[11px] leading-5 text-emerald-200">الطبقات المرئية تُنشأ محلياً. الموسيقى والمؤثرات من مكتبة Mickey Studio.</p></div></div>
+            <div class="rounded-xl border border-white/10 bg-black/20 p-3 space-y-3">
+              <label class="flex items-center gap-2 text-xs font-semibold"><input id="motion-music-enabled" type="checkbox" checked class="accent-orange-400"> أضف موسيقى خلفية تلقائياً</label>
+              <div class="grid grid-cols-2 gap-3"><div><label for="motion-music-track" class="block text-[10px] text-zinc-400 mb-1.5">الموسيقى</label><select id="motion-music-track" class="w-full rounded-lg border border-white/10 bg-[#17171b] p-2 text-[11px]"><option value="auto">اختيار مناسب للستايل</option><option value="social_upbeat">سوشيال حيوي</option><option value="kids_playful">مرح للأطفال</option><option value="tech_corporate">تقني وشركات</option><option value="luxury_ambient">فخامة هادئة</option><option value="cyber_drive">سايبر إلكتروني</option><option value="cinematic_inspire">سينمائي ملهم</option><option value="stats_pulse">إحصائيات بإيقاع</option></select></div><div><label for="motion-music-volume" class="block text-[10px] text-zinc-400 mb-1.5">مستوى الموسيقى: <span id="motion-music-volume-value">28%</span></label><input id="motion-music-volume" type="range" min="10" max="50" value="28" class="w-full accent-orange-400 mt-2"></div></div>
+              <p class="text-[10px] text-zinc-500">موسيقى أصلية مصممة للمشاهد القصيرة، تُدرج في مسار صوتي مستقل مع خفض مستوى مناسب للكلام.</p>
+            </div>
           </div>
           <div class="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-4">
             <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">02</span>مرجع بصري</h3>
@@ -221,7 +226,7 @@
               <div class="grid grid-cols-2 gap-3"><div><label for="motion-edit-size" class="motion-field-label">حجم الخط</label><input id="motion-edit-size" type="number" min="12" max="220" value="64" class="motion-field" dir="ltr"></div><div><label for="motion-edit-color" class="motion-field-label">لون النص</label><input id="motion-edit-color" type="color" value="#FFFFFF" class="motion-color-field"></div></div>
               <div class="motion-selection-info"><i class="fa-solid fa-circle-info ml-1"></i><span>تظهر التغييرات فوراً في المعاينة، وتُحفظ تلقائياً داخل بيانات المشهد.</span></div>
             </div>
-            <div class="motion-assets-note"><i class="fa-solid fa-wand-magic-sparkles ml-2 text-orange-300"></i>المحرر يركز على معاينة المشهد وتعديل النصوص. الحركة والقوالب الأصلية تُنفّذ في Premiere.</div>
+            <div class="motion-assets-note"><i class="fa-solid fa-wand-magic-sparkles ml-2 text-orange-300"></i>تُبنى الطبقات كصور شفافة مستقلة على التايم لاين مع تحريك Premiere. عدّل النص والخط هنا ثم أعد الإرسال لتحديث النتيجة.</div>
           </aside>
 
           <div class="motion-preview-column">
