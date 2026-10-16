@@ -16,13 +16,13 @@ export default {
 
       if (url.pathname === '/generate') return await generateFluxImage(context);
 
-      if (['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'consume_generation'].includes(action)) {
+      if (['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'analyze_video_silence', 'consume_generation'].includes(action)) {
         context.access = await enforceGenerationAccess(context);
       }
       if (['list_api_keys', 'revoke_api_key'].includes(action)) context.account = await authenticate(context, true);
 
       switch (action) {
-        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.0.0', endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'generate_image', 'refine_voiceover'] }, 200, headers);
+        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.0.0', endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'] }, 200, headers);
         case 'get_gemini_keys': case 'get_gemini_key': return json(await getGeminiKeys(env), 200, headers);
         case 'generate_tts': return await generateTts(context);
         case 'generate_text': return await generateText(context);
@@ -31,6 +31,7 @@ export default {
         case 'enhance_prompt': return await enhancePrompt(context);
         case 'refine_voiceover': return await refineVoiceover(context);
         case 'transcribe_audio': return await transcribeAudio(context);
+        case 'analyze_video_silence': return await analyzeVideoSilence(context);
         case 'proxy_media': return await proxyMedia(context);
         case 'consume_generation': return json({ success: true, remaining: context.access.remaining, plan: context.access.account ? 'free' : 'guest', permit: context.access.permit || undefined }, 200, headers);
         case 'account_status': {
@@ -187,7 +188,7 @@ async function enforceGenerationAccess(ctx) {
   const state = await ctx.env.MICKEY_STATE.get(key, 'json') || { count: 0, permits: {} };
   const used = Number(state.count) || 0;
   const count = Math.min(20, Math.max(1, Number(ctx.body.count) || 1));
-  const tool = ({ generate_image: 'image', generate_tts: 'voiceover', transcribe_audio: 'transcription', enhance_prompt: 'prompt', refine_voiceover: 'voiceover' })[action] || ctx.body.tool || action;
+  const tool = ({ generate_image: 'image', generate_tts: 'voiceover', transcribe_audio: 'transcription', analyze_video_silence: 'transcription', enhance_prompt: 'prompt', refine_voiceover: 'voiceover' })[action] || ctx.body.tool || action;
   const permitHeader = ctx.request.headers.get('X-Generation-Permit') || '';
   const permitHash = permitHeader ? await sha256(permitHeader) : '';
   if (action !== 'consume_generation' && permitHash && state.permits?.[permitHash]?.tool === tool && state.permits[permitHash].expires > Date.now()) {
@@ -416,6 +417,50 @@ async function transcribeAudio(ctx) {
     }
   }
   return json({ success: false, error: 'تعذر تفريغ الصوت. تحقق من مفتاح Gemini API في Cloudflare.' }, 502, ctx.headers);
+}
+async function analyzeVideoSilence(ctx) {
+  const video = String(ctx.body.video_base64 || '').replace(/^data:[^,]+,/, '');
+  const mimeType = String(ctx.body.mime_type || '').split(';')[0].trim().toLowerCase();
+  if (!video) return json({ success: false, error: 'ملف الفيديو غير موجود.' }, 400, ctx.headers);
+  if (video.length > 16_800_000) return json({ success: false, error: 'حجم الفيديو أكبر من حد الإرسال الآمن (12 ميجابايت).' }, 413, ctx.headers);
+  if (!/^video\/(?:mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)$/.test(mimeType)) {
+    return json({ success: false, error: 'صيغة الفيديو غير مدعومة لتحليل الصمت.' }, 415, ctx.headers);
+  }
+  const start = Number(ctx.body.start_seconds);
+  const end = Number(ctx.body.end_seconds);
+  const threshold = Number(ctx.body.threshold_db);
+  const minimum = Number(ctx.body.minimum_seconds);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end - start > 360) {
+    return json({ success: false, error: 'نطاق الفيديو المحدد غير صالح أو أطول من 6 دقائق.' }, 400, ctx.headers);
+  }
+  const minDuration = Number.isFinite(minimum) ? Math.min(5, Math.max(0.2, minimum)) : 0.5;
+  const thresholdDb = Number.isFinite(threshold) ? Math.min(-18, Math.max(-65, threshold)) : -38;
+  const prompt = `حلل المسار الصوتي داخل الفيديو المرفق فقط، ولا تحلل الصورة أو المحتوى البصري. ابحث عن فترات الصمت أو الانخفاض الواضح جدًا في الصوت، بحد تقريبي ${thresholdDb} dB ولمدة لا تقل عن ${minDuration} ثانية. افحص فقط المجال من ${start.toFixed(3)} إلى ${end.toFixed(3)} ثانية من بداية الملف. أرجع الأوقات بالثواني نسبة إلى بداية المجال المحدد (أي يبدأ المجال عند 0). لا تعتبر الوقفات التعبيرية القصيرة صمتًا، ولا تقطع الكلام الهادئ. أخرج JSON فقط بالشكل {"silences":[{"start_seconds":1.25,"end_seconds":2.10}]}. إذا لم توجد فترات مناسبة أرجع {"silences":[]}. لا تضف أي شرح.`;
+  for (const key of await keysForRequest(ctx)) {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.6-flash']) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: video } }, { text: prompt }] }],
+          generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 3000 }
+        })
+      });
+      const result = await readJson(response);
+      const text = result.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
+      if (!response.ok || !text) continue;
+      let parsed;
+      try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { continue; }
+      if (!Array.isArray(parsed.silences)) continue;
+      const duration = end - start;
+      const silences = parsed.silences.map(item => ({
+        start_seconds: Math.max(0, Math.min(duration, Number(item.start_seconds))),
+        end_seconds: Math.max(0, Math.min(duration, Number(item.end_seconds)))
+      })).filter(item => Number.isFinite(item.start_seconds) && Number.isFinite(item.end_seconds)
+        && item.end_seconds - item.start_seconds >= minDuration);
+      return json({ success: true, data: { silences }, provider: model }, 200, ctx.headers);
+    }
+  }
+  return json({ success: false, error: 'تعذر تحليل صوت الفيديو. تحقق من مفتاح Gemini أو جرّب مقطعًا أقصر.' }, 502, ctx.headers);
 }
 async function proxyMedia(ctx) {
   const target = ctx.url.searchParams.get('url');

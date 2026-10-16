@@ -36,7 +36,7 @@ $action = $_GET['action'] ?? $postData['action'] ?? 'status';
 validateRequestApiKey();
 
 $generationAccess = null;
-if ($action === 'consume_generation' || in_array($action, ['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio'], true)) {
+if ($action === 'consume_generation' || in_array($action, ['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'analyze_video_silence'], true)) {
     $generationAccess = enforceGenerationAccess($action === 'consume_generation' ? ($postData['tool'] ?? 'tool') : $action, (int)($postData['count'] ?? 1), $action, (string)($postData['idToken'] ?? ''));
 }
 if (in_array($action, ['list_api_keys', 'revoke_api_key'], true)) {
@@ -142,6 +142,10 @@ switch ($action) {
 
     case 'transcribe_audio':
         handleTranscribeAudio($postData);
+        break;
+
+    case 'analyze_video_silence':
+        handleAnalyzeVideoSilence($postData);
         break;
 
     case 'generate_api_key':
@@ -1244,6 +1248,66 @@ function handleTranscribeAudio($data) {
     exit();
 }
 
+function handleAnalyzeVideoSilence($data) {
+    header('Content-Type: application/json; charset=utf-8');
+    $videoBase64 = preg_replace('/^data:[^,]+,/', '', (string)($data['video_base64'] ?? ''));
+    $mimeType = strtolower(trim(explode(';', (string)($data['mime_type'] ?? ''))[0]));
+    if ($videoBase64 === '') sendJsonResponse(400, ['success' => false, 'error' => 'ملف الفيديو غير موجود.']);
+    if (strlen($videoBase64) > 16800000) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (12 ميجابايت).']);
+    if (!preg_match('/^video\/(mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)$/', $mimeType)) {
+        sendJsonResponse(415, ['success' => false, 'error' => 'صيغة الفيديو غير مدعومة لتحليل الصمت.']);
+    }
+    $start = filter_var($data['start_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
+    $end = filter_var($data['end_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
+    if ($start === false || $end === false || $start < 0 || $end <= $start || $end - $start > 360) {
+        sendJsonResponse(400, ['success' => false, 'error' => 'نطاق الفيديو المحدد غير صالح أو أطول من 6 دقائق.']);
+    }
+    $minimum = max(0.2, min(5, (float)($data['minimum_seconds'] ?? 0.5)));
+    $threshold = max(-65, min(-18, (float)($data['threshold_db'] ?? -38)));
+    $prompt = sprintf(
+        'حلل المسار الصوتي داخل الفيديو المرفق فقط، ولا تحلل الصورة أو المحتوى البصري. ابحث عن فترات الصمت أو الانخفاض الواضح جدًا في الصوت، بحد تقريبي %.1f dB ولمدة لا تقل عن %.2f ثانية. افحص فقط المجال من %.3f إلى %.3f ثانية من بداية الملف. أرجع الأوقات بالثواني نسبة إلى بداية المجال المحدد (أي يبدأ المجال عند 0). لا تعتبر الوقفات التعبيرية القصيرة صمتًا، ولا تقطع الكلام الهادئ. أخرج JSON فقط بالشكل {"silences":[{"start_seconds":1.25,"end_seconds":2.10}]}. إذا لم توجد فترات مناسبة أرجع {"silences":[]}. لا تضف أي شرح.',
+        $threshold, $minimum, $start, $end
+    );
+    foreach (getActiveGeminiKeys() as $apiKey) {
+        foreach (['gemini-3.8-flash', 'gemini-3.6-flash'] as $modelName) {
+            $payload = [
+                'contents' => [[ 'role' => 'user', 'parts' => [
+                    ['inlineData' => ['mimeType' => $mimeType, 'data' => $videoBase64]],
+                    ['text' => $prompt]
+                ]]],
+                'generationConfig' => ['temperature' => 0, 'responseMimeType' => 'application/json', 'maxOutputTokens' => 3000]
+            ];
+            $ch = curl_init('https://generativelanguage.googleapis.com/v1beta/models/' . $modelName . ':generateContent?key=' . urlencode($apiKey));
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload), CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+                CURLOPT_TIMEOUT => 90, CURLOPT_SSL_VERIFYPEER => true
+            ]);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($httpCode !== 200 || !$response) continue;
+            $json = json_decode($response, true);
+            $rawText = trim((string)($json['candidates'][0]['content']['parts'][0]['text'] ?? ''));
+            $rawText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', $rawText);
+            $parsed = json_decode($rawText, true);
+            if (!is_array($parsed) || !isset($parsed['silences']) || !is_array($parsed['silences'])) continue;
+            $duration = $end - $start;
+            $silences = [];
+            foreach ($parsed['silences'] as $range) {
+                $rangeStart = (float)($range['start_seconds'] ?? NAN);
+                $rangeEnd = (float)($range['end_seconds'] ?? NAN);
+                if (!is_finite($rangeStart) || !is_finite($rangeEnd)) continue;
+                $rangeStart = max(0, min($duration, $rangeStart));
+                $rangeEnd = max(0, min($duration, $rangeEnd));
+                if ($rangeEnd - $rangeStart >= $minimum) $silences[] = ['start_seconds' => $rangeStart, 'end_seconds' => $rangeEnd];
+            }
+            sendJsonResponse(200, ['success' => true, 'data' => ['silences' => $silences], 'provider' => $modelName]);
+        }
+    }
+    sendJsonResponse(502, ['success' => false, 'error' => 'تعذر تحليل صوت الفيديو. تحقق من مفتاح Gemini أو جرّب مقطعًا أقصر.']);
+}
+
 /**
  * 6. Developer API Key Management & Validation Middleware
  */
@@ -1434,7 +1498,7 @@ function enforceGenerationAccess($tool, $count = 1, $action = '', $providedToken
     $tool = (string)$tool;
     $actionTool = [
         'generate_image' => 'image', 'generate_tts' => 'voiceover',
-        'transcribe_audio' => 'transcription', 'enhance_prompt' => 'prompt', 'refine_voiceover' => 'voiceover'
+        'transcribe_audio' => 'transcription', 'analyze_video_silence' => 'transcription', 'enhance_prompt' => 'prompt', 'refine_voiceover' => 'voiceover'
     ][$action] ?? $tool;
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $key = hash('sha256', $anonymousId . '|' . $ip);
@@ -1686,7 +1750,7 @@ function handleStatus() {
         'system'    => 'Mickey Studio Nano Banana AI Gateway',
         'version'   => '3.8.0',
         'security'  => 'AES-256 Encryption Active',
-        'endpoints' => ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'generate_image', 'refine_voiceover'],
+        'endpoints' => ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'],
         'engines'   => [
             'nano_banana'  => 'gemini-nano-banana-2.1',
             'gemini_tts'   => 'gemini-3.8-flash-tts',

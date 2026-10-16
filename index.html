@@ -606,15 +606,8 @@
                 </div>
               </div>
 
-              <!-- Replacement Background Choice -->
               <div class="space-y-2">
-                <label class="text-xs font-medium text-zinc-400 block">نمط الخلفية</label>
-                <div class="grid grid-cols-3 gap-1.5" id="bg-replace-options">
-                  <button type="button" onclick="MickeyStudio.setBgMode(this, 'transparent')" class="bg-mode-btn pill-option active py-2 text-center justify-center">شفافة PNG</button>
-                  <button type="button" onclick="MickeyStudio.setBgMode(this, 'cyberpunk')" class="bg-mode-btn pill-option py-2 text-center justify-center">سايبربانك</button>
-                  <button type="button" onclick="MickeyStudio.setBgMode(this, 'neon-solid')" class="bg-mode-btn pill-option py-2 text-center justify-center">لون مصمت</button>
-                </div>
-                <p class="text-[11px] leading-relaxed text-zinc-500">تُرسل الصورة إلى خدمة BiRefNet عامة على Hugging Face لإزالة الخلفية.</p>
+                <p class="text-[11px] leading-relaxed text-zinc-500">يعزل النموذج العنصر الرئيسي ويحفظه بصيغة PNG بخلفية شفافة.</p>
               </div>
 
             </div>
@@ -642,7 +635,7 @@
               <div id="bg-result-empty" class="text-center space-y-2 max-w-xs text-zinc-500 bg-[#09090B]/80 p-6 rounded-xl border border-white/5">
                 <i class="fa-solid fa-shapes text-3xl text-zinc-600 block mb-2"></i>
                 <h3 class="text-sm font-semibold text-zinc-300">معاينة الصورة المفرغة</h3>
-                <p class="text-xs">اختر صورة واضغط إزالة الخلفية لتحميلها بصيغة PNG شفافة.</p>
+                <p class="text-xs">اختر صورة لإزالة خلفيتها بالذكاء الاصطناعي والحصول على PNG شفاف.</p>
               </div>
 
               <canvas id="bg-canvas-result" class="hidden max-h-[480px] w-auto mx-auto object-contain"></canvas>
@@ -697,14 +690,8 @@
                 </div>
               </div>
 
-              <!-- AI upscaler model -->
               <div class="space-y-2">
-                <label class="text-xs font-medium text-zinc-400 block">نوع الصورة</label>
-                <select id="upscale-content-mode" class="w-full p-2.5 text-xs">
-                  <option value="RealESRGAN_x4plus" selected>صور واقعية</option>
-                  <option value="RealESRGAN_x4plus_anime_6B">أنمي ورسوم</option>
-                </select>
-                <p class="text-[11px] leading-relaxed text-zinc-500">تُعالج الصور عبر خدمة Hugging Face عامة؛ قد تنتظر في الطابور أو تتوقف مؤقتًا.</p>
+                <p class="text-[11px] leading-relaxed text-zinc-500">يحسّن Real-ESRGAN التفاصيل ويرفع الدقة؛ اختر 2X أو 4X حسب حاجتك.</p>
               </div>
 
             </div>

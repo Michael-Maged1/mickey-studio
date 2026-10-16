@@ -53,7 +53,6 @@ window.MickeyStudio = (function () {
       subTab: 'bg-remover', // 'bg-remover' | 'upscaler'
       bgSourceImage: null,
       bgSourceFile: null,
-      bgMode: 'transparent',
       bgResultBlob: null,
       upscaleSourceImage: null,
       upscaleSourceFile: null,
@@ -1405,21 +1404,6 @@ window.MickeyStudio = (function () {
     reader.readAsDataURL(file);
   }
 
-  function setBgMode(btnOrMode, maybeMode) {
-    let mode = typeof btnOrMode === 'string' ? btnOrMode : (maybeMode || 'transparent');
-    let btnEl = (btnOrMode && btnOrMode.nodeType) ? btnOrMode : (window.event && window.event.currentTarget) || null;
-    STATE.photoLab.bgMode = mode;
-    document.querySelectorAll('#bg-replace-options .bg-mode-btn').forEach(b => {
-      b.classList.remove('active', 'border-pink-500/50', 'text-pink-neon');
-      b.classList.add('border-white/10', 'text-slate-300');
-    });
-    if (btnEl) {
-      btnEl.classList.add('active', 'border-pink-500/50', 'text-pink-neon');
-      btnEl.classList.remove('border-white/10', 'text-slate-300');
-    }
-    SFX.playClick();
-  }
-
   async function photoLabGradioFile(sourceImage, savedFile, name) {
     if (savedFile) return savedFile;
     const response = await fetch(sourceImage.src);
@@ -1431,7 +1415,7 @@ window.MickeyStudio = (function () {
   function findGradioFile(value) {
     if (!value) return null;
     if (Array.isArray(value)) {
-      for (let i = value.length - 1; i >= 0; i--) { const found = findGradioFile(value[i]); if (found) return found; }
+      for (const item of value) { const found = findGradioFile(item); if (found) return found; }
     } else if (typeof value === 'object') {
       if (value.url || value.path) return value.url || value.path;
       for (const child of Object.values(value)) { const found = findGradioFile(child); if (found) return found; }
@@ -1470,12 +1454,12 @@ window.MickeyStudio = (function () {
 
     const sourceImg = STATE.photoLab.bgSourceImage;
     try {
-      statusPill.textContent = 'جاري الاتصال بنموذج BiRefNet...';
+      statusPill.textContent = 'جاري الاتصال بنموذج إزالة الخلفية...';
       const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
       const client = await Client.connect('ZhengPeng7/BiRefNet_demo');
       const file = await photoLabGradioFile(sourceImg, STATE.photoLab.bgSourceFile, 'photo.png');
       const result = await client.predict('/image', [await handle_file(file), '1024x1024', 'General']);
-      const processedBlob = await gradioOutputBlob(result?.data);
+      const processedBlob = await gradioOutputBlob(result?.data?.[0]);
       const cutoutImg = new Image();
       cutoutImg.src = URL.createObjectURL(processedBlob);
       await new Promise((resolve, reject) => { cutoutImg.onload = resolve; cutoutImg.onerror = reject; });
@@ -1484,8 +1468,7 @@ window.MickeyStudio = (function () {
       canvas.width = W;
       canvas.height = H;
       const ctx = canvas.getContext('2d');
-      if (STATE.photoLab.bgMode === 'transparent') ctx.drawImage(cutoutImg, 0, 0, W, H);
-      else drawCutoutWithBg(ctx, cutoutImg, W, H, STATE.photoLab.bgMode);
+      ctx.drawImage(cutoutImg, 0, 0, W, H);
       STATE.photoLab.bgResultBlob = await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('تعذر تجهيز ملف PNG.')), 'image/png'));
 
       scanner.classList.add('hidden');
@@ -1493,7 +1476,7 @@ window.MickeyStudio = (function () {
       actionsBar.classList.remove('opacity-0', 'pointer-events-none');
       statusPill.textContent = 'تم العزل بنجاح ✓';
       SFX.playSuccess();
-      showToast('تمت إزالة الخلفية باستخدام BiRefNet!', 'success');
+      showToast('تمت إزالة الخلفية وحفظ العنصر بصيغة PNG شفافة.', 'success');
 
     } catch (err) {
       console.error(err);
@@ -1502,36 +1485,6 @@ window.MickeyStudio = (function () {
       statusPill.textContent = 'تعذرت المعالجة';
       showToast(huggingFaceErrorMessage(err, 'تعذرت خدمة إزالة الخلفية. أعد المحاولة لاحقًا.'), 'error');
     }
-  }
-
-  function drawCutoutWithBg(ctx, cutoutImg, W, H, mode) {
-    ctx.clearRect(0, 0, W, H);
-    if (mode === 'cyberpunk') {
-      const grad = ctx.createLinearGradient(0, 0, W, H);
-      grad.addColorStop(0, '#05050A');
-      grad.addColorStop(0.5, '#1A0B2E');
-      grad.addColorStop(1, '#001A24');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-      // Cyber neon lines
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.2)';
-      ctx.lineWidth = 2;
-      for (let y = 0; y < H; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(W, y);
-        ctx.stroke();
-      }
-    } else if (mode === 'neon-solid') {
-      ctx.fillStyle = '#0E1026';
-      ctx.fillRect(0, 0, W, H);
-      const radGrad = ctx.createRadialGradient(W / 2, H / 2, 50, W / 2, H / 2, W * 0.7);
-      radGrad.addColorStop(0, 'rgba(0, 240, 255, 0.3)');
-      radGrad.addColorStop(1, 'rgba(0, 240, 255, 0)');
-      ctx.fillStyle = radGrad;
-      ctx.fillRect(0, 0, W, H);
-    }
-    ctx.drawImage(cutoutImg, 0, 0);
   }
 
   function downloadBgResult() {
@@ -1580,7 +1533,7 @@ window.MickeyStudio = (function () {
 
   async function processUpscale() {
     if (!STATE.photoLab.upscaleSourceImage) {
-      showToast('يرجى اختيار صورة أولاً لتكبيرها إلى 4K!', 'warning');
+      showToast('يرجى اختيار صورة أولاً لتحسين جودتها!', 'warning');
       return;
     }
     if (!await authorizeAndConsume('upscale')) return;
@@ -1604,9 +1557,8 @@ window.MickeyStudio = (function () {
       const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
       const client = await Client.connect('guetLzy/Real-ESRGAN-Demo');
       const file = await photoLabGradioFile(src, STATE.photoLab.upscaleSourceFile, 'photo.png');
-      const model = document.getElementById('upscale-content-mode')?.value || 'RealESRGAN_x4plus';
-      const result = await client.predict('/enhance', [await handle_file(file), model, mul, false]);
-      const outputBlob = await gradioOutputBlob(result?.data);
+      const result = await client.predict('/enhance', [await handle_file(file), 'RealESRGAN_x4plus', mul, false]);
+      const outputBlob = await gradioOutputBlob(result?.data?.[0]);
       STATE.photoLab.upscaleResultBlob = outputBlob;
       const originalImg = document.getElementById('img-compare-original');
       const upscaledImg = document.getElementById('img-compare-upscaled');
@@ -5718,7 +5670,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     setPhotoLabTab,
     useLastImageForPhotoLab,
     handleBgImageUpload,
-    setBgMode,
     removeBackground,
     downloadBgResult,
     handleUpscaleImageUpload,
