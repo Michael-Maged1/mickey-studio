@@ -213,7 +213,7 @@
           </div>
           <div class="flex items-center gap-2">
             <button type="button" onclick="MickeyStudio.motionOpenEditor()" class="motion-icon-button" title="تحديث المعاينة"><i class="fa-solid fa-rotate"></i></button>
-            <span id="motion-editor-status" class="text-[9px] text-zinc-400"></span><button id="motion-editor-send" type="button" onclick="MickeyStudio.motionSendToPremiere()" class="motion-export-button"><i class="fa-solid fa-paper-plane ml-2"></i>إرسال إلى Premiere</button>
+            <span id="motion-editor-status" class="text-[9px] text-zinc-400"></span><button id="motion-editor-export" type="button" onclick="MickeyStudio.motionExportVideo()" class="motion-export-button motion-download-button"><i class="fa-solid fa-download ml-2"></i>تصدير WebM</button><button id="motion-editor-send" type="button" onclick="MickeyStudio.motionSendToPremiere()" class="motion-export-button"><i class="fa-solid fa-paper-plane ml-2"></i>إرسال إلى Premiere</button>
           </div>
         </header>
 
@@ -231,7 +231,7 @@
           </aside>
 
           <div class="motion-preview-column">
-            <div class="motion-preview-topline"><span><i class="fa-regular fa-eye ml-2"></i>معاينة المشهد</span><span id="motion-preview-resolution">1920 × 1080</span></div>
+            <div class="motion-preview-topline"><span><i class="fa-regular fa-eye ml-2"></i>معاينة المشهد</span><div class="motion-preview-options"><label for="motion-aspect-ratio">مقاس الفيديو</label><select id="motion-aspect-ratio" class="motion-aspect-select" aria-label="مقاس الفيديو" title="يُطبّق المقاس عند تصدير WebM؛ Premiere يستخدم مقاس الـ Sequence النشط"><option value="16:9">عرضي · 16:9</option><option value="9:16">طولي · 9:16</option><option value="1:1">مربع · 1:1</option></select><span id="motion-preview-resolution">1920 × 1080</span></div></div>
             <div class="motion-preview-stage-wrap"><div id="motion-preview-stage" class="motion-preview-stage"><div class="motion-preview-placeholder"><i class="fa-solid fa-clapperboard"></i><span>جهّز JSON أولاً لعرض المشهد</span></div></div></div>
             <div class="motion-playback-bar" dir="ltr">
               <div class="flex items-center gap-2"><button id="motion-play-toggle" type="button" class="motion-play-button" onclick="MickeyStudio.motionTogglePlayback()" title="تشغيل المعاينة"><i class="fa-solid fa-play"></i></button><span id="motion-play-time" class="motion-timecode">00:00 / 00:00</span></div>
@@ -2096,7 +2096,7 @@
 
   <!-- Main Application Script -->
   <script src="api-config.js"></script>
-  <script src="app.js?v=4.1"></script>
+  <script src="app.js?v=4.2"></script>
 
 </body>
 </html>
