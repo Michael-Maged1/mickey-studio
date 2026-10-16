@@ -396,16 +396,23 @@ async function transcribeAudio(ctx) {
   if (!audio) return json({ success: false, error: 'ملف الصوت غير موجود.' }, 400, ctx.headers);
   if (audio.length > 18_000_000) return json({ success: false, error: 'حجم ملف الصوت أكبر من الحد المسموح.' }, 413, ctx.headers);
   const mimeType = String(ctx.body.mime_type || 'audio/webm').split(';')[0];
-  const prompt = `فرّغ هذا التسجيل الصوتي إلى نص عربي دقيق باللهجة ${ctx.body.dialect || 'المسموعة'}، مع علامات الترقيم. أخرج JSON صالحاً فقط بهذه الحقول: {"transcript":"النص الكامل","srt":"ترجمة SRT بتوقيتات تقديرية","dialect":"اللهجة المكتشفة","tone":"النبرة","summary":"ملخص قصير","key_points":[],"words_count":0,"estimated_speed":"معتدلة"}. لا تضف كلمات غير موجودة في التسجيل.`;
+  const startSeconds = Number(ctx.body.start_seconds);
+  const endSeconds = Number(ctx.body.end_seconds);
+  const rangeInstruction = Number.isFinite(startSeconds) && startSeconds >= 0 && Number.isFinite(endSeconds) && endSeconds > startSeconds
+    ? ` فرّغ الكلام الواقع فقط بين ${startSeconds.toFixed(2)} و${endSeconds.toFixed(2)} ثانية من بداية الملف، وتجاهل ما قبل هذا النطاق وما بعده. اجعل توقيتات SRT نسبية إلى بداية هذا النطاق.`
+    : '';
+  const prompt = `حلل الصوت المرفق، سواء أُرسل كملف صوتي أو كفيديو يحتوي على صوت، وفرّغ الكلام العربي بدقة باللهجة ${ctx.body.dialect || 'المسموعة'}، مع علامات الترقيم.${rangeInstruction} أخرج JSON صالحاً فقط بهذه الحقول: {"transcript":"النص الكامل","srt":"ترجمة SRT بتوقيتات تقديرية","dialect":"اللهجة المكتشفة","tone":"النبرة","summary":"ملخص قصير","key_points":[],"words_count":0,"estimated_speed":"معتدلة"}. لا تضف كلمات غير موجودة في التسجيل.`;
   for (const key of await keysForRequest(ctx)) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: audio } }, { text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 8192 } })
-    });
-    const data = await readJson(response); const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim();
-    if (response.ok && text) {
-      let parsed; try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { parsed = { transcript: text }; }
-      const transcript = parsed.transcript || text;
-      return json({ success: true, data: { transcript, text: transcript, srt: parsed.srt || '', dialect: parsed.dialect || ctx.body.dialect || '', tone: parsed.tone || '', summary: parsed.summary || transcript.slice(0, 180), key_points: parsed.key_points || [], words_count: parsed.words_count || transcript.trim().split(/\s+/).filter(Boolean).length, estimated_speed: parsed.estimated_speed || '' }, provider: 'Google Gemini' }, 200, ctx.headers);
+    for (const model of ['gemini-3.8-flash', 'gemini-3.6-flash']) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: audio } }, { text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 8192 } })
+      });
+      const data = await readJson(response); const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim();
+      if (response.ok && text) {
+        let parsed; try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { parsed = { transcript: text }; }
+        const transcript = parsed.transcript || text;
+        return json({ success: true, data: { transcript, text: transcript, srt: parsed.srt || '', dialect: parsed.dialect || ctx.body.dialect || '', tone: parsed.tone || '', summary: parsed.summary || transcript.slice(0, 180), key_points: parsed.key_points || [], words_count: parsed.words_count || transcript.trim().split(/\s+/).filter(Boolean).length, estimated_speed: parsed.estimated_speed || '' }, provider: model }, 200, ctx.headers);
+      }
     }
   }
   return json({ success: false, error: 'تعذر تفريغ الصوت. تحقق من مفتاح Gemini API في Cloudflare.' }, 502, ctx.headers);
