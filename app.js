@@ -4294,13 +4294,18 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!context) throw new Error('تعذر إنشاء لوحة تجهيز الرسومات في الموقع.');
     if (document.fonts?.ready) await document.fonts.ready;
     const previousScene = motionEditorScene;
+    const semanticText = scene.elements.filter(motionEditorIsText).flatMap(item => [item.params?.text, item.params?.label]).filter(Boolean).join(' ');
+    const hero = scene.elements.find(item => motionEditorIsText(item) && ['text_kinetic', 'logo_outro'].includes(item.templateId)) || scene.elements.find(motionEditorIsText);
+    const semanticAnchor = Array.isArray(hero?.position) ? hero.position : null;
     let totalBytes = 0;
     try {
       for (let index = 0; index < visualItems.length; index += 1) {
         const source = visualItems[index];
         const item = { ...source, startTime: 0, duration: 180, position: [960, 540], scale: 100, animationIn: 'none', animationOut: 'none' };
         const isBackground = item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId);
-        motionEditorScene = { ...scene, elements: [item] };
+        const renderTime = Number(source.startTime) + Number(source.duration) / 2;
+        const hasHigherBackground = scene.elements.some(candidate => candidate !== source && (candidate.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(candidate.templateId)) && Number(candidate.trackIndex) > Number(source.trackIndex) && renderTime >= Number(candidate.startTime) && renderTime <= Number(candidate.startTime) + Number(candidate.duration));
+        motionEditorScene = { ...scene, semanticText, semanticAnchor, semanticBackdrop: isBackground && !hasHigherBackground, elements: [item] };
         context.clearRect(0, 0, canvas.width, canvas.height);
         motionEditorDrawExportFrame(context, 0.5, canvas.width, canvas.height, !isBackground);
         const png = canvas.toDataURL('image/png');
@@ -4565,6 +4570,31 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     return (item.type === 'mogrt' || item.type === 'graphic') && ['text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro'].includes(item.templateId);
   }
 
+  function motionEditorSemanticTopic(scene) {
+    const copy = [scene?.semanticText || '', ...(scene?.elements || []).filter(motionEditorIsText).flatMap(item => [item.params?.text, item.params?.label])].join(' ').toLowerCase();
+    if (/(قهوة|القهوة|بُن|البن|حبوب القهوة|coffee|espresso|cappuccino|latte)/i.test(copy)) return 'coffee';
+    return '';
+  }
+
+  function motionEditorApplySemanticPalette(scene) {
+    if (!scene?.elements || motionPalette.length) return false;
+    const topic = motionEditorSemanticTopic(scene);
+    if (topic !== 'coffee') return false;
+    let changed = false;
+    scene.elements.forEach(item => {
+      const params = item.params && typeof item.params === 'object' ? item.params : (item.params = {});
+      if (item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId)) {
+        if (params.color1 !== '#241710') { params.color1 = '#241710'; changed = true; }
+        if (params.color2 !== '#70482F') { params.color2 = '#70482F'; changed = true; }
+      }
+      if (!motionEditorIsText(item)) return;
+      if (params.color1 !== '#C9884D') { params.color1 = '#C9884D'; changed = true; }
+      if (params.color2 !== '#E3B77E') { params.color2 = '#E3B77E'; changed = true; }
+      if (params.textColor !== '#FFF4E2') { params.textColor = '#FFF4E2'; changed = true; }
+    });
+    return changed;
+  }
+
   function motionEditorColorLuminance(color) {
     if (!/^#[0-9a-f]{6}$/i.test(String(color || ''))) return 0;
     const channels = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : Math.pow((value + .055) / 1.055, 2.4));
@@ -4578,8 +4608,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function motionEditorEnsureTextContrast(scene) {
     if (!scene?.elements) return false;
+    let changed = motionEditorApplySemanticPalette(scene);
     const backgrounds = scene.elements.filter(item => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
-    let changed = false;
     scene.elements.forEach(item => {
       if (!motionEditorIsText(item)) return;
       const params = item.params && typeof item.params === 'object' ? item.params : (item.params = {});
@@ -4592,11 +4622,53 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const surfaces = card ? ['#0A0D12'] : [backgroundColor1, backgroundColor2, '#080A10'];
       const score = color => Math.min(...surfaces.map(surface => motionEditorContrastRatio(color, surface)));
       if (score(requested) >= 4.5) return;
-      const accent = /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : backgroundColor2;
-      const replacement = score(accent) >= 4.5 ? accent : score('#FFFFFF') >= 4.5 ? '#FFFFFF' : '#11131F';
+      const replacement = score('#FFF4E2') >= 4.5 ? '#FFF4E2' : score('#FFFFFF') >= 4.5 ? '#FFFFFF' : score('#11131F') >= 4.5 ? '#11131F' : '#FFFFFF';
       if (params.textColor !== replacement) { params.textColor = replacement; changed = true; }
     });
     return changed;
+  }
+
+  function motionEditorDrawCoffeeIllustration(context, width, height, time, scene) {
+    const textItems = (scene?.elements || []).filter(motionEditorIsText);
+    const candidates = [[.22, .27], [.78, .27], [.22, .72], [.78, .72]];
+    const anchor = candidates.map(([cx, cy]) => ({ x: width * cx, y: height * cy })).map(point => ({ ...point, clearance: textItems.reduce((score, item) => {
+      const position = Array.isArray(item.position) ? item.position : [960, 540];
+      return score + Math.hypot(point.x - Number(position[0]) / 1920 * width, point.y - Number(position[1]) / 1080 * height);
+    }, 0) })).sort((a, b) => b.clearance - a.clearance)[0];
+    const size = Math.min(width * .27, height * .48);
+    const scale = size / 360;
+    const x = scene?.semanticAnchor ? (Number(scene.semanticAnchor[0]) < 960 ? width * .78 : width * .22) : anchor.x;
+    const y = scene?.semanticAnchor ? (Number(scene.semanticAnchor[1]) < 540 ? height * .72 : height * .27) : anchor.y;
+    const cream = '#F4DDB7', roast = '#A76B3E', coffee = '#4A2B1B';
+    context.save(); context.translate(x, y); context.scale(scale, scale); context.globalAlpha = .97;
+    const glow = context.createRadialGradient(0, 0, 24, 0, 0, 190);
+    glow.addColorStop(0, '#D39B5A38'); glow.addColorStop(1, '#D39B5A00'); context.fillStyle = glow;
+    context.beginPath(); context.arc(0, 0, 190, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = '#F0D5AE35'; context.lineWidth = 2; context.beginPath(); context.arc(0, 0, 165, time * .1, time * .1 + Math.PI * 1.52); context.stroke();
+    context.save(); context.shadowColor = '#00000085'; context.shadowBlur = 24; context.shadowOffsetY = 17;
+    const saucer = context.createLinearGradient(-120, 90, 120, 140); saucer.addColorStop(0, '#F8E8CF'); saucer.addColorStop(.55, '#D6B58B'); saucer.addColorStop(1, '#FFF2DA');
+    context.fillStyle = saucer; context.beginPath(); context.ellipse(0, 105, 124, 26, 0, 0, Math.PI * 2); context.fill(); context.restore();
+    context.strokeStyle = '#F7E8D1'; context.lineWidth = 18; context.beginPath(); context.ellipse(89, -8, 45, 59, .18, -.9, Math.PI * .9); context.stroke();
+    const cup = context.createLinearGradient(-92, -72, 90, 88); cup.addColorStop(0, '#FFF0D8'); cup.addColorStop(.32, '#D8B58B'); cup.addColorStop(.7, '#F2D8B3'); cup.addColorStop(1, '#B9885C');
+    context.fillStyle = cup; context.beginPath(); context.moveTo(-94, -54); context.quadraticCurveTo(-83, 67, -49, 80); context.quadraticCurveTo(0, 96, 48, 80); context.quadraticCurveTo(83, 59, 94, -54); context.closePath(); context.fill();
+    context.strokeStyle = '#FFF4E2'; context.lineWidth = 8; context.beginPath(); context.ellipse(0, -53, 95, 23, 0, 0, Math.PI * 2); context.stroke();
+    const crema = context.createLinearGradient(0, -76, 0, -31); crema.addColorStop(0, '#6B3D24'); crema.addColorStop(.62, '#362015'); crema.addColorStop(1, '#9C6239');
+    context.fillStyle = crema; context.beginPath(); context.ellipse(0, -53, 86, 15, 0, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = '#E7BC84'; context.lineWidth = 3; context.globalAlpha = .78; context.beginPath(); context.ellipse(0, -53, 49, 7, -.12, .2, Math.PI * 1.45); context.stroke(); context.globalAlpha = .97;
+    for (let index = 0; index < 3; index += 1) {
+      const phase = time * 1.4 + index * 1.9;
+      context.save(); context.globalAlpha = .5 + .28 * Math.sin(phase); context.strokeStyle = cream; context.lineWidth = 4; context.lineCap = 'round';
+      context.beginPath(); context.moveTo(-35 + index * 34, -85); context.bezierCurveTo(-55 + index * 34, -112 - Math.sin(phase) * 8, -8 + index * 34, -130, -32 + index * 34, -161 - Math.cos(phase) * 10); context.stroke(); context.restore();
+    }
+    const beans = [[-137, 29, -.42], [137, 73, .6], [119, -112, -.8]];
+    beans.forEach(([bx, by, angle], index) => {
+      context.save(); context.translate(bx, by + Math.sin(time * 1.3 + index) * 3); context.rotate(angle);
+      context.fillStyle = index === 1 ? roast : coffee; context.beginPath(); context.ellipse(0, 0, 20, 12, 0, 0, Math.PI * 2); context.fill();
+      context.strokeStyle = '#E5B67F'; context.lineWidth = 2.5; context.beginPath(); context.moveTo(-13, 1); context.bezierCurveTo(-5, -10, 4, 11, 14, -2); context.stroke(); context.restore();
+    });
+    motionEditorDrawSparkle(context, -124, -91, 8, '#F8D79E', time * .3, .9);
+    motionEditorDrawSparkle(context, 130, -34, 7, '#F8D79E', -time * .4, .75);
+    context.restore();
   }
 
   function motionEditorLabel(item) {
@@ -4852,6 +4924,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         for (let index = 0; index < 3; index += 1) { context.beginPath(); context.ellipse(width * (.18 + index * .32), height * (.84 - index * .12), width * .42, height * (.16 + index * .015), -.18, Math.PI, Math.PI * 1.92); context.stroke(); }
         context.restore();
       }
+      if (motionEditorSemanticTopic(motionEditorScene) === 'coffee' && motionEditorScene.semanticBackdrop !== false) motionEditorDrawCoffeeIllustration(context, width, height, time, motionEditorScene);
       const vignette = context.createRadialGradient(width * .5, height * .48, Math.min(width, height) * .18, width * .5, height * .48, Math.max(width, height) * .7);
       vignette.addColorStop(0, '#00000000'); vignette.addColorStop(1, '#03050AB8'); context.fillStyle = vignette; context.fillRect(0, 0, width, height);
       context.save();
@@ -4921,9 +4994,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const maxWidth = item.templateId === 'widget_counter' ? width * .7 : item.templateId === 'widget_social_card' ? width * .68 : width * .84; const words = String(text).split(/\s+/); const lines = []; let line = '';
       words.forEach(word => { const test = line ? `${line} ${word}` : word; if (line && context.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test; });
       if (line) lines.push(line); const shown = lines.slice(0, 4); const lineHeight = fontSize * 1.24;
-      const textGradient = context.createLinearGradient(-maxWidth * .48, 0, maxWidth * .48, 0);
-      textGradient.addColorStop(0, textColor); textGradient.addColorStop(.52, textColor); textGradient.addColorStop(1, accent);
-      context.fillStyle = textGradient;
+      context.fillStyle = textColor;
+      context.lineWidth = Math.max(1.5, fontSize * .055); context.strokeStyle = '#1B120DE0'; context.lineJoin = 'round';
       const revealProgress = String(item.animationIn || '').toLowerCase() === 'word-reveal' ? Math.min(1, Math.max(0, (time - (Number(item.startTime) || 0)) / .85)) : 1;
       const lineWidths = shown.map(part => context.measureText(part).width);
       const totalWidth = Math.max(...lineWidths, 1);
@@ -4932,8 +5004,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         if (revealProgress < 1) {
           const revealedWidth = Math.max(0, totalWidth * revealProgress - Math.max(0, totalWidth - lineWidths[index]) / 2);
           context.save(); context.beginPath(); context.rect(textOffsetX + lineWidths[index] / 2 - revealedWidth, lineY - lineHeight * .52, revealedWidth, lineHeight); context.clip();
-          context.fillText(part, textOffsetX, lineY, maxWidth); context.restore();
-        } else context.fillText(part, textOffsetX, lineY, maxWidth);
+          context.strokeText(part, textOffsetX, lineY, maxWidth); context.fillText(part, textOffsetX, lineY, maxWidth); context.restore();
+        } else { context.strokeText(part, textOffsetX, lineY, maxWidth); context.fillText(part, textOffsetX, lineY, maxWidth); }
       });
       if (['text_kinetic', 'logo_outro'].includes(item.templateId)) {
         context.shadowBlur = 0; context.shadowOffsetY = 0;
