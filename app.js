@@ -4151,12 +4151,28 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     finally { URL.revokeObjectURL(image.src); }
   }
 
+  function motionSceneVisualDirection(idea) {
+    const brief = String(idea || '').normalize('NFKC').toLowerCase();
+    const directions = [
+      [/(قهوة|القهوة|بُن|البن|حبوب القهوة|coffee|espresso|cappuccino|latte)/i, 'Show the actual coffee subject prominently: a recognizable steaming cup, coffee beans, crema or a pour, with restrained morning-sunlight cues. The cup and beans are the hero visual, not generic abstract lines.'],
+      [/(طعام|أكل|وجبة|طبخ|مطعم|food|recipe|cooking|restaurant)/i, 'Show the exact dish or ingredient named in the brief as the hero subject, with appetizing but tasteful food details. Do not replace it with generic gradients or unrelated props.'],
+      [/(رياضة|تمرين|لياقة|جيم|عضلات|fitness|workout|gym|sport)/i, 'Show the activity and equipment named in the brief as the hero subject, with a clear action pose and energetic supporting shapes. Avoid unrelated data widgets.'],
+      [/(سفر|رحلة|سياحة|مدينة|شاطئ|travel|trip|tourism|beach)/i, 'Show the actual destination or travel object named in the brief as the hero subject; use map, route, luggage, transport, or landscape cues only when relevant. Do not invent a specific landmark.'],
+      [/(تعليم|تعلم|دراسة|مدرسة|جامعة|كتاب|education|learning|study|school|university)/i, 'Show a recognizable learning object or activity tied to the brief, such as the relevant book, lesson, or study setting. Keep the visual concrete and avoid generic abstract decoration.'],
+      [/(تقنية|ذكاء اصطناعي|تطبيق|برنامج|هاتف|حاسوب|technology|artificial intelligence|\bai\b|app|software|phone|computer)/i, 'Show the actual product or technology named in the brief, such as a device or purposeful interface. Use clean interface geometry only as support; avoid generic sci-fi imagery.'],
+      [/(طبيعة|نبات|زهور|شجرة|حيوان|بحر|جبل|nature|plant|flower|tree|animal|ocean|mountain)/i, 'Show the exact natural subject named in the brief as a recognizable hero visual. Keep its colors and supporting details grounded in that subject.']
+    ];
+    const match = directions.find(([pattern]) => pattern.test(brief));
+    return match?.[1] || 'Identify the main concrete subject in the user brief and make it the unmistakable hero visual. Choose supporting motifs, setting, and colors from that subject; never use generic abstract decoration as a substitute for the subject.';
+  }
+
   function motionScenePrompt() {
     let idea = document.getElementById('motion-idea')?.value.trim();
     const duration = Number(document.getElementById('motion-duration')?.value);
     if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
     if (!Number.isFinite(duration) || duration < 1 || duration > 180) throw new Error('المدة يجب أن تكون بين 1 و180 ثانية.');
-    idea = `Create a finished premium motion-graphics video, not a wireframe or preview board. Avoid a bright full-frame grid, an empty gradient, a lone oversized title, and generic centered-title layouts. Prefer a restrained aurora or color-matte background; use bg_grid only as a subtle texture. Build a clear hierarchy with a strong Arabic headline, concise supporting copy, and a complementary graphic or accent. Give the opening, middle, and ending distinct compositions with balanced negative space, safe margins, polished contrast, and readable text. Avoid decorative clutter, repeated cards, long copy, and invented facts. Never show the same price, number, or claim twice at the same time; use one clear primary treatment for each key fact. Preserve the user's Arabic wording and meaning.\n\nUSER'S IDEA: ${idea}`;
+    const visualDirection = motionSceneVisualDirection(idea);
+    idea = `Create a finished premium motion-graphics video, not a wireframe or preview board. Avoid a bright full-frame grid, an empty gradient, a lone oversized title, and generic centered-title layouts. Prefer a restrained aurora or color-matte background; use bg_grid only as a subtle texture. Build a clear hierarchy with a strong Arabic headline, concise supporting copy, and a complementary graphic or accent. Give the opening, middle, and ending distinct compositions with balanced negative space, safe margins, polished contrast, and readable text. Avoid decorative clutter, repeated cards, long copy, and invented facts. Never show the same price, number, or claim twice at the same time; use one clear primary treatment for each key fact. Preserve the user's Arabic wording and meaning.\n\nTOPIC-SPECIFIC VISUAL DIRECTION: ${visualDirection}\nDo not invent template IDs, element types, image fields, or unsupported JSON properties. Use only the supplied schema; keep the visual direction present through the selected supported templates, concise labels, and coherent palette.\n\nUSER'S IDEA: ${idea}`;
     const styleSelect = document.getElementById('motion-style'); const styleName = styleSelect.options[styleSelect.selectedIndex].text;
     const musicControl = document.getElementById('motion-music-track');
     const requestedMusic = musicControl?.value === 'auto' || !musicControl?.value ? MOTION_STYLE_MUSIC[styleSelect.value] : musicControl.value;
