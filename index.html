@@ -191,9 +191,55 @@
         <div class="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
           <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">03</span>رد الذكاء الاصطناعي</h3>
           <textarea id="motion-json" rows="12" dir="ltr" spellcheck="false" class="w-full rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-xs" placeholder='{"version":1,"elements":[]}'></textarea>
-          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs">انسخ طلب تصحيح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
+          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionOpenEditor()" id="motion-open-editor" class="motion-editor-cta hidden"><i class="fa-solid fa-arrow-up-left-from-circle ml-2"></i>الذهاب لواجهة التعديل</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs">انسخ طلب تصحيح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
           <p class="text-[10px] text-zinc-500">يجب أن تكون الإضافة مفتوحة ومسجلة الدخول بالحساب نفسه. المشهد المرسل يبقى متاحاً للاستلام لمدة 15 دقيقة.</p>
         </div>
+      </div>
+    </section>
+
+    <section id="section-motion-editor" class="studio-section h-full hidden overflow-hidden bg-[#09090B] text-zinc-100">
+      <div class="motion-editor-shell">
+        <header class="motion-editor-header">
+          <div class="flex items-center gap-3 min-w-0">
+            <button type="button" onclick="MickeyStudio.switchTab('motion-builder')" class="motion-icon-button" title="العودة للمساعد"><i class="fa-solid fa-arrow-right"></i></button>
+            <div class="min-w-0"><div class="text-[10px] tracking-[.22em] uppercase text-orange-300">MICKEY MOTION EDITOR</div><h2 class="text-lg font-bold truncate">محرر المشهد</h2></div>
+            <span class="motion-preview-tag"><i class="fa-solid fa-circle text-[7px] text-emerald-400 ml-1.5"></i>معاينة تفاعلية</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="MickeyStudio.motionOpenEditor()" class="motion-icon-button" title="تحديث المعاينة"><i class="fa-solid fa-rotate"></i></button>
+            <span id="motion-editor-status" class="text-[9px] text-zinc-400"></span><button id="motion-editor-send" type="button" onclick="MickeyStudio.motionSendToPremiere()" class="motion-export-button"><i class="fa-solid fa-paper-plane ml-2"></i>إرسال إلى Premiere</button>
+          </div>
+        </header>
+
+        <div class="motion-editor-workspace">
+          <aside class="motion-properties-panel" dir="rtl">
+            <div class="motion-panel-heading"><div><span class="motion-eyebrow">PROPERTIES</span><h3>خصائص العنصر</h3></div><span id="motion-property-index" class="motion-property-counter">—</span></div>
+            <div id="motion-editor-empty" class="motion-empty-state"><i class="fa-solid fa-arrow-pointer"></i><p>اختر مقطعاً من خط الزمن لتعديل نصه وخطه.</p></div>
+            <div id="motion-text-properties" class="space-y-4 hidden">
+              <div><label for="motion-edit-text" class="motion-field-label">النص الظاهر</label><textarea id="motion-edit-text" rows="4" maxlength="500" class="motion-field" placeholder="اكتب النص الذي يظهر في المعاينة"></textarea></div>
+              <div><label for="motion-edit-font" class="motion-field-label">نوع الخط</label><select id="motion-edit-font" class="motion-field"><option value="Readex Pro">Readex Pro — عربي عصري</option><option value="Cairo">Cairo — واضح ومرن</option><option value="Tajawal">Tajawal — خفيف وأنيق</option><option value="Almarai">Almarai — هندسي</option><option value="Arial">Arial — افتراضي</option></select></div>
+              <div class="grid grid-cols-2 gap-3"><div><label for="motion-edit-size" class="motion-field-label">حجم الخط</label><input id="motion-edit-size" type="number" min="12" max="220" value="64" class="motion-field" dir="ltr"></div><div><label for="motion-edit-color" class="motion-field-label">لون النص</label><input id="motion-edit-color" type="color" value="#FFFFFF" class="motion-color-field"></div></div>
+              <div class="motion-selection-info"><i class="fa-solid fa-circle-info ml-1"></i><span>تظهر التغييرات فوراً في المعاينة، وتُحفظ تلقائياً داخل بيانات المشهد.</span></div>
+            </div>
+            <div class="motion-assets-note"><i class="fa-solid fa-wand-magic-sparkles ml-2 text-orange-300"></i>المحرر يركز على معاينة المشهد وتعديل النصوص. الحركة والقوالب الأصلية تُنفّذ في Premiere.</div>
+          </aside>
+
+          <div class="motion-preview-column">
+            <div class="motion-preview-topline"><span><i class="fa-regular fa-eye ml-2"></i>معاينة المشهد</span><span id="motion-preview-resolution">1920 × 1080</span></div>
+            <div class="motion-preview-stage-wrap"><div id="motion-preview-stage" class="motion-preview-stage"><div class="motion-preview-placeholder"><i class="fa-solid fa-clapperboard"></i><span>جهّز JSON أولاً لعرض المشهد</span></div></div></div>
+            <div class="motion-playback-bar" dir="ltr">
+              <div class="flex items-center gap-2"><button id="motion-play-toggle" type="button" class="motion-play-button" onclick="MickeyStudio.motionTogglePlayback()" title="تشغيل المعاينة"><i class="fa-solid fa-play"></i></button><span id="motion-play-time" class="motion-timecode">00:00 / 00:00</span></div>
+              <input id="motion-playhead" type="range" min="0" max="15" step="0.01" value="0" aria-label="موضع التشغيل" class="motion-playhead">
+              <span class="motion-preview-scale">FIT</span>
+            </div>
+          </div>
+        </div>
+
+        <section class="motion-timeline-panel" aria-label="خط الزمن">
+          <div class="motion-timeline-heading"><div><span class="motion-eyebrow">TIMELINE</span><h3>خط الزمن</h3></div><div class="motion-timeline-legend"><span><i class="bg-orange-400"></i>نصوص</span><span><i class="bg-violet-400"></i>قوالب</span><span><i class="bg-cyan-400"></i>مؤثرات صوتية</span></div></div>
+          <div id="motion-timeline" class="motion-timeline" dir="ltr"><div class="motion-timeline-empty">ستظهر المقاطع هنا بعد تجهيز مشهد JSON.</div></div>
+          <footer class="motion-timeline-footer"><span id="motion-timeline-summary">لا توجد مقاطع</span><button type="button" onclick="MickeyStudio.motionBackToPrompt()" class="motion-back-link"><i class="fa-solid fa-arrow-right ml-2"></i>العودة إلى إعداد المشهد</button></footer>
+        </section>
       </div>
     </section>
 

@@ -3510,6 +3510,10 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       initDeveloperApiSection();
     }
     if (tabId === 'motion-builder') initMotionBuilder();
+    if (tabId === 'motion-editor') {
+      initMotionEditorControls();
+      if (motionEditorScene) motionEditorRender();
+    }
   }
 
   function openLightbox(url) {
@@ -4096,9 +4100,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   const MOTION_SFX_IDS = ['whoosh', 'pop', 'click', 'riser'];
   let motionPalette = [];
   let motionBuilderInitialized = false;
+  let motionEditorScene = null;
+  let motionEditorDuration = 15;
+  let motionEditorSelectedIndex = -1;
+  let motionEditorTime = 0;
+  let motionEditorPlaying = false;
+  let motionEditorFrame = 0;
+  let motionEditorLastFrame = 0;
 
-  function motionNotice(text, error = false) {
-    const node = document.getElementById('motion-status');
+  function motionNotice(text, error = false, targetId = 'motion-status') {
+    const node = document.getElementById(targetId);
     if (node) { node.textContent = text; node.className = `text-xs ${error ? 'text-red-300' : 'text-emerald-300'}`; }
   }
 
@@ -4140,7 +4151,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
     if (!Number.isFinite(duration) || duration < 1 || duration > 180) throw new Error('المدة يجب أن تكون بين 1 و180 ثانية.');
     const styleSelect = document.getElementById('motion-style'); const styleName = styleSelect.options[styleSelect.selectedIndex].text;
-    return `You are a senior Motion Graphics Director and scene planner for the Mickey Studio Premiere UXP extension. Return exactly one valid JSON object, with no Markdown or explanations.\n\nArabic brief (preserve wording and intent):\n${idea}\n\nSTYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nDURATION: ${duration} seconds.\nREFERENCE COLORS: ${motionPalette.length ? motionPalette.join(', ') : 'none'}\n\nReturn {"version":1,"elements":[{"type":"mogrt|color_matte|sfx","templateId":"MOGRT_ID","sfxId":"SFX_ID","trackIndex":0,"startTime":0,"duration":2,"position":[960,540],"scale":100,"animationIn":"none|pop-in|slide-up|fade-in","animationOut":"none|fade-out|slide-down","params":{"text":"Arabic text","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100}}]}.\nAllowed templateId values: ${MOTION_MOGRT_IDS.join(', ')}. Allowed sfxId values: ${MOTION_SFX_IDS.join(', ')}. Use type mogrt with templateId, type sfx with sfxId, and type color_matte with templateId color_matte. All times are seconds; positions use a 1920x1080 reference. Keep every item inside the duration and return no more than 30 elements.`;
+    return `You are a senior Motion Graphics Director and scene planner for the Mickey Studio Premiere UXP extension. Return exactly one valid JSON object, with no Markdown or explanations.\n\nArabic brief (preserve wording and intent):\n${idea}\n\nSTYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nDURATION: ${duration} seconds.\nREFERENCE COLORS: ${motionPalette.length ? motionPalette.join(', ') : 'none'}\n\nReturn {"version":1,"elements":[{"type":"mogrt|color_matte|sfx","templateId":"MOGRT_ID","sfxId":"SFX_ID","trackIndex":0,"startTime":0,"duration":2,"position":[960,540],"scale":100,"animationIn":"none|pop-in|slide-up|fade-in","animationOut":"none|fade-out|slide-down","params":{"text":"Arabic text","fontFamily":"Readex Pro","fontSize":64,"textColor":"#FFFFFF","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100}}]}.\nAllowed templateId values: ${MOTION_MOGRT_IDS.join(', ')}. Allowed sfxId values: ${MOTION_SFX_IDS.join(', ')}. Use type mogrt with templateId, type sfx with sfxId, and type color_matte with templateId color_matte. All times are seconds; positions use a 1920x1080 reference. Keep every item inside the duration and return no more than 30 elements.`;
   }
 
   async function motionGeneratePrompt() {
@@ -4163,14 +4174,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   async function motionSendToPremiere() {
-    const button = document.getElementById('motion-send');
+    const button = document.getElementById('motion-send') || document.getElementById('motion-editor-send');
+    const statusId = document.getElementById('section-motion-editor')?.classList.contains('hidden') ? 'motion-status' : 'motion-editor-status';
     try {
       if (!window.firebase?.auth?.().currentUser) throw new Error('سجّل الدخول إلى الموقع أولاً بالحساب المرتبط بإضافة Premiere.');
       const scene = validateMotionScene(JSON.parse(cleanMotionJSON(document.getElementById('motion-json').value)));
       const assetsBaseUrl = String(document.getElementById('motion-assets-url').value || '').trim().replace(/\/$/, '');
       if (scene.elements.some(item => item.type !== 'sfx') && !/^https:\/\//i.test(assetsBaseUrl)) throw new Error('أدخل رابط R2 العام لأصول MOGRT مثل https://bucket.r2.dev.');
       localStorage.setItem('mickey_motion_assets_url', assetsBaseUrl);
-      button.disabled = true; motionNotice('جارٍ إرسال المشهد إلى حسابك…');
+      if (button) button.disabled = true;
+      motionNotice('جارٍ إرسال المشهد إلى حسابك…', false, statusId);
       const user = firebase.auth().currentUser;
       const response = await fetch(`${MOTION_SCENE_API_URL}/?action=motion_scene_submit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
@@ -4178,8 +4191,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
-      motionNotice('وصل المشهد إلى حسابك. افتح الإضافة واضغط «استلام المشهد وتنفيذه».');
-    } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true); }
+      motionNotice('وصل المشهد إلى حسابك. افتح الإضافة واضغط «استلام المشهد وتنفيذه».', false, statusId);
+    } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true, statusId); }
     finally { if (button) button.disabled = false; }
   }
 
@@ -4196,8 +4209,326 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     motionBuilderInitialized = true;
     const picker = document.getElementById('motion-image');
     picker?.addEventListener('change', event => motionReadImage(event.target.files?.[0]));
+    document.getElementById('motion-json')?.addEventListener('input', motionUpdateEditorCTA);
     const baseUrl = document.getElementById('motion-assets-url');
     if (baseUrl && !baseUrl.value) baseUrl.value = localStorage.getItem('mickey_motion_assets_url') || '';
+    motionUpdateEditorCTA();
+  }
+
+  function motionUpdateEditorCTA() {
+    const button = document.getElementById('motion-open-editor');
+    const input = document.getElementById('motion-json');
+    if (!button || !input) return;
+    try {
+      validateMotionScene(JSON.parse(cleanMotionJSON(input.value)));
+      button.classList.remove('hidden');
+      button.setAttribute('aria-hidden', 'false');
+    } catch (_) {
+      button.classList.add('hidden');
+      button.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function motionOpenEditor() {
+    try {
+      const scene = validateMotionScene(JSON.parse(cleanMotionJSON(document.getElementById('motion-json')?.value)));
+      motionEditorScene = JSON.parse(JSON.stringify(scene));
+      const requestedDuration = Number(document.getElementById('motion-duration')?.value) || 15;
+      const contentEnd = Math.max(...motionEditorScene.elements.map(item => Number(item.startTime) + Number(item.duration)));
+      motionEditorDuration = Math.max(1, Math.min(180, Math.max(requestedDuration, contentEnd)));
+      motionEditorSelectedIndex = motionEditorScene.elements.findIndex(item => item.type !== 'sfx');
+      motionEditorTime = 0;
+      motionEditorPlaying = false;
+      if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
+      motionEditorFrame = 0;
+      motionEditorRender();
+      switchTab('motion-editor');
+      motionEditorRender();
+    } catch (error) {
+      motionNotice(error.message || 'تعذر فتح المحرر. راجع JSON المشهد.', true);
+    }
+  }
+
+  function motionEditorRender() {
+    if (!motionEditorScene) return;
+    motionEditorRenderTimeline();
+    motionEditorRenderProperties();
+    motionEditorRenderPreview();
+    motionEditorUpdatePlaybackControls();
+  }
+
+  function motionEditorRenderTimeline() {
+    const timeline = document.getElementById('motion-timeline');
+    if (!timeline) return;
+    timeline.replaceChildren();
+    const elements = motionEditorScene.elements;
+    const maxTrack = Math.max(0, ...elements.map(item => Math.max(0, Math.floor(Number(item.trackIndex) || 0))));
+    const ruler = document.createElement('div');
+    ruler.className = 'motion-ruler';
+    ruler.style.minWidth = `${Math.max(500, 92 + motionEditorDuration * 44)}px`;
+    const tickCount = Math.min(12, Math.max(2, Math.ceil(motionEditorDuration / 2)));
+    for (let i = 0; i <= tickCount; i += 1) {
+      const tick = document.createElement('span');
+      tick.className = 'motion-ruler-tick';
+      tick.style.left = `${i / tickCount * 100}%`;
+      tick.textContent = `${(motionEditorDuration * i / tickCount).toFixed(i === tickCount ? 0 : 1)}s`;
+      ruler.appendChild(tick);
+    }
+    timeline.appendChild(ruler);
+    for (let track = maxTrack; track >= 0; track -= 1) {
+      const row = document.createElement('div');
+      row.className = 'motion-track-row';
+      const label = document.createElement('span');
+      label.className = 'motion-track-label';
+      label.textContent = `مسار ${track + 1}`;
+      const lane = document.createElement('div');
+      lane.className = 'motion-track-lane';
+      elements.forEach((item, index) => {
+        if (Math.floor(Number(item.trackIndex) || 0) !== track) return;
+        const clip = document.createElement('button');
+        clip.type = 'button';
+        const isText = motionEditorIsText(item);
+        clip.className = `motion-clip ${item.type === 'sfx' ? 'clip-sfx' : isText ? 'clip-text' : 'clip-mogrt'}${index === motionEditorSelectedIndex ? ' is-selected' : ''}`;
+        const start = Math.max(0, Number(item.startTime) || 0);
+        const duration = Math.max(.1, Number(item.duration) || .1);
+        clip.style.left = `${Math.min(100, start / motionEditorDuration * 100)}%`;
+        clip.style.width = `${Math.max(2, Math.min(100 - start / motionEditorDuration * 100, duration / motionEditorDuration * 100))}%`;
+        clip.title = `${motionEditorLabel(item)} · ${start.toFixed(2)}s — ${(start + duration).toFixed(2)}s`;
+        clip.textContent = motionEditorLabel(item);
+        clip.addEventListener('click', () => {
+          motionEditorSelectedIndex = index;
+          motionEditorTime = start;
+          motionEditorRender();
+        });
+        lane.appendChild(clip);
+      });
+      row.append(label, lane);
+      timeline.appendChild(row);
+    }
+    const playhead = document.createElement('div');
+    playhead.className = 'motion-playhead-line';
+    timeline.appendChild(playhead);
+    motionEditorUpdatePlayheadLine();
+    const summary = document.getElementById('motion-timeline-summary');
+    if (summary) summary.textContent = `${elements.length} مقاطع · ${motionEditorDuration.toFixed(1)} ثانية`;
+  }
+
+  function motionEditorUpdatePlayheadLine() {
+    const timeline = document.getElementById('motion-timeline');
+    const playhead = timeline?.querySelector('.motion-playhead-line');
+    if (!timeline || !playhead) return;
+    const contentWidth = Math.max(1, timeline.scrollWidth - 92);
+    playhead.style.left = `${92 + contentWidth * Math.min(1, motionEditorTime / motionEditorDuration)}px`;
+  }
+
+  function motionEditorIsText(item) {
+    return item.type === 'mogrt' && ['text_kinetic', 'text_badge', 'widget_counter', 'widget_social_card', 'logo_outro'].includes(item.templateId);
+  }
+
+  function motionEditorLabel(item) {
+    if (item.type === 'sfx') return item.sfxId || 'مؤثر صوتي';
+    if (item.type === 'color_matte') return 'خلفية لونية';
+    const text = String(item.params?.text || '').trim();
+    return text || item.templateId || 'قالب';
+  }
+
+  function motionEditorRenderProperties() {
+    const empty = document.getElementById('motion-editor-empty');
+    const fields = document.getElementById('motion-text-properties');
+    const indexBadge = document.getElementById('motion-property-index');
+    const item = motionEditorScene.elements[motionEditorSelectedIndex];
+    const editable = item && motionEditorIsText(item);
+    if (empty) empty.classList.toggle('hidden', Boolean(editable));
+    if (fields) fields.classList.toggle('hidden', !editable);
+    if (indexBadge) indexBadge.textContent = item ? `${String(motionEditorSelectedIndex + 1).padStart(2, '0')} / ${String(motionEditorScene.elements.length).padStart(2, '0')}` : '—';
+    if (!editable) {
+      if (empty && item?.type === 'sfx') empty.querySelector('p').textContent = 'هذا مقطع صوتي. اختر طبقة نصية من خط الزمن لتحريرها.';
+      else if (empty) empty.querySelector('p').textContent = 'اختر مقطعاً نصياً من خط الزمن لتعديل نصه وخطه.';
+      return;
+    }
+    const params = item.params || (item.params = {});
+    const textField = document.getElementById('motion-edit-text');
+    const fontField = document.getElementById('motion-edit-font');
+    const sizeField = document.getElementById('motion-edit-size');
+    const colorField = document.getElementById('motion-edit-color');
+    if (textField && document.activeElement !== textField) textField.value = params.text || '';
+    if (fontField) fontField.value = ['Readex Pro', 'Cairo', 'Tajawal', 'Almarai', 'Arial'].includes(params.fontFamily) ? params.fontFamily : 'Readex Pro';
+    if (sizeField && document.activeElement !== sizeField) sizeField.value = Math.max(12, Math.min(220, Number(params.fontSize) || 64));
+    if (colorField) colorField.value = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : '#FFFFFF';
+  }
+
+  function motionEditorRenderPreview() {
+    const stage = document.getElementById('motion-preview-stage');
+    if (!stage) return;
+    stage.replaceChildren();
+    const visible = motionEditorScene.elements.map((item, index) => ({ item, index })).filter(({ item }) => {
+      if (item.type === 'sfx') return false;
+      const start = Number(item.startTime) || 0;
+      return motionEditorTime >= start && motionEditorTime <= start + Number(item.duration);
+    });
+    const bgItem = [...visible].reverse().find(({ item }) => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
+    stage.style.background = motionEditorBackground(bgItem?.item);
+    if (bgItem?.item.templateId === 'bg_grid') {
+      const grid = document.createElement('div');
+      grid.className = 'motion-preview-grid';
+      stage.appendChild(grid);
+    }
+    if (bgItem?.item.templateId === 'bg_aurora') {
+      const glow = document.createElement('div');
+      glow.className = 'motion-preview-glow';
+      stage.appendChild(glow);
+    }
+    visible.forEach(({ item, index }) => {
+      if (!motionEditorIsText(item)) return;
+      const params = item.params || {};
+      const layer = document.createElement('div');
+      layer.className = `motion-preview-layer${item.templateId === 'text_badge' ? ' is-badge' : ''}${index === motionEditorSelectedIndex ? ' is-selected' : ''}`;
+      const position = Array.isArray(item.position) ? item.position : [960, 540];
+      const animation = motionEditorLayerAnimation(item);
+      layer.style.inset = 'auto';
+      layer.style.left = `${Math.max(0, Math.min(100, Number(position[0]) / 19.2))}%`;
+      layer.style.top = `${Math.max(0, Math.min(100, Number(position[1]) / 10.8))}%`;
+      layer.style.width = '86%';
+      layer.style.transform = `translate(-50%, calc(-50% + ${animation.offsetY}px)) scale(${Math.max(0.02, Math.min(3, (Number(item.scale) || 100) / 100 * animation.scale))})`;
+      layer.style.opacity = String(animation.opacity);
+      layer.style.color = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : '#FFFFFF';
+      layer.style.fontFamily = `${params.fontFamily || 'Readex Pro'}, Cairo, sans-serif`;
+      const copy = document.createElement('span');
+      copy.className = 'motion-preview-copy';
+      copy.style.fontSize = `clamp(12px, ${Math.max(1.4, Math.min(18, (Number(params.fontSize) || 64) / 1080 * 100))}cqw, 88px)`;
+      copy.textContent = motionEditorDisplayText(item);
+      layer.appendChild(copy);
+      layer.addEventListener('click', () => { motionEditorSelectedIndex = index; motionEditorRender(); });
+      stage.appendChild(layer);
+    });
+    if (!visible.some(({ item }) => motionEditorIsText(item)) && !bgItem) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'motion-preview-placeholder';
+      placeholder.innerHTML = '<i class="fa-solid fa-clapperboard"></i><span>لا توجد طبقة مرئية عند هذا التوقيت</span>';
+      stage.appendChild(placeholder);
+    }
+  }
+
+  function motionEditorBackground(item) {
+    if (!item) return 'radial-gradient(ellipse at 50% 110%, #293950 0%, #141b2b 48%, #090b13 100%)';
+    if (item.type === 'color_matte') {
+      const color = /^#[0-9a-f]{6}$/i.test(item.params?.color1 || '') ? item.params.color1 : '#171722';
+      return `linear-gradient(145deg, ${color}, #09090b)`;
+    }
+    if (item.templateId === 'bg_grid') return 'linear-gradient(145deg, #0f172a, #111827 55%, #09090b)';
+    return 'radial-gradient(ellipse at 20% 10%, #56388e 0%, transparent 36%), radial-gradient(ellipse at 85% 88%, #164d66 0%, transparent 38%), linear-gradient(145deg, #121326, #080a12 70%)';
+  }
+
+  function motionEditorLayerAnimation(item) {
+    const start = Number(item.startTime) || 0;
+    const end = start + (Number(item.duration) || 0);
+    const elapsed = Math.max(0, motionEditorTime - start);
+    const remaining = Math.max(0, end - motionEditorTime);
+    const result = { scale: 1, offsetY: 0, opacity: 1 };
+    const animationIn = String(item.animationIn || 'none').toLowerCase();
+    if (animationIn === 'pop-in' && elapsed < .48) {
+      const progress = elapsed / .48;
+      result.scale = progress < .68 ? Math.max(.02, progress / .68 * 1.1) : 1.1 - (progress - .68) / .32 * .1;
+    } else if (animationIn === 'slide-up' && elapsed < .42) {
+      const progress = elapsed / .42;
+      result.offsetY = (1 - progress) * 78;
+      result.opacity = Math.max(.05, progress);
+    } else if (animationIn === 'fade-in' && elapsed < .45) {
+      result.opacity = Math.max(.05, elapsed / .45);
+    }
+    const animationOut = String(item.animationOut || 'none').toLowerCase();
+    if (animationOut === 'fade-out' && remaining < .45) {
+      result.opacity *= Math.max(0, remaining / .45);
+    } else if (animationOut === 'slide-down' && remaining < .42) {
+      const progress = 1 - remaining / .42;
+      result.offsetY += progress * 78;
+      result.opacity *= 1 - progress;
+    }
+    return result;
+  }
+
+  function motionEditorDisplayText(item) {
+    if (item.templateId === 'widget_counter' && item.params?.numberValue != null) return String(item.params.numberValue);
+    return String(item.params?.text || (item.templateId === 'widget_counter' ? '١٢٬٥٠٠' : 'اكتب النص هنا'));
+  }
+
+  function motionEditorUpdateSelected(key, value) {
+    const item = motionEditorScene?.elements[motionEditorSelectedIndex];
+    if (!item || !motionEditorIsText(item)) return;
+    if (!item.params || typeof item.params !== 'object') item.params = {};
+    item.params[key] = value;
+    const jsonField = document.getElementById('motion-json');
+    if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
+    motionUpdateEditorCTA();
+    motionEditorRenderTimeline();
+    motionEditorRenderPreview();
+  }
+
+  function motionEditorSetTime(value) {
+    motionEditorTime = Math.max(0, Math.min(motionEditorDuration, Number(value) || 0));
+    motionEditorUpdatePlayheadLine();
+    motionEditorRenderPreview();
+    motionEditorUpdatePlaybackControls();
+  }
+
+  function motionEditorUpdatePlaybackControls() {
+    const range = document.getElementById('motion-playhead');
+    const timecode = document.getElementById('motion-play-time');
+    const button = document.getElementById('motion-play-toggle');
+    if (range) { range.max = String(motionEditorDuration); range.value = String(motionEditorTime); }
+    if (timecode) timecode.textContent = `${motionFormatTime(motionEditorTime)} / ${motionFormatTime(motionEditorDuration)}`;
+    if (button) button.innerHTML = `<i class="fa-solid fa-${motionEditorPlaying ? 'pause' : 'play'}"></i>`;
+  }
+
+  function motionFormatTime(seconds) {
+    const value = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+  }
+
+  function motionTogglePlayback() {
+    if (!motionEditorScene) return;
+    motionEditorPlaying = !motionEditorPlaying;
+    motionEditorLastFrame = 0;
+    if (motionEditorPlaying) motionEditorFrame = requestAnimationFrame(motionEditorPlayFrame);
+    else if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
+    motionEditorUpdatePlaybackControls();
+  }
+
+  function motionEditorPlayFrame(timestamp) {
+    if (!motionEditorPlaying) return;
+    if (motionEditorLastFrame) motionEditorTime += (timestamp - motionEditorLastFrame) / 1000;
+    motionEditorLastFrame = timestamp;
+    if (motionEditorTime >= motionEditorDuration) motionEditorTime = 0;
+    motionEditorRenderPreview();
+    motionEditorUpdatePlayheadLine();
+    motionEditorUpdatePlaybackControls();
+    motionEditorFrame = requestAnimationFrame(motionEditorPlayFrame);
+  }
+
+  function motionBackToPrompt() {
+    motionEditorPlaying = false;
+    if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
+    motionEditorFrame = 0;
+    switchTab('motion-builder');
+  }
+
+  function initMotionEditorControls() {
+    const text = document.getElementById('motion-edit-text');
+    const font = document.getElementById('motion-edit-font');
+    const size = document.getElementById('motion-edit-size');
+    const color = document.getElementById('motion-edit-color');
+    const playhead = document.getElementById('motion-playhead');
+    if (!document.getElementById('motion-editor-shell-ready')) {
+      text?.addEventListener('input', () => motionEditorUpdateSelected('text', text.value));
+      font?.addEventListener('change', () => motionEditorUpdateSelected('fontFamily', font.value));
+      size?.addEventListener('input', () => motionEditorUpdateSelected('fontSize', Math.max(12, Math.min(220, Number(size.value) || 64))));
+      color?.addEventListener('input', () => motionEditorUpdateSelected('textColor', color.value.toUpperCase()));
+      playhead?.addEventListener('input', () => motionEditorSetTime(playhead.value));
+      const marker = document.createElement('span');
+      marker.id = 'motion-editor-shell-ready';
+      marker.hidden = true;
+      document.body.appendChild(marker);
+    }
   }
 
   async function ensureActiveProfile(user) {
@@ -4639,6 +4970,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     motionGeneratePrompt,
     motionSendToPremiere,
     motionCopyRepairPrompt,
+    motionOpenEditor,
+    motionTogglePlayback,
+    motionBackToPrompt,
     toggleSound,
     handleAuthClick,
     openAccountModal,
