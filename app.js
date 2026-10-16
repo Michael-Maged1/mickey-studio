@@ -4204,7 +4204,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
-      motionNotice('وصل المشهد إلى حسابك. افتح الإضافة واضغط «استلام المشهد وتنفيذه».', false, statusId);
+      motionNotice('تم إرسال المشهد. ستظهر شاشة استلام كاملة داخل Premiere تلقائياً، وستظل مفتوحة حتى تنشئ المشهد أو تغلقها.', false, statusId);
     } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true, statusId); }
     finally { if (button) button.disabled = false; }
   }
