@@ -1,5 +1,6 @@
 .env
 .env.*
+.wrangler/
 *.key
 *_key.txt
 gemini_keys.json
