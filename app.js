@@ -3509,6 +3509,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (tabId === 'developer-api') {
       initDeveloperApiSection();
     }
+    if (tabId === 'motion-builder') initMotionBuilder();
   }
 
   function openLightbox(url) {
@@ -4016,6 +4017,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
   const API_BASE_URL = window.MICKEY_API_BASE_URL || new URL('api.php', window.location.href).href;
+  const MOTION_SCENE_API_URL = 'https://mickey-studio-api.kma279500.workers.dev';
   let phoneConfirmation = null;
   let phoneRecaptcha = null;
   let pendingPairCode = '';
@@ -4079,6 +4081,123 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       sessionStorage.setItem('mickey_generation_permits', JSON.stringify(permits));
     }
     return data;
+  }
+
+  const MOTION_STYLE_GUIDES = {
+    social: 'Bold Arabic typography, energetic pacing and clean social-first framing.',
+    kids: 'Playful shapes, bright colors and friendly, readable typography.',
+    tech: 'Grid-driven interface visuals, precise motion and cool high-contrast colors.',
+    luxury: 'Elegant spacing, restrained gold accents and smooth premium motion.',
+    cyber: 'Dark cyberpunk palette, crisp neon geometry and controlled visual density.',
+    marketing: 'Clear product hierarchy, direct offer emphasis and punchy transitions.',
+    stats: 'Data-led layout, accurate numeric hierarchy and legible chart moments.'
+  };
+  const MOTION_MOGRT_IDS = ['bg_aurora', 'bg_grid', 'text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro', 'color_matte'];
+  const MOTION_SFX_IDS = ['whoosh', 'pop', 'click', 'riser'];
+  let motionPalette = [];
+  let motionBuilderInitialized = false;
+
+  function motionNotice(text, error = false) {
+    const node = document.getElementById('motion-status');
+    if (node) { node.textContent = text; node.className = `text-xs ${error ? 'text-red-300' : 'text-emerald-300'}`; }
+  }
+
+  function renderMotionPalette() {
+    const host = document.getElementById('motion-palette');
+    if (!host) return;
+    host.replaceChildren();
+    motionPalette.forEach((color, index) => {
+      const button = document.createElement('button'); button.type = 'button'; button.title = `${color} — اضغط لنسخ اللون`;
+      button.className = 'h-9 w-9 rounded-full border border-white/30 shadow'; button.style.backgroundColor = color;
+      button.addEventListener('click', async () => { try { await navigator.clipboard.writeText(motionPalette[index]); motionNotice(`تم نسخ اللون ${motionPalette[index]}`); } catch (_) {} });
+      button.addEventListener('dblclick', () => { const value = prompt('عدّل اللون بصيغة #RRGGBB', motionPalette[index]); if (value && /^#[0-9a-f]{6}$/i.test(value)) { motionPalette[index] = value.toUpperCase(); renderMotionPalette(); } });
+      host.appendChild(button);
+    });
+  }
+
+  async function motionReadImage(file) {
+    if (!file || !file.type.startsWith('image/')) { motionNotice('اختر ملف صورة صالحاً.', true); return; }
+    const image = new Image(); image.src = URL.createObjectURL(file);
+    try {
+      await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = 120; canvas.height = 120;
+      const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0, 120, 120);
+      const pixels = context.getImageData(0, 0, 120, 120).data, counts = new Map();
+      for (let i = 0; i < pixels.length; i += 16) {
+        if (pixels[i + 3] < 96) continue;
+        const key = `#${[pixels[i], pixels[i + 1], pixels[i + 2]].map(v => (Math.round(v / 32) * 32).toString(16).padStart(2, '0')).map(v => (parseInt(v, 16) > 255 ? 'ff' : v)).join('').toUpperCase()}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      motionPalette = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([color]) => color);
+      renderMotionPalette(); motionNotice(`استخرجت ${motionPalette.length} ألوان من ${file.name}.`);
+    } catch (error) { motionNotice(`تعذرت قراءة الصورة: ${error.message}`, true); }
+    finally { URL.revokeObjectURL(image.src); }
+  }
+
+  function motionScenePrompt() {
+    const idea = document.getElementById('motion-idea')?.value.trim();
+    const duration = Number(document.getElementById('motion-duration')?.value);
+    if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
+    if (!Number.isFinite(duration) || duration < 1 || duration > 180) throw new Error('المدة يجب أن تكون بين 1 و180 ثانية.');
+    const styleSelect = document.getElementById('motion-style'); const styleName = styleSelect.options[styleSelect.selectedIndex].text;
+    return `You are a senior Motion Graphics Director and scene planner for the Mickey Studio Premiere UXP extension. Return exactly one valid JSON object, with no Markdown or explanations.\n\nArabic brief (preserve wording and intent):\n${idea}\n\nSTYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nDURATION: ${duration} seconds.\nREFERENCE COLORS: ${motionPalette.length ? motionPalette.join(', ') : 'none'}\n\nReturn {"version":1,"elements":[{"type":"mogrt|color_matte|sfx","templateId":"MOGRT_ID","sfxId":"SFX_ID","trackIndex":0,"startTime":0,"duration":2,"position":[960,540],"scale":100,"animationIn":"none|pop-in|slide-up|fade-in","animationOut":"none|fade-out|slide-down","params":{"text":"Arabic text","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100}}]}.\nAllowed templateId values: ${MOTION_MOGRT_IDS.join(', ')}. Allowed sfxId values: ${MOTION_SFX_IDS.join(', ')}. Use type mogrt with templateId, type sfx with sfxId, and type color_matte with templateId color_matte. All times are seconds; positions use a 1920x1080 reference. Keep every item inside the duration and return no more than 30 elements.`;
+  }
+
+  async function motionGeneratePrompt() {
+    try { await navigator.clipboard.writeText(motionScenePrompt()); motionNotice('تم نسخ الطلب. الصقه في ChatGPT أو Claude أو Gemini.'); }
+    catch (error) { motionNotice(error.message || 'تعذر نسخ الطلب.', true); }
+  }
+
+  function cleanMotionJSON(value) { return String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim(); }
+
+  function validateMotionScene(scene) {
+    if (!scene || !Array.isArray(scene.elements) || !scene.elements.length || scene.elements.length > 30) throw new Error('يجب أن يحتوي JSON على 1 إلى 30 عنصراً داخل elements.');
+    scene.elements.forEach((item, index) => {
+      const id = item?.type === 'mogrt' ? item.templateId : item?.type === 'sfx' ? item.sfxId : item?.type === 'color_matte' ? 'color_matte' : '';
+      if (!id || !/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new Error(`معرّف العنصر ${index + 1} غير صالح.`);
+      if (item.type === 'mogrt' && !MOTION_MOGRT_IDS.includes(id)) throw new Error(`قالب غير معروف: ${id}`);
+      if (item.type === 'sfx' && !MOTION_SFX_IDS.includes(id)) throw new Error(`مؤثر صوتي غير معروف: ${id}`);
+      if (!Number.isInteger(Number(item.trackIndex)) || Number(item.trackIndex) < 0 || !Number.isFinite(Number(item.startTime)) || Number(item.startTime) < 0 || !Number.isFinite(Number(item.duration)) || Number(item.duration) <= 0) throw new Error(`التوقيت أو المسار غير صالح في العنصر ${index + 1}.`);
+    });
+    return scene;
+  }
+
+  async function motionSendToPremiere() {
+    const button = document.getElementById('motion-send');
+    try {
+      if (!window.firebase?.auth?.().currentUser) throw new Error('سجّل الدخول إلى الموقع أولاً بالحساب المرتبط بإضافة Premiere.');
+      const scene = validateMotionScene(JSON.parse(cleanMotionJSON(document.getElementById('motion-json').value)));
+      const assetsBaseUrl = String(document.getElementById('motion-assets-url').value || '').trim().replace(/\/$/, '');
+      if (scene.elements.some(item => item.type !== 'sfx') && !/^https:\/\//i.test(assetsBaseUrl)) throw new Error('أدخل رابط R2 العام لأصول MOGRT مثل https://bucket.r2.dev.');
+      localStorage.setItem('mickey_motion_assets_url', assetsBaseUrl);
+      button.disabled = true; motionNotice('جارٍ إرسال المشهد إلى حسابك…');
+      const user = firebase.auth().currentUser;
+      const response = await fetch(`${MOTION_SCENE_API_URL}/?action=motion_scene_submit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+        body: JSON.stringify({ scene, assetsBaseUrl })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
+      motionNotice('وصل المشهد إلى حسابك. افتح الإضافة واضغط «استلام المشهد وتنفيذه».');
+    } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true); }
+    finally { if (button) button.disabled = false; }
+  }
+
+  async function motionCopyRepairPrompt() {
+    try {
+      const input = cleanMotionJSON(document.getElementById('motion-json').value); if (!input) throw new Error('الصق JSON أولاً.');
+      const text = `Repair this Premiere motion scene. Return JSON only. Preserve Arabic text and intent. Valid types: mogrt, color_matte, sfx. MOGRT IDs: ${MOTION_MOGRT_IDS.join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Root schema: {"version":1,"elements":[]}. Element fields: type,templateId,sfxId,trackIndex,startTime,duration,position:[x,y],scale,animationIn,animationOut,params:{text,color1,color2,numberValue}.\n\n${input}`;
+      await navigator.clipboard.writeText(text); motionNotice('تم نسخ طلب تصحيح JSON.');
+    } catch (error) { motionNotice(error.message || 'تعذر نسخ طلب التصحيح.', true); }
+  }
+
+  function initMotionBuilder() {
+    if (motionBuilderInitialized) return;
+    motionBuilderInitialized = true;
+    const picker = document.getElementById('motion-image');
+    picker?.addEventListener('change', event => motionReadImage(event.target.files?.[0]));
+    const baseUrl = document.getElementById('motion-assets-url');
+    if (baseUrl && !baseUrl.value) baseUrl.value = localStorage.getItem('mickey_motion_assets_url') || '';
   }
 
   async function ensureActiveProfile(user) {
@@ -4490,6 +4609,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     await initIndexedDB();
     ['mickey_groq_key','mickey_hf_token','mickey_firebase_config'].forEach(key => localStorage.removeItem(key));
     initFirebaseAuth();
+    initMotionBuilder();
     updateGuestBadge();
     
     onVoiceEngineChanged();
@@ -4516,6 +4636,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   // Public API
   return {
     switchTab,
+    motionGeneratePrompt,
+    motionSendToPremiere,
+    motionCopyRepairPrompt,
     toggleSound,
     handleAuthClick,
     openAccountModal,

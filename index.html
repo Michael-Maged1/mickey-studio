@@ -81,6 +81,11 @@
           <span>استوديو الفيديو</span>
         </button>
 
+        <button onclick="MickeyStudio.switchTab('motion-builder')" id="tab-btn-motion-builder" class="sidebar-nav-item">
+          <i class="fa-solid fa-wand-magic-sparkles text-orange-400"></i>
+          <span>مساعد الموشن جرافيك</span>
+        </button>
+
         <button onclick="MickeyStudio.switchTab('photo-lab')" id="tab-btn-photo-lab" class="sidebar-nav-item">
           <i class="fa-solid fa-wand-magic-sparkles"></i>
           <span>تعديل وتكبير الصور</span>
@@ -160,6 +165,38 @@
     <!-- ===============================================================
          STUDIO 1: توليد الصور (IMAGE STUDIO)
          =============================================================== -->
+    <section id="section-motion-builder" class="studio-section h-full flex flex-col overflow-y-auto hidden bg-[#09090B] p-5 lg:p-8">
+      <div class="max-w-5xl w-full mx-auto space-y-5">
+        <header class="flex items-center justify-between gap-4">
+          <div><div class="text-[10px] uppercase tracking-[.25em] text-orange-300">AI Motion Builder</div><h2 class="text-2xl font-bold mt-1">مساعد الموشن جرافيك بالذكاء الاصطناعي</h2><p class="text-xs text-zinc-400 mt-2">جهّز المشهد هنا، ثم أرسله إلى إضافة Premiere المرتبطة بحسابك.</p></div>
+          <span class="rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-[10px] text-orange-200">1 · 2 · 3</span>
+        </header>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div class="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-4">
+            <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">01</span>الفكرة والستايل</h3>
+            <label class="block text-xs text-zinc-400">ستايل المشهد</label>
+            <select id="motion-style" class="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm"><option value="social">سوشيال ميديا</option><option value="kids">أطفال وكرتون</option><option value="tech">شرح تقني وواجهات</option><option value="luxury">فخامة ذهبي</option><option value="cyber">نيون سايبر</option><option value="marketing">تسويق وعروض</option><option value="stats">أرقام وإحصائيات</option></select>
+            <label class="block text-xs text-zinc-400">الفكرة بالعربية</label>
+            <textarea id="motion-idea" rows="5" maxlength="3000" class="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm" placeholder="اكتب فكرة المشهد والنصوص التي تريد ظهورها..."></textarea>
+            <div class="grid grid-cols-2 gap-3"><div><label class="block text-xs text-zinc-400 mb-2">المدة (ثانية)</label><input id="motion-duration" type="number" min="1" max="180" value="15" class="w-full rounded-xl border border-white/10 bg-black/30 p-3"></div><div><label class="block text-xs text-zinc-400 mb-2">رابط أصول R2 العام</label><input id="motion-assets-url" type="url" placeholder="https://…r2.dev" class="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs" dir="ltr"></div></div>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-4">
+            <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">02</span>مرجع بصري</h3>
+            <label for="motion-image" class="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-black/20 p-5 text-center text-xs text-zinc-400 hover:border-orange-300/50">ارفع لوحة القصة أو اسحب الصورة هنا<input id="motion-image" type="file" accept="image/*" class="hidden"></label>
+            <div id="motion-palette" class="flex flex-wrap gap-3"></div>
+            <div class="flex flex-wrap gap-2"><button type="button" onclick="MickeyStudio.motionGeneratePrompt()" class="btn-primary px-4 py-2.5 text-xs"><i class="fa-regular fa-copy ml-1"></i>انسخ طلب الذكاء الاصطناعي</button><a href="https://chatgpt.com" target="_blank" rel="noopener" class="btn-secondary px-3 py-2.5 text-xs">ChatGPT ↗</a><a href="https://claude.ai" target="_blank" rel="noopener" class="btn-secondary px-3 py-2.5 text-xs">Claude ↗</a><a href="https://gemini.google.com" target="_blank" rel="noopener" class="btn-secondary px-3 py-2.5 text-xs">Gemini ↗</a></div>
+            <p class="text-[10px] text-zinc-500">انسخ الطلب إلى المساعد الذي تفضله، ثم الصق JSON الناتج في الخطوة التالية.</p>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-white/10 bg-[#121215] p-5 space-y-3">
+          <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">03</span>رد الذكاء الاصطناعي</h3>
+          <textarea id="motion-json" rows="12" dir="ltr" spellcheck="false" class="w-full rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-xs" placeholder='{"version":1,"elements":[]}'></textarea>
+          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs">انسخ طلب تصحيح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
+          <p class="text-[10px] text-zinc-500">يجب أن تكون الإضافة مفتوحة ومسجلة الدخول بالحساب نفسه. المشهد المرسل يبقى متاحاً للاستلام لمدة 15 دقيقة.</p>
+        </div>
+      </div>
+    </section>
+
     <section id="section-image-studio" class="studio-section h-full flex flex-row overflow-hidden">
       
       <!-- Left Panel: Controls Column (380px) -->

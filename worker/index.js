@@ -40,6 +40,9 @@ export default {
         case 'pair_begin': return await pairBegin(context);
         case 'pair_complete': return await pairComplete(context);
         case 'pair_poll': return await pairPoll(context);
+        case 'motion_scene_submit': return await submitMotionScene(context);
+        case 'motion_scene_poll': return await pollMotionScene(context);
+        case 'motion_scene_ack': return await acknowledgeMotionScene(context);
         case 'admin_get_provider_keys': return await adminProviderKeys(context, false);
         case 'admin_save_provider_keys': return await adminProviderKeys(context, true);
         case 'admin_delete_gemini_key': return await deleteGeminiKey(context);
@@ -488,6 +491,61 @@ async function pairPoll(ctx) {
   await fetch(url, { method: 'DELETE' });
   if (!pair) return json({ success: false, error: 'تعذر فك تشفير جلسة الربط.' }, 502, ctx.headers);
   return json({ success: true, status: 'complete', email: pair.email, refreshToken: pair.refreshToken }, 200, ctx.headers);
+}
+
+function validateMotionScene(scene) {
+  if (!scene || typeof scene !== 'object' || !Array.isArray(scene.elements) || scene.elements.length < 1 || scene.elements.length > 30) {
+    fail(400, 'المشهد يجب أن يحتوي من عنصر إلى 30 عنصراً.');
+  }
+  const idPattern = /^[A-Za-z0-9_-]{1,80}$/;
+  const mogrtIds = new Set(['bg_aurora', 'bg_grid', 'text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro', 'color_matte']);
+  const sfxIds = new Set(['whoosh', 'pop', 'click', 'riser']);
+  for (const [index, item] of scene.elements.entries()) {
+    if (!item || !['mogrt', 'color_matte', 'sfx'].includes(item.type)) fail(400, `نوع العنصر ${index + 1} غير مدعوم.`);
+    const assetId = item.type === 'sfx' ? item.sfxId : (item.type === 'mogrt' ? item.templateId : 'color_matte');
+    if (!idPattern.test(String(assetId || ''))) fail(400, `معرّف الأصل في العنصر ${index + 1} غير صالح.`);
+    if (item.type === 'mogrt' && !mogrtIds.has(assetId)) fail(400, `قالب غير معروف في العنصر ${index + 1}.`);
+    if (item.type === 'sfx' && !sfxIds.has(assetId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
+    for (const key of ['trackIndex', 'startTime', 'duration']) {
+      const value = Number(item[key]);
+      if (!Number.isFinite(value) || value < 0 || (key === 'duration' && value === 0)) fail(400, `قيمة ${key} في العنصر ${index + 1} غير صالحة.`);
+    }
+    if (Number(item.startTime) + Number(item.duration) > 180) fail(400, `العنصر ${index + 1} يتجاوز حد مدة المشهد.`);
+  }
+  const serialized = JSON.stringify(scene);
+  if (serialized.length > 100000) fail(413, 'حجم المشهد أكبر من الحد المسموح.');
+  return scene;
+}
+
+async function submitMotionScene(ctx) {
+  const account = await authenticate(ctx);
+  const scene = validateMotionScene(ctx.body.scene);
+  const assetsBaseUrl = String(ctx.body.assetsBaseUrl || '').replace(/\/$/, '');
+  if (scene.elements.some(item => item.type !== 'sfx') && !/^https:\/\//i.test(assetsBaseUrl)) fail(400, 'أرسل رابط HTTPS عام لمكتبة أصول MOGRT.');
+  const jobId = crypto.randomUUID();
+  const record = { jobId, scene, assetsBaseUrl, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000 };
+  await ctx.env.MICKEY_STATE.put(`motion_scene:${account.uid}`, JSON.stringify(record), { expirationTtl: 900 });
+  return json({ success: true, jobId, status: 'pending', message: 'المشهد جاهز للاستلام من إضافة Premiere.' }, 200, ctx.headers);
+}
+
+async function pollMotionScene(ctx) {
+  const account = await authenticate(ctx);
+  const key = `motion_scene:${account.uid}`;
+  const record = await ctx.env.MICKEY_STATE.get(key, 'json');
+  if (!record || record.expiresAt < Date.now()) {
+    if (record) await ctx.env.MICKEY_STATE.delete(key);
+    return json({ success: true, status: 'empty' }, 200, ctx.headers);
+  }
+  return json({ success: true, status: 'pending', jobId: record.jobId, scene: record.scene, assetsBaseUrl: record.assetsBaseUrl || '', createdAt: record.createdAt }, 200, ctx.headers);
+}
+
+async function acknowledgeMotionScene(ctx) {
+  const account = await authenticate(ctx);
+  const key = `motion_scene:${account.uid}`;
+  const record = await ctx.env.MICKEY_STATE.get(key, 'json');
+  if (!record || record.jobId !== String(ctx.body.jobId || '')) return json({ success: false, error: 'المشهد غير موجود أو تم استلامه مسبقاً.' }, 404, ctx.headers);
+  await ctx.env.MICKEY_STATE.delete(key);
+  return json({ success: true, status: 'complete' }, 200, ctx.headers);
 }
 
 async function adminProviderKeys(ctx, save) {
