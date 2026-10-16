@@ -4088,7 +4088,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   const MOTION_STYLE_GUIDES = {
-    social: 'Bold Arabic typography, energetic pacing and clean social-first framing.',
+    social: 'Match a polished social-media motion reference: near-black midnight-navy background, a restrained violet glow in the upper right and cobalt-blue glow in the lower right; crisp bold white Arabic typography with short key words highlighted in hot magenta and electric blue using separate whole-word text layers in natural right-to-left order; thin outlined rings and a few small floating reaction or subject-relevant symbol badges (♥, ↗, ✦). Use concise two-line kinetic headlines, clear negative space, tasteful dark-violet UI cards, and coordinated pop/slide/scale reveals. Use a phone or app-interface motif only when the brief is about apps or social engagement, and use counters or charts only for facts explicitly supplied by the user. Preserve the user’s actual subject as the hero visual; never replace it with generic decoration. Avoid green/gold palettes, bright grids, dense particles, repeated cards, invented metrics, and text-only scenes.',
     kids: 'Playful shapes, bright colors and friendly, readable typography.',
     tech: 'Grid-driven interface visuals, precise motion and cool high-contrast colors.',
     luxury: 'Elegant spacing, restrained gold accents and smooth premium motion.',
