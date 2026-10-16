@@ -582,7 +582,7 @@ audio::-webkit-media-controls-time-remaining-display {
 .motion-timecode { color: #a1a1aa; font-family: var(--font-mono); font-size: 9px; white-space: nowrap; }
 .motion-playhead { accent-color: #fb923c; cursor: pointer; height: 3px; min-width: 40px; width: 100%; }
 .motion-preview-scale { color: #71717a; font-family: var(--font-mono); font-size: 8px; }
-.motion-timeline-panel { background: #101013; border-top: 1px solid var(--motion-line); flex: 0 0 220px; min-height: 170px; overflow: hidden; padding: 12px 20px 8px; }
+.motion-timeline-panel { background: #101013; border-top: 1px solid var(--motion-line); flex: 0 0 285px; min-height: 235px; overflow: hidden; padding: 14px 20px 10px; }
 .motion-timeline-heading { height: 32px; }
 .motion-timeline-legend { color: #8b8b94; display: flex; font-size: 8px; gap: 15px; }
 .motion-timeline-legend span { align-items: center; display: inline-flex; }
@@ -624,6 +624,6 @@ audio::-webkit-media-controls-time-remaining-display {
   .motion-empty-state i { display: none; }
   .motion-preview-column { grid-row: 1; min-height: 0; padding-top: 10px; }
   .motion-preview-stage { width: min(100%, calc((100vh - 560px) * 1.777)); }
-  .motion-timeline-panel { flex-basis: 188px; min-height: 155px; padding-top: 8px; }
+  .motion-timeline-panel { flex-basis: 220px; min-height: 190px; padding-top: 8px; }
   .motion-timeline-legend { display: none; }
 }
