@@ -4265,21 +4265,12 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         const jsonField = document.getElementById('motion-json');
         if (jsonField) jsonField.value = JSON.stringify(scene, null, 2);
       }
-      const visualBeats = scene.elements.filter(item => ['graphic', 'mogrt', 'color_matte'].includes(item.type) && Number(item.duration) > 0);
-      const existingSfx = scene.elements.filter(item => item.type === 'sfx');
-      if (existingSfx.length < 3 && visualBeats.length) {
-        const soundIds = ['whoosh', 'pop', 'impact', 'sparkle', 'click'];
-        const totalDuration = Number(document.getElementById('motion-duration')?.value) || 15;
-        let addedCount = 0;
-        [0.12, 0.52, 0.86].forEach((ratio, index) => {
-          if (existingSfx.length + addedCount >= 3) return;
-          const startTime = Math.min(totalDuration * ratio, Math.max(0, totalDuration - 0.1));
-          if ([...existingSfx, ...scene.elements.filter(item => item.type === 'sfx' && !existingSfx.includes(item))].some(item => Math.abs(Number(item.startTime) - startTime) < 0.25)) return;
-          const remaining = Math.max(0.1, (Number(document.getElementById('motion-duration')?.value) || 15) - startTime);
-          scene.elements.push({ type: 'sfx', sfxId: soundIds[(index * 2 + existingSfx.length) % soundIds.length], trackIndex: existingSfx.length + addedCount, startTime, duration: Math.min(0.55, remaining), params: {} });
-          addedCount++;
-        });
-      }
+      const sfxElements = scene.elements.filter(item => item.type === 'sfx').slice(0, 2);
+      scene.elements = scene.elements.filter(item => item.type !== 'sfx').concat(sfxElements.map((item, index) => ({
+        ...item,
+        sfxId: index === 0 ? 'soft_whoosh' : 'click',
+        duration: Math.min(Number(item.duration) || 0.5, index === 0 ? 0.65 : 0.2),
+      })));
       motionNotice('جارٍ تجهيز الطبقات الرسومية من الموقع…', false, statusId);
       await motionAttachRenderedLayers(scene);
       validateMotionScene(scene);
@@ -4304,8 +4295,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       throw new Error('متصفح الموقع لا يدعم تجهيز طبقات PNG المطلوبة. افتح Mickey Studio في Chrome أو Edge ثم أعد الإرسال.');
     }
     const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
+    const outputSize = scene.aspectRatio === '9:16' ? { width: 720, height: 1280 } : scene.aspectRatio === '1:1' ? { width: 1080, height: 1080 } : { width: 1280, height: 720 };
+    canvas.width = outputSize.width;
+    canvas.height = outputSize.height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('تعذر إنشاء لوحة تجهيز الرسومات في الموقع.');
     if (document.fonts?.ready) await document.fonts.ready;
@@ -4480,7 +4472,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const now = context.currentTime + 0.08;
     const destination = outputNode || context.destination;
     const audioItems = motionEditorScene.elements.filter(item => item.type === 'sfx');
-    const jobs = audioItems.map(item => ({ kind: 'sfx', id: item.sfxId, time: Number(item.startTime) || 0, duration: Number(item.duration) || 0.5, volume: 0.82 }));
+    const jobs = audioItems.map(item => ({ kind: 'sfx', id: item.sfxId, time: Number(item.startTime) || 0, duration: Number(item.duration) || 0.5, volume: 0.2 }));
     if (motionEditorScene.music?.musicId) jobs.push({ kind: 'music', id: motionEditorScene.music.musicId, time: 0, duration: Number(motionEditorScene.music.duration) || motionEditorDuration, volume: Math.max(0.05, Math.min(0.8, Number(motionEditorScene.music.volume) || 0.28)) });
     const buffers = await Promise.all(jobs.map(async job => ({ job, buffer: await motionEditorLoadAudio(job.kind, job.id) })));
     if (!outputNode && !motionEditorPlaying) return;
