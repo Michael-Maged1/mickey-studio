@@ -2965,105 +2965,31 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     });
   }
 
-  function reflowTranscribeSrt(srt, maxChars, maxWords) {
-    const parseTime = value => {
-      const match = value.match(/^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/);
-      return match ? ((Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])) * 1000 + Number(match[4])) : null;
-    };
-    const formatTime = ms => {
-      const safe = Math.max(0, Math.round(ms));
-      const hours = Math.floor(safe / 3600000), minutes = Math.floor((safe % 3600000) / 60000), seconds = Math.floor((safe % 60000) / 1000), millis = safe % 1000;
-      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
-    };
-    const charLimit = Math.max(12, Math.min(80, Number(maxChars) || 42));
-    const wordLimit = Math.max(1, Math.min(12, Number(maxWords) || 6));
-    const entries = String(srt || '').trim().split(/\r?\n\s*\r?\n/).filter(Boolean);
-    const output = [];
-    for (const entry of entries) {
-      const lines = entry.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-      const timingIndex = lines.findIndex(line => line.includes('-->'));
-      const timing = timingIndex >= 0 ? lines[timingIndex].match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/) : null;
-      if (!timing || !lines[timingIndex + 1]) continue;
-      const start = parseTime(timing[1]), end = parseTime(timing[2]);
-      if (start === null || end === null || end <= start) continue;
-      const words = lines.slice(timingIndex + 1).join(' ').split(/\s+/).filter(Boolean);
-      const groups = [];
-      let group = [];
-      for (const word of words) {
-        const candidate = [...group, word].join(' ');
-        if (group.length && (group.length >= wordLimit || candidate.length > charLimit)) { groups.push(group); group = [word]; }
-        else group.push(word);
-      }
-      if (group.length) groups.push(group);
-      const weights = groups.map(part => Math.max(1, part.join(' ').length));
-      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-      let offset = 0;
-      groups.forEach((part, index) => {
-        const cueStart = start + (end - start) * offset / totalWeight;
-        offset += weights[index];
-        const cueEnd = index === groups.length - 1 ? end : start + (end - start) * offset / totalWeight;
-        output.push(`${output.length + 1}\n${formatTime(cueStart)} --> ${formatTime(cueEnd)}\n${part.join(' ')}`);
-      });
-    }
-    return output.join('\n\n');
-  }
+  function generateSrtFromTranscript(text, totalDurationSec = 30) {
+    if (!text || !text.trim()) return '';
+    const sentences = text
+      .split(/(?<=[.،؟!؛\n])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
 
-  function reflowTranscribeSrtFromControls() {
-    const output = document.getElementById('transcribe-srt-output');
-    if (!output?.value.trim()) { showToast('لا توجد توقيتات SRT لتقسيمها.', 'warning'); return; }
-    output.value = reflowTranscribeSrt(output.value, document.getElementById('caption-max-chars')?.value, document.getElementById('caption-max-words')?.value);
-    if (STATE.transcribe.lastResult) STATE.transcribe.lastResult.srt = output.value;
-    showToast('تم تقسيم بطاقات الكابشن مع الحفاظ على توقيتاتها.', 'success');
-  }
+    if (sentences.length === 0) return '';
+    const durPerSent = Math.max(2.5, totalDurationSec / sentences.length);
 
-  async function analyzeTranscribeSilence() {
-    const results = document.getElementById('web-silence-results');
-    const blob = STATE.transcribe.audioBlob;
-    if (!blob) { showToast('ارفع ملفًا أو سجّل صوتًا أولاً لتحليل الصمت.', 'warning'); return; }
-    if (results) { results.classList.remove('hidden'); results.textContent = 'جاري تحليل الصوت محليًا في المتصفح…'; }
-    let context;
-    try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) throw new Error('تحليل الصوت غير مدعوم في هذا المتصفح.');
-      context = new AudioContextClass();
-      const decoded = await context.decodeAudioData(await blob.arrayBuffer());
-      const threshold = Number(document.getElementById('web-silence-threshold')?.value || -38);
-      const minimum = Number(document.getElementById('web-silence-min')?.value || 0.5);
-      const windowSize = Math.max(1, Math.floor(decoded.sampleRate * 0.1));
-      const channels = Array.from({ length: decoded.numberOfChannels }, (_, index) => decoded.getChannelData(index));
-      const silent = [];
-      for (let start = 0; start < decoded.length; start += windowSize) {
-        const end = Math.min(decoded.length, start + windowSize);
-        let energy = 0, count = 0;
-        for (const channel of channels) for (let sample = start; sample < end; sample++) { energy += channel[sample] * channel[sample]; count++; }
-        silent.push(20 * Math.log10(Math.max(Math.sqrt(energy / Math.max(1, count)), 1e-7)) <= threshold);
-      }
-      const ranges = [];
-      let runStart = -1;
-      silent.forEach((isSilent, index) => {
-        if (isSilent && runStart < 0) runStart = index;
-        if ((!isSilent || index === silent.length - 1) && runStart >= 0) {
-          const runEnd = isSilent && index === silent.length - 1 ? index + 1 : index;
-          const startSec = runStart * windowSize / decoded.sampleRate;
-          const endSec = Math.min(decoded.duration, runEnd * windowSize / decoded.sampleRate);
-          if (endSec - startSec >= minimum) ranges.push({ startSec, endSec });
-          runStart = -1;
-        }
-      });
-      if (!ranges.length) { if (results) results.textContent = 'لم يُعثر على فترات صمت مطابقة. جرّب عتبة أكثر حساسية أو مدة أقصر.'; return; }
-      if (results) {
-        results.innerHTML = `<p>تم العثور على ${ranges.length} فترة صمت. راجع الحدود قبل القص:</p><ol class="list-decimal list-inside">${ranges.slice(0, 20).map(range => `<li>${range.startSec.toFixed(2)}s – ${range.endSec.toFixed(2)}s (${(range.endSec - range.startSec).toFixed(2)}s)</li>`).join('')}</ol>${ranges.length > 20 ? `<p>و ${ranges.length - 20} فترات أخرى.</p>` : ''}<button type="button" id="web-silence-download" class="btn-secondary px-3 py-1.5 mt-2">تنزيل تقرير الفترات CSV</button>`;
-        document.getElementById('web-silence-download')?.addEventListener('click', () => {
-          const csv = '\uFEFFstart_seconds,end_seconds,duration_seconds\n' + ranges.map(range => `${range.startSec.toFixed(3)},${range.endSec.toFixed(3)},${(range.endSec - range.startSec).toFixed(3)}`).join('\n');
-          downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `mickey_silence_report_${Date.now()}.csv`);
-        });
-      }
-    } catch (error) {
-      if (results) results.textContent = error.message || 'تعذر تحليل الملف الصوتي.';
-      showToast(error.message || 'تعذر تحليل الصمت.', 'error');
-    } finally {
-      if (context) { try { await context.close(); } catch (_) {} }
-    }
+    let srt = '';
+    sentences.forEach((sentence, idx) => {
+      const start = idx * durPerSent;
+      const end = (idx + 1) * durPerSent;
+      const formatTime = (sec) => {
+        const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+        const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+        const s = String(Math.floor(sec % 60)).padStart(2, '0');
+        const ms = String(Math.floor((sec % 1) * 1000)).padStart(3, '0');
+        return `${h}:${m}:${s},${ms}`;
+      };
+
+      srt += `${idx + 1}\n${formatTime(start)} --> ${formatTime(end)}\n${sentence}\n\n`;
+    });
+    return srt.trim();
   }
 
   async function processAudioTranscription() {
@@ -3100,6 +3026,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (actionsBar) actionsBar.classList.add('opacity-0', 'pointer-events-none');
     if (statusPill) statusPill.textContent = 'جاري تحليل الموجات الصوتية وتفريغ الكلام العربي...';
 
+    const engine = document.getElementById('transcribe-engine-select')?.value || 'gemini-multimodal';
     const dialect = document.getElementById('transcribe-dialect-select')?.value || 'auto';
 
     let dialectLabel = 'فصحى معاصرة';
@@ -3182,9 +3109,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       isSuccess = false;
     }
 
-    parsedResult.srt = parsedResult.srt && parsedResult.srt.trim()
-      ? reflowTranscribeSrt(parsedResult.srt, document.getElementById('caption-max-chars')?.value, document.getElementById('caption-max-words')?.value)
-      : '';
+    if (!parsedResult.srt || !parsedResult.srt.trim()) {
+      parsedResult.srt = generateSrtFromTranscript(parsedResult.transcript);
+    }
 
     const wordsCount = parsedResult.words_count || (parsedResult.transcript ? parsedResult.transcript.trim().split(/\s+/).filter(Boolean).length : 0);
     const estSpeed = parsedResult.estimated_speed || `~120 كلمة/دقيقة`;
@@ -3200,12 +3127,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
     if (textOutput) textOutput.value = parsedResult.transcript || '';
     if (srtOutput) srtOutput.value = parsedResult.srt || '';
-    const srtTab = document.getElementById('tab-out-srt');
-    if (srtTab) srtTab.disabled = !parsedResult.srt;
-    const srtStatus = document.getElementById('transcribe-srt-status');
-    if (srtStatus) srtStatus.textContent = parsedResult.srt
-      ? 'تم تقسيم ملف SRT حسب الإعدادات. التوقيتات كما أعادها محرك التفريغ وقد تحتاج مراجعة قبل التسليم.'
-      : 'لا توجد توقيتات SRT من المحرك؛ لم نُنشئ توقيتات تخمينية. يمكنك نسخ أو تحميل النص الكامل.';
     if (summaryText) summaryText.textContent = parsedResult.summary || 'تم تفريغ الصوت بنجاح.';
 
     if (keyPointsList) {
@@ -5727,8 +5648,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     toggleLiveRecording,
     setTranscribeOutputTab,
     processAudioTranscription,
-    reflowTranscribeSrt: reflowTranscribeSrtFromControls,
-    analyzeTranscribeSilence,
     copyTranscribeCurrentText,
     downloadTranscribeTxt,
     downloadTranscribeSrt,
