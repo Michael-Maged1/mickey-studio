@@ -4174,7 +4174,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       'Use cinematic negative space, a restrained title treatment, a strong color transition, and one memorable closing visual.'
     ];
     const variation = variationDirections[Math.floor(Math.random() * variationDirections.length)];
-    return `You are a senior Motion Graphics Director designing a polished Arabic motion-graphics scene for a Premiere Pro UXP extension. Return exactly one valid JSON object and absolutely no Markdown, preamble, or explanation. Preserve the user's Arabic idea and spelling. Produce a visually coherent edit with clear hierarchy, deliberate pacing, readable Arabic typography, and a strong opening and ending.\n\nCREATIVE VARIATION ID: ${variationId}. Treat this as a new art direction, not a reusable preset.\nMANDATORY COMPOSITION DIRECTION FOR THIS GENERATION: ${variation}\nDo not repeat a generic centered-title-on-gradient layout. Vary title alignment, scale, negative space, graphic choice, card shape, color balance, and entrance animation. Use at least three visibly different layout treatments across the opening, middle, and ending. Avoid repeating identical timing and positions across separate scenes.\n\nUSER BRIEF (Arabic):\n${idea}\n\nVISUAL STYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nTOTAL DURATION: ${duration} seconds.\nREFERENCE PALETTE: ${motionPalette.length ? motionPalette.join(', ') : 'Use a sophisticated palette appropriate to the selected style.'}\n\nOUTPUT CONTRACT\nRoot schema: {"version":1,"elements":[...]}. Return 7-20 elements (maximum 30), including at least 3 sound-effect elements. Each element occupies its own visual/audio layer; use trackIndex 0 for background, 1 for primary title, 2 for supporting text, 3+ for accents/widgets. Put simultaneous elements on different trackIndex values so they do not overwrite. Keep visuals inside the requested duration and leave comfortable margins. Use 1920x1080 canvas coordinates; position is the layer anchor [x,y]. Use natural concise Arabic copy and don't invent facts or numbers.\n\nAllowed schemas:\nGraphic: {"type":"graphic","templateId":"bg_aurora|bg_grid|text_kinetic|text_badge|widget_counter|widget_donut_ring|widget_social_card|logo_outro","trackIndex":1,"startTime":0,"duration":3,"position":[960,540],"scale":100,"animationIn":"none|pop-in|slide-up|fade-in","animationOut":"none|fade-out|slide-down","params":{"text":"Arabic text","fontFamily":"Readex Pro","fontSize":72,"textColor":"#FFFFFF","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100,"label":"Arabic label"}}\nSolid background: {"type":"color_matte","trackIndex":0,"startTime":0,"duration":${duration},"position":[960,540],"scale":100,"animationIn":"none","animationOut":"none","params":{"color1":"#10131F"}}\nSound effect: {"type":"sfx","sfxId":"whoosh|pop|click|riser|impact|sparkle|soft_whoosh|swipe|bass_hit|notification","trackIndex":0,"startTime":1.2,"duration":0.5,"params":{}}\nMusic (root field, separate from elements): ${musicEnabled ? `"music":{"musicId":"${requestedMusic}","duration":${duration},"volume":${musicVolume.toFixed(2)},"fadeIn":1.2,"fadeOut":1.5}` : 'omit the music property because the user disabled background music'}\n\nGraphic IDs: ${MOTION_MOGRT_IDS.filter(id => id !== 'color_matte').join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Background templates render full-frame backgrounds; foreground templates render transparent overlays. Use hex colors, font sizes 30-130, scale 70-115, and valid times. Distribute beats across the full duration; do not stack unrelated content or put all elements at time zero. Include 3-5 SFX timed to meaningful visual reveals (opening/title/widget/ending), selecting varied IDs instead of repeating one sound. Use pop-in for impactful titles, slide-up for captions, and fade-in for calm entrances; fade-out or slide-down may be used at the end. Return JSON only.`;
+    return `You are a senior Motion Graphics Director designing a polished Arabic motion-graphics scene for a Premiere Pro UXP extension. Return exactly one valid JSON object and absolutely no Markdown, preamble, or explanation. Preserve the user's Arabic idea and spelling. Produce a visually coherent edit with clear hierarchy, deliberate pacing, readable Arabic typography, and a strong opening and ending.\n\nCREATIVE VARIATION ID: ${variationId}. Treat this as a new art direction, not a reusable preset.\nMANDATORY COMPOSITION DIRECTION FOR THIS GENERATION: ${variation}\nDo not repeat a generic centered-title-on-gradient layout. Vary title alignment, scale, negative space, graphic choice, card shape, color balance, and entrance animation. Use at least three visibly different layout treatments across the opening, middle, and ending. Avoid repeating identical timing and positions across separate scenes.\nART DIRECTION: Design an actual motion-graphics spot, not plain text on a dark gradient. Give the hero copy a designed treatment using a glass/solid card, clipped color band, icon medallion, geometric frame, orbital accent, or a purposeful combination. Use icons and shapes as visual storytelling, not random decoration. Animate typography and graphic motifs in coordinated beats; use small supporting labels and clear scale contrast. Keep copy concise, Arabic letterforms unobstructed, and avoid placing titles at arbitrary scattered coordinates. Create a visual payoff at the ending.\n\nUSER BRIEF (Arabic):\n${idea}\n\nVISUAL STYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nTOTAL DURATION: ${duration} seconds.\nREFERENCE PALETTE: ${motionPalette.length ? motionPalette.join(', ') : 'Use a sophisticated palette appropriate to the selected style.'}\n\nOUTPUT CONTRACT\nRoot schema: {"version":1,"elements":[...]}. Return 7-20 elements (maximum 30), including at least 3 sound-effect elements. Each element occupies its own visual/audio layer; use trackIndex 0 for background, 1 for primary title, 2 for supporting text, 3+ for accents/widgets. Put simultaneous elements on different trackIndex values so they do not overwrite. Keep visuals inside the requested duration and leave comfortable margins. Use 1920x1080 canvas coordinates; position is the layer anchor [x,y]. Use natural concise Arabic copy and don't invent facts or numbers.\n\nAllowed schemas:\nGraphic: {"type":"graphic","templateId":"bg_aurora|bg_grid|text_kinetic|text_badge|widget_counter|widget_donut_ring|widget_social_card|logo_outro","trackIndex":1,"startTime":0,"duration":3,"position":[960,540],"scale":100,"animationIn":"none|pop-in|zoom-in|bounce-in|slide-up|slide-left|slide-right|word-reveal|fade-in","animationOut":"none|fade-out|zoom-out|slide-down|slide-left|slide-right","params":{"text":"Arabic text","fontFamily":"Readex Pro","fontSize":72,"textColor":"#FFFFFF","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100,"label":"Arabic label"}}\nSolid background: {"type":"color_matte","trackIndex":0,"startTime":0,"duration":${duration},"position":[960,540],"scale":100,"animationIn":"none","animationOut":"none","params":{"color1":"#10131F"}}\nSound effect: {"type":"sfx","sfxId":"whoosh|pop|click|riser|impact|sparkle|soft_whoosh|swipe|bass_hit|notification","trackIndex":0,"startTime":1.2,"duration":0.5,"params":{}}\nMusic (root field, separate from elements): ${musicEnabled ? `"music":{"musicId":"${requestedMusic}","duration":${duration},"volume":${musicVolume.toFixed(2)},"fadeIn":1.2,"fadeOut":1.5}` : 'omit the music property because the user disabled background music'}\n\nGraphic IDs: ${MOTION_MOGRT_IDS.filter(id => id !== 'color_matte').join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Background templates render full-frame backgrounds; foreground templates render transparent overlays. Use hex colors, font sizes 30-130, scale 70-115, and valid times. Distribute beats across the full duration; do not stack unrelated content or put all elements at time zero. Include 3-5 varied SFX precisely synchronized to meaningful visual reveals. Use varied entrance/exit animations (pop-in, zoom-in, bounce-in, slide-left/right/up, or word-reveal) that match each beat. Keep at least one visual motif recurring across scenes for cohesion. Return JSON only.`;
   }
 
   async function motionGeneratePrompt() {
@@ -4317,7 +4317,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   async function motionCopyRepairPrompt() {
     try {
       const input = cleanMotionJSON(document.getElementById('motion-json').value); if (!input) throw new Error('الصق JSON أولاً.');
-      const text = `Repair this Premiere motion scene. Return JSON only, with no markdown or explanation. Preserve Arabic text and intent. Valid types: graphic, color_matte, sfx (legacy mogrt is accepted). Graphic IDs: ${MOTION_MOGRT_IDS.join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Root schema: {"version":1,"elements":[],"music":{"musicId":"tech_corporate","duration":15,"volume":0.28,"fadeIn":1.2,"fadeOut":1.5}}. Element fields: type,templateId,sfxId,trackIndex,startTime,duration,position:[x,y],scale,animationIn,animationOut,params:{text,fontFamily,fontSize,textColor,color1,color2,numberValue,label}. Use different trackIndex values for overlapping layers.\n\n${input}`;
+      const text = `Repair this Premiere motion scene. Return JSON only, with no markdown or explanation. Preserve Arabic text and intent. Valid types: graphic, color_matte, sfx (legacy mogrt is accepted). Graphic IDs: ${MOTION_MOGRT_IDS.join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Root schema: {"version":1,"elements":[],"music":{"musicId":"tech_corporate","duration":15,"volume":0.28,"fadeIn":1.2,"fadeOut":1.5}}. Element fields: type,templateId,sfxId,trackIndex,startTime,duration,position:[x,y],scale,animationIn,animationOut,params:{text,fontFamily,fontSize,textColor,color1,color2,numberValue,label}. Use different trackIndex values for overlapping layers. Prefer designed title cards and meaningful icons/shapes over bare text. Valid animationIn: none,pop-in,zoom-in,bounce-in,slide-up,slide-left,slide-right,word-reveal,fade-in. Valid animationOut: none,fade-out,zoom-out,slide-down,slide-left,slide-right.\n\n${input}`;
       await navigator.clipboard.writeText(text); motionNotice('تم نسخ طلب تصحيح JSON.');
     } catch (error) { motionNotice(error.message || 'تعذر نسخ طلب التصحيح.', true); }
   }
@@ -4683,20 +4683,29 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const end = start + (Number(item.duration) || 0);
     const elapsed = Math.max(0, atTime - start);
     const remaining = Math.max(0, end - atTime);
-    const result = { scale: 1, offsetY: 0, opacity: 1 };
+    const result = { scale: 1, offsetX: 0, offsetY: 0, opacity: 1 };
     const animationIn = String(item.animationIn || 'none').toLowerCase();
+    const entranceDuration = animationIn === 'word-reveal' ? .85 : .48;
     if (animationIn === 'pop-in' && elapsed < .48) {
       const progress = elapsed / .48;
       const eased = 1 - Math.pow(1 - progress, 3);
       result.scale = Math.max(.02, eased * 1.08);
       if (eased > .82) result.scale = 1 + (eased - .82) * .44;
-    } else if (animationIn === 'slide-up' && elapsed < .42) {
+    } else if (['zoom-in', 'bounce-in'].includes(animationIn) && elapsed < .58) {
+      const progress = Math.min(1, elapsed / .58);
+      const eased = animationIn === 'bounce-in' ? 1 - Math.pow(1 - progress, 3) + Math.sin(progress * Math.PI) * .12 * (1 - progress) : 1 - Math.pow(1 - progress, 4);
+      result.scale = Math.max(.02, eased);
+      result.opacity = Math.min(1, progress * 1.5);
+    } else if (['slide-up', 'slide-left', 'slide-right'].includes(animationIn) && elapsed < .52) {
       const progress = elapsed / .42;
       const eased = 1 - Math.pow(1 - progress, 3);
-      result.offsetY = (1 - eased) * 78;
+      if (animationIn === 'slide-up') result.offsetY = (1 - eased) * 78;
+      else result.offsetX = (1 - eased) * (animationIn === 'slide-left' ? 110 : -110);
       result.opacity = Math.max(.05, eased);
     } else if (animationIn === 'fade-in' && elapsed < .45) {
       result.opacity = Math.max(.05, 1 - Math.pow(1 - elapsed / .45, 3));
+    } else if (animationIn === 'word-reveal' && elapsed < entranceDuration) {
+      result.opacity = Math.min(1, .35 + elapsed / entranceDuration);
     }
     const animationOut = String(item.animationOut || 'none').toLowerCase();
     if (animationOut === 'fade-out' && remaining < .45) {
@@ -4705,8 +4714,29 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const progress = 1 - remaining / .42;
       result.offsetY += progress * 78;
       result.opacity *= 1 - progress;
+    } else if (['slide-left', 'slide-right'].includes(animationOut) && remaining < .42) {
+      const progress = 1 - remaining / .42;
+      result.offsetX += progress * (animationOut === 'slide-left' ? -90 : 90);
+      result.opacity *= 1 - progress;
+    } else if (animationOut === 'zoom-out' && remaining < .42) {
+      const progress = 1 - remaining / .42;
+      result.scale *= 1 - progress * .24;
+      result.opacity *= 1 - progress;
     }
     return result;
+  }
+
+  function motionEditorDrawSparkle(context, x, y, size, color, rotation = 0, alpha = 1) {
+    context.save(); context.translate(x, y); context.rotate(rotation); context.globalAlpha *= alpha;
+    context.fillStyle = color; context.beginPath(); context.moveTo(0, -size); context.quadraticCurveTo(size * .12, -size * .12, size, 0); context.quadraticCurveTo(size * .12, size * .12, 0, size); context.quadraticCurveTo(-size * .12, size * .12, -size, 0); context.quadraticCurveTo(-size * .12, -size * .12, 0, -size); context.fill();
+    context.restore();
+  }
+
+  function motionEditorDrawOrbit(context, x, y, radius, accent, phase = 0) {
+    context.save(); context.translate(x, y); context.rotate(phase);
+    context.strokeStyle = `${accent}55`; context.lineWidth = Math.max(1, radius * .035); context.beginPath(); context.ellipse(0, 0, radius, radius * .36, -.24, Math.PI * .08, Math.PI * 1.6); context.stroke();
+    context.fillStyle = accent; context.shadowColor = accent; context.shadowBlur = radius * .35; context.beginPath(); context.arc(radius * .78, -radius * .16, Math.max(2, radius * .065), 0, Math.PI * 2); context.fill();
+    context.restore();
   }
 
   function motionEditorDisplayText(item) {
@@ -4796,6 +4826,20 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       glow.addColorStop(0, `${c2}55`); glow.addColorStop(.48, `${c1}24`); glow.addColorStop(1, `${c2}00`); context.fillStyle = glow; context.fillRect(0, 0, width, height);
       const lowerGlow = context.createRadialGradient(width * .86, height * .92, 0, width * .86, height * .92, Math.max(width, height) * .48);
       lowerGlow.addColorStop(0, `${c2}27`); lowerGlow.addColorStop(1, `${c2}00`); context.fillStyle = lowerGlow; context.fillRect(0, 0, width, height);
+      const sweepX = ((time * .035) % 1.7 - .35) * width;
+      const sweep = context.createLinearGradient(sweepX, 0, sweepX + width * .24, height);
+      sweep.addColorStop(0, `${c2}00`); sweep.addColorStop(.5, `${c2}12`); sweep.addColorStop(1, `${c2}00`);
+      context.fillStyle = sweep; context.fillRect(0, 0, width, height);
+      context.save(); context.globalAlpha = .2;
+      for (let index = 0; index < 24; index += 1) {
+        const seed = index * 127.1;
+        const x = (Math.sin(seed) * .5 + .5) * width;
+        const y = (Math.cos(seed * .71) * .5 + .5) * height;
+        const pulse = .5 + .5 * Math.sin(time * 1.7 + index * 2.2);
+        context.fillStyle = index % 3 === 0 ? c2 : '#FFFFFF';
+        context.beginPath(); context.arc(x, y, Math.max(1, width * (.0008 + pulse * .0012)), 0, Math.PI * 2); context.fill();
+      }
+      context.restore();
       if (bg?.templateId === 'bg_grid') {
         context.save(); context.lineWidth = Math.max(1, width / 2400);
         const step = Math.max(48, Math.round(width / 12));
@@ -4834,22 +4878,29 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const accent = /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : c1;
       const textColor = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : '#FFFFFF';
       context.save(); context.globalAlpha = Math.max(0, Math.min(1, animation.opacity));
-      context.translate(x, y + animation.offsetY * height / 1080); context.scale(scale, scale);
+      context.translate(x + animation.offsetX * width / 1920, y + animation.offsetY * height / 1080); context.scale(scale, scale);
       context.direction = 'rtl'; context.textAlign = 'center'; context.textBaseline = 'middle';
       context.font = `800 ${fontSize}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`;
+      let textOffsetX = 0;
       if (item.templateId === 'text_badge') {
-        const boxWidth = Math.min(width * .86, Math.max(fontSize * 4, context.measureText(text).width + fontSize * 1.5));
-        const boxHeight = fontSize * 1.75;
-        context.shadowColor = `${accent}55`; context.shadowBlur = fontSize * .46;
-        context.fillStyle = '#0A0D12E8'; context.strokeStyle = `${accent}88`; context.lineWidth = Math.max(1, fontSize * .025);
-        context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, boxHeight * .48); context.fill(); context.stroke();
-        context.shadowBlur = 0; context.fillStyle = accent; context.beginPath(); context.roundRect(-boxWidth / 2 + boxHeight * .2, -boxHeight * .14, boxHeight * .28, boxHeight * .28, boxHeight * .14); context.fill();
-        context.fillStyle = '#FFFFFF12'; context.beginPath(); context.roundRect(-boxWidth / 2 + 1, -boxHeight / 2 + 1, boxWidth - 2, boxHeight * .12, boxHeight * .08); context.fill();
+        const boxWidth = Math.min(width * .86, Math.max(fontSize * 4.8, context.measureText(text).width + fontSize * 2.15));
+        const boxHeight = fontSize * 1.86;
+        context.shadowColor = `${accent}66`; context.shadowBlur = fontSize * .62;
+        const badgeGradient = context.createLinearGradient(-boxWidth / 2, -boxHeight / 2, boxWidth / 2, boxHeight / 2);
+        badgeGradient.addColorStop(0, '#111722F5'); badgeGradient.addColorStop(1, '#0A0D15F5');
+        context.fillStyle = badgeGradient; context.strokeStyle = `${accent}88`; context.lineWidth = Math.max(1, fontSize * .025);
+        context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, boxHeight * .42); context.fill(); context.stroke();
+        context.shadowBlur = 0; context.fillStyle = `${accent}20`; context.beginPath(); context.arc(boxWidth / 2 - boxHeight * .55, 0, boxHeight * .34, 0, Math.PI * 2); context.fill();
+        motionEditorDrawSparkle(context, boxWidth / 2 - boxHeight * .55, 0, boxHeight * .15, accent, time * 1.3);
+        context.fillStyle = '#FFFFFF18'; context.beginPath(); context.roundRect(-boxWidth / 2 + 1, -boxHeight / 2 + 1, boxWidth - 2, boxHeight * .1, boxHeight * .08); context.fill();
+        textOffsetX = -boxHeight * .18;
       } else if (item.templateId === 'widget_counter') {
         const boxWidth = Math.min(width * .78, fontSize * 8); const boxHeight = fontSize * 4.2;
         context.shadowColor = '#00000066'; context.shadowBlur = fontSize * .55; context.fillStyle = '#0B0E14F2'; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, fontSize * .38); context.fill();
         context.shadowBlur = 0; context.strokeStyle = '#FFFFFF22'; context.lineWidth = Math.max(1, fontSize / 28); context.stroke();
         context.fillStyle = accent; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, Math.max(4, fontSize * .07), boxHeight, fontSize * .04); context.fill();
+        context.fillStyle = `${accent}24`; context.beginPath(); context.arc(boxWidth / 2 - fontSize * .6, -boxHeight / 2 + fontSize * .55, fontSize * .3, 0, Math.PI * 2); context.fill();
+        motionEditorDrawSparkle(context, boxWidth / 2 - fontSize * .6, -boxHeight / 2 + fontSize * .55, fontSize * .13, accent, time);
         const label = String(params.label || '').trim();
         if (label) { context.textAlign = 'center'; context.textBaseline = 'middle'; context.font = `600 ${fontSize * .34}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`; context.fillStyle = '#B9C1CE'; context.fillText(label, 0, -boxHeight * .23, boxWidth * .8); }
       } else if (item.templateId === 'widget_donut_ring') {
@@ -4863,17 +4914,33 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         context.shadowColor = '#00000070'; context.shadowBlur = fontSize * .4; context.fillStyle = '#10141BEF'; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, fontSize * .32); context.fill();
         context.shadowBlur = 0; context.strokeStyle = '#FFFFFF24'; context.lineWidth = Math.max(1, fontSize / 28); context.stroke();
         context.fillStyle = accent; context.beginPath(); context.arc(-boxWidth / 2 + boxHeight * .52, 0, boxHeight * .22, 0, Math.PI * 2); context.fill();
-        context.fillStyle = '#FFFFFF'; context.font = `700 ${fontSize * .24}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText('✦', -boxWidth / 2 + boxHeight * .52, 0);
+        motionEditorDrawSparkle(context, -boxWidth / 2 + boxHeight * .52, 0, boxHeight * .11, '#FFFFFF', time * .8);
+        textOffsetX = boxHeight * .23;
       }
-      context.fillStyle = textColor; context.shadowColor = '#000000B8'; context.shadowBlur = fontSize * .3; context.shadowOffsetY = fontSize * .045;
+      context.fillStyle = textColor; context.shadowColor = `${accent}55`; context.shadowBlur = fontSize * .24; context.shadowOffsetY = 0;
       const maxWidth = item.templateId === 'widget_counter' ? width * .7 : item.templateId === 'widget_social_card' ? width * .68 : width * .84; const words = String(text).split(/\s+/); const lines = []; let line = '';
       words.forEach(word => { const test = line ? `${line} ${word}` : word; if (line && context.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test; });
       if (line) lines.push(line); const shown = lines.slice(0, 4); const lineHeight = fontSize * 1.24;
-      shown.forEach((part, index) => context.fillText(part, 0, (index - (shown.length - 1) / 2) * lineHeight, maxWidth));
+      const textGradient = context.createLinearGradient(-maxWidth * .48, 0, maxWidth * .48, 0);
+      textGradient.addColorStop(0, textColor); textGradient.addColorStop(.52, textColor); textGradient.addColorStop(1, accent);
+      context.fillStyle = textGradient;
+      const revealProgress = String(item.animationIn || '').toLowerCase() === 'word-reveal' ? Math.min(1, Math.max(0, (time - (Number(item.startTime) || 0)) / .85)) : 1;
+      const lineWidths = shown.map(part => context.measureText(part).width);
+      const totalWidth = Math.max(...lineWidths, 1);
+      shown.forEach((part, index) => {
+        const lineY = (index - (shown.length - 1) / 2) * lineHeight;
+        if (revealProgress < 1) {
+          const revealedWidth = Math.max(0, totalWidth * revealProgress - Math.max(0, totalWidth - lineWidths[index]) / 2);
+          context.save(); context.beginPath(); context.rect(textOffsetX + lineWidths[index] / 2 - revealedWidth, lineY - lineHeight * .52, revealedWidth, lineHeight); context.clip();
+          context.fillText(part, textOffsetX, lineY, maxWidth); context.restore();
+        } else context.fillText(part, textOffsetX, lineY, maxWidth);
+      });
       if (['text_kinetic', 'logo_outro'].includes(item.templateId)) {
         context.shadowBlur = 0; context.shadowOffsetY = 0;
         const lineY = (shown.length - 1) * lineHeight / 2 + fontSize * .76;
         const bar = context.createLinearGradient(-width * .29, 0, width * .29, 0); bar.addColorStop(0, `${accent}00`); bar.addColorStop(.26, `${accent}55`); bar.addColorStop(.5, `${accent}EE`); bar.addColorStop(.74, `${c2}77`); bar.addColorStop(1, `${c2}00`); context.fillStyle = bar; context.fillRect(-width * .29, lineY, width * .58, Math.max(3, fontSize * .055));
+        motionEditorDrawOrbit(context, -Math.min(width * .3, totalWidth * .65), -fontSize * .5, fontSize * .75, accent, time * .22);
+        motionEditorDrawSparkle(context, Math.min(width * .3, totalWidth * .65), -fontSize * .42, fontSize * .16, c2, -time * .7, .88);
         if (item.templateId === 'logo_outro') { context.strokeStyle = `${accent}99`; context.lineWidth = Math.max(2, fontSize * .035); context.beginPath(); context.arc(0, -(shown.length * lineHeight / 2 + fontSize * .55), fontSize * .19, 0, Math.PI * 2); context.stroke(); }
       }
       if (item.templateId === 'text_badge' || item.templateId === 'widget_counter' || item.templateId === 'widget_social_card') { context.shadowBlur = 0; context.shadowOffsetY = 0; }
