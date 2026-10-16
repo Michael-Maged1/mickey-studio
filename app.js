@@ -4113,15 +4113,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   let motionEditorAudioContext = null;
   let motionEditorAudioNodes = [];
   let motionEditorExporting = false;
-  let motionEditorLastStyledJson = '';
   const motionEditorAudioCache = new Map();
-  const MOTION_EDITOR_PALETTES = [
-    ['#111827', '#F97316', '#F7C548'], ['#101C2C', '#20D6C7', '#6D5DFB'], ['#21152F', '#FF4F87', '#A78BFA'],
-    ['#0E2237', '#28C7FA', '#7A5CFA'], ['#2A1D16', '#F59E0B', '#EF4444'], ['#14231B', '#A3E635', '#06B6D4'],
-    ['#201528', '#E879F9', '#38BDF8'], ['#202138', '#F4B942', '#F06A6A'], ['#102725', '#2DD4BF', '#FB7185'],
-    ['#18233A', '#60A5FA', '#C084FC'], ['#2A1720', '#FB7185', '#FDBA74'], ['#14251F', '#4ADE80', '#22D3EE']
-  ];
-
   function motionNotice(text, error = false, targetId = 'motion-status') {
     const node = document.getElementById(targetId);
     if (node) { node.textContent = text; node.className = `text-xs ${error ? 'text-red-300' : 'text-emerald-300'}`; }
@@ -4164,7 +4156,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const duration = Number(document.getElementById('motion-duration')?.value);
     if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
     if (!Number.isFinite(duration) || duration < 1 || duration > 180) throw new Error('المدة يجب أن تكون بين 1 و180 ثانية.');
-    idea = `Create a finished premium motion-graphics video, not a wireframe or preview board. Avoid a bright full-frame grid, an empty gradient, a lone oversized title, and generic centered-title layouts. Prefer a restrained aurora or color-matte background; use bg_grid only as a subtle texture. Build a clear hierarchy with a strong Arabic headline, concise supporting copy, and a complementary graphic or accent. Give the opening, middle, and ending distinct compositions with balanced negative space, safe margins, polished contrast, and readable text. Avoid decorative clutter, repeated cards, long copy, and invented facts. Preserve the user's Arabic wording and meaning.\n\nUSER'S IDEA: ${idea}`;
+    idea = `Create a finished premium motion-graphics video, not a wireframe or preview board. Avoid a bright full-frame grid, an empty gradient, a lone oversized title, and generic centered-title layouts. Prefer a restrained aurora or color-matte background; use bg_grid only as a subtle texture. Build a clear hierarchy with a strong Arabic headline, concise supporting copy, and a complementary graphic or accent. Give the opening, middle, and ending distinct compositions with balanced negative space, safe margins, polished contrast, and readable text. Avoid decorative clutter, repeated cards, long copy, and invented facts. Never show the same price, number, or claim twice at the same time; use one clear primary treatment for each key fact. Preserve the user's Arabic wording and meaning.\n\nUSER'S IDEA: ${idea}`;
     const styleSelect = document.getElementById('motion-style'); const styleName = styleSelect.options[styleSelect.selectedIndex].text;
     const musicControl = document.getElementById('motion-music-track');
     const requestedMusic = musicControl?.value === 'auto' || !musicControl?.value ? MOTION_STYLE_MUSIC[styleSelect.value] : musicControl.value;
@@ -4253,6 +4245,10 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
         scene.music = { musicId, duration: Number(document.getElementById('motion-duration')?.value) || 15, volume, fadeIn: 1.2, fadeOut: 1.5 };
       } else delete scene.music;
+      if (motionEditorEnsureTextContrast(scene)) {
+        const jsonField = document.getElementById('motion-json');
+        if (jsonField) jsonField.value = JSON.stringify(scene, null, 2);
+      }
       const visualBeats = scene.elements.filter(item => ['graphic', 'mogrt', 'color_matte'].includes(item.type) && Number(item.duration) > 0);
       const existingSfx = scene.elements.filter(item => item.type === 'sfx');
       if (existingSfx.length < 3 && visualBeats.length) {
@@ -4365,10 +4361,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
         motionEditorScene.music = { musicId, duration: motionEditorDuration, volume, fadeIn: 1.2, fadeOut: 1.5 };
       }
-      if (sourceJSON !== motionEditorLastStyledJson) {
-        motionEditorApplyPalette();
-        motionEditorApplyCompositionVariation();
-        motionEditorLastStyledJson = JSON.stringify(motionEditorScene, null, 2);
+      if (motionEditorEnsureTextContrast(motionEditorScene)) {
+        const jsonField = document.getElementById('motion-json');
+        if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
       }
       motionEditorSelectedIndex = motionEditorScene.elements.findIndex(item => item.type !== 'sfx');
       motionEditorTime = 0;
@@ -4391,42 +4386,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     motionEditorRenderProperties();
     motionEditorRenderPreview();
     motionEditorUpdatePlaybackControls();
-  }
-
-  function motionEditorApplyPalette() {
-    if (!motionEditorScene) return;
-    const chosen = MOTION_EDITOR_PALETTES[Math.floor(Math.random() * MOTION_EDITOR_PALETTES.length)];
-    const accents = motionPalette.length >= 2 ? motionPalette : chosen.slice(1);
-    const color1 = chosen[0], color2 = accents[Math.floor(Math.random() * accents.length)];
-    const color3 = accents[(accents.indexOf(color2) + 1) % accents.length] || chosen[2];
-    motionEditorScene.elements.forEach(item => {
-      if (!['graphic', 'mogrt', 'color_matte'].includes(item.type)) return;
-      item.params = item.params && typeof item.params === 'object' ? item.params : {};
-      const isBackground = item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId);
-      item.params.color1 = isBackground ? color1 : color2;
-      item.params.color2 = isBackground ? color2 : color3;
-    });
-    const jsonField = document.getElementById('motion-json');
-    if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
-    motionUpdateEditorCTA();
-  }
-
-  function motionEditorApplyCompositionVariation() {
-    if (!motionEditorScene) return;
-    const variant = Math.floor(Math.random() * 4);
-    const layers = motionEditorScene.elements.filter(item => motionEditorIsText(item));
-    layers.forEach((item, index) => {
-      const position = Array.isArray(item.position) ? item.position : [960, 540];
-      let x = Number(position[0]) || 960, y = Number(position[1]) || 540;
-      if (variant === 0) x = 1920 - x;
-      else if (variant === 1) { x += index % 2 ? 130 : -130; y += index % 2 ? 55 : -55; }
-      else if (variant === 2) { x += index % 2 ? -150 : 150; y += index % 2 ? -35 : 70; }
-      else { y += index === 0 ? -90 : index * 35; item.scale = Math.max(70, Math.min(120, (Number(item.scale) || 100) * (index === 0 ? 1.08 : 0.94))); }
-      item.position = [Math.max(160, Math.min(1760, Math.round(x))), Math.max(140, Math.min(940, Math.round(y)))];
-    });
-    const jsonField = document.getElementById('motion-json');
-    if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
-    motionUpdateEditorCTA();
   }
 
   function motionEditorAspectDimensions() {
@@ -4606,6 +4565,40 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     return (item.type === 'mogrt' || item.type === 'graphic') && ['text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro'].includes(item.templateId);
   }
 
+  function motionEditorColorLuminance(color) {
+    if (!/^#[0-9a-f]{6}$/i.test(String(color || ''))) return 0;
+    const channels = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : Math.pow((value + .055) / 1.055, 2.4));
+    return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+  }
+
+  function motionEditorContrastRatio(foreground, background) {
+    const first = motionEditorColorLuminance(foreground), second = motionEditorColorLuminance(background);
+    return (Math.max(first, second) + .05) / (Math.min(first, second) + .05);
+  }
+
+  function motionEditorEnsureTextContrast(scene) {
+    if (!scene?.elements) return false;
+    const backgrounds = scene.elements.filter(item => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
+    let changed = false;
+    scene.elements.forEach(item => {
+      if (!motionEditorIsText(item)) return;
+      const params = item.params && typeof item.params === 'object' ? item.params : (item.params = {});
+      const requested = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : '#FFFFFF';
+      const midpoint = (Number(item.startTime) || 0) + (Number(item.duration) || 0) / 2;
+      const background = backgrounds.filter(candidate => midpoint >= (Number(candidate.startTime) || 0) && midpoint <= (Number(candidate.startTime) || 0) + (Number(candidate.duration) || 0)).reduce((top, candidate) => !top || Number(candidate.trackIndex) >= Number(top.trackIndex) ? candidate : top, null);
+      const backgroundColor1 = /^#[0-9a-f]{6}$/i.test(background?.params?.color1 || '') ? background.params.color1 : '#1A2744';
+      const backgroundColor2 = /^#[0-9a-f]{6}$/i.test(background?.params?.color2 || '') ? background.params.color2 : '#3F2A70';
+      const card = ['text_badge', 'widget_counter', 'widget_social_card'].includes(item.templateId);
+      const surfaces = card ? ['#0A0D12'] : [backgroundColor1, backgroundColor2, '#080A10'];
+      const score = color => Math.min(...surfaces.map(surface => motionEditorContrastRatio(color, surface)));
+      if (score(requested) >= 4.5) return;
+      const accent = /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : backgroundColor2;
+      const replacement = score(accent) >= 4.5 ? accent : score('#FFFFFF') >= 4.5 ? '#FFFFFF' : '#11131F';
+      if (params.textColor !== replacement) { params.textColor = replacement; changed = true; }
+    });
+    return changed;
+  }
+
   function motionEditorLabel(item) {
     if (item.type === 'sfx') return item.sfxId || 'مؤثر صوتي';
     if (item.type === 'color_matte') return 'خلفية لونية';
@@ -4726,6 +4719,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!item || !motionEditorIsText(item)) return;
     if (!item.params || typeof item.params !== 'object') item.params = {};
     item.params[key] = value;
+    motionEditorEnsureTextContrast(motionEditorScene);
     const jsonField = document.getElementById('motion-json');
     if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
     motionUpdateEditorCTA();
