@@ -4097,7 +4097,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     stats: 'Data-led layout, accurate numeric hierarchy and legible chart moments.'
   };
   const MOTION_MOGRT_IDS = ['bg_aurora', 'bg_grid', 'text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro', 'color_matte'];
-  const MOTION_SFX_IDS = ['whoosh', 'pop', 'click', 'riser'];
+  const MOTION_SFX_IDS = ['whoosh', 'pop', 'click', 'riser', 'impact', 'sparkle', 'soft_whoosh', 'swipe', 'bass_hit', 'notification'];
+  const MOTION_MUSIC_IDS = ['social_upbeat', 'kids_playful', 'tech_corporate', 'luxury_ambient', 'cyber_drive', 'cinematic_inspire', 'stats_pulse'];
+  const MOTION_STYLE_MUSIC = { social: 'social_upbeat', kids: 'kids_playful', tech: 'tech_corporate', luxury: 'luxury_ambient', cyber: 'cyber_drive', marketing: 'social_upbeat', stats: 'stats_pulse' };
   let motionPalette = [];
   let motionBuilderInitialized = false;
   let motionEditorScene = null;
@@ -4151,7 +4153,11 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
     if (!Number.isFinite(duration) || duration < 1 || duration > 180) throw new Error('المدة يجب أن تكون بين 1 و180 ثانية.');
     const styleSelect = document.getElementById('motion-style'); const styleName = styleSelect.options[styleSelect.selectedIndex].text;
-    return `You are a senior Motion Graphics Director and scene planner for the Mickey Studio Premiere UXP extension. Return exactly one valid JSON object, with no Markdown or explanations.\n\nArabic brief (preserve wording and intent):\n${idea}\n\nSTYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nDURATION: ${duration} seconds.\nREFERENCE COLORS: ${motionPalette.length ? motionPalette.join(', ') : 'none'}\n\nReturn {"version":1,"elements":[{"type":"mogrt|color_matte|sfx","templateId":"MOGRT_ID","sfxId":"SFX_ID","trackIndex":0,"startTime":0,"duration":2,"position":[960,540],"scale":100,"animationIn":"none|pop-in|slide-up|fade-in","animationOut":"none|fade-out|slide-down","params":{"text":"Arabic text","fontFamily":"Readex Pro","fontSize":64,"textColor":"#FFFFFF","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100}}]}.\nAllowed templateId values: ${MOTION_MOGRT_IDS.join(', ')}. Allowed sfxId values: ${MOTION_SFX_IDS.join(', ')}. Use type mogrt with templateId, type sfx with sfxId, and type color_matte with templateId color_matte. All times are seconds; positions use a 1920x1080 reference. Keep every item inside the duration and return no more than 30 elements.`;
+    const musicControl = document.getElementById('motion-music-track');
+    const requestedMusic = musicControl?.value === 'auto' || !musicControl?.value ? MOTION_STYLE_MUSIC[styleSelect.value] : musicControl.value;
+    const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
+    const musicVolume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
+    return `You are a senior Motion Graphics Director designing a polished Arabic motion-graphics scene for a Premiere Pro UXP extension. Return exactly one valid JSON object and absolutely no Markdown, preamble, or explanation. Preserve the user's Arabic idea and spelling. Produce a visually coherent edit with clear hierarchy, deliberate pacing, readable Arabic typography, and a strong opening and ending.\n\nUSER BRIEF (Arabic):\n${idea}\n\nVISUAL STYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nTOTAL DURATION: ${duration} seconds.\nREFERENCE PALETTE: ${motionPalette.length ? motionPalette.join(', ') : 'Use a sophisticated palette appropriate to the selected style.'}\n\nOUTPUT CONTRACT\nRoot schema: {"version":1,"elements":[...]}. Return 5-18 elements (maximum 30). Each element occupies its own visual/audio layer; use trackIndex 0 for background, 1 for primary title, 2 for supporting text, 3+ for accents/widgets. Put simultaneous elements on different trackIndex values so they do not overwrite. Keep visuals inside the requested duration and leave comfortable margins. Use 1920x1080 canvas coordinates; position is the layer anchor [x,y]. Use natural concise Arabic copy and don't invent facts or numbers.\n\nAllowed schemas:\nGraphic: {"type":"graphic","templateId":"bg_aurora|bg_grid|text_kinetic|text_badge|widget_counter|widget_donut_ring|widget_social_card|logo_outro","trackIndex":1,"startTime":0,"duration":3,"position":[960,540],"scale":100,"animationIn":"none|pop-in|slide-up|fade-in","animationOut":"none|fade-out|slide-down","params":{"text":"Arabic text","fontFamily":"Readex Pro","fontSize":72,"textColor":"#FFFFFF","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100,"label":"Arabic label"}}\nSolid background: {"type":"color_matte","trackIndex":0,"startTime":0,"duration":${duration},"position":[960,540],"scale":100,"animationIn":"none","animationOut":"none","params":{"color1":"#10131F"}}\nSound effect: {"type":"sfx","sfxId":"whoosh|pop|click|riser|impact|sparkle|soft_whoosh|swipe|bass_hit|notification","trackIndex":0,"startTime":1.2,"duration":0.5,"params":{}}\nMusic (root field, separate from elements): ${musicEnabled ? `"music":{"musicId":"${requestedMusic}","duration":${duration},"volume":${musicVolume.toFixed(2)},"fadeIn":1.2,"fadeOut":1.5}` : 'omit the music property because the user disabled background music'}\n\nGraphic IDs: ${MOTION_MOGRT_IDS.filter(id => id !== 'color_matte').join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Background templates render full-frame backgrounds; foreground templates render transparent overlays. Use hex colors, font sizes 30-130, scale 70-115, and valid times. Distribute beats across the full duration; do not stack unrelated content or put all elements at time zero. Use pop-in for impactful titles, slide-up for captions, and fade-in for calm entrances; fade-out or slide-down may be used at the end. Return JSON only.`;
   }
 
   async function motionGeneratePrompt() {
@@ -4164,12 +4170,13 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   function validateMotionScene(scene) {
     if (!scene || !Array.isArray(scene.elements) || !scene.elements.length || scene.elements.length > 30) throw new Error('يجب أن يحتوي JSON على 1 إلى 30 عنصراً داخل elements.');
     scene.elements.forEach((item, index) => {
-      const id = item?.type === 'mogrt' ? item.templateId : item?.type === 'sfx' ? item.sfxId : item?.type === 'color_matte' ? 'color_matte' : '';
+      const id = item?.type === 'mogrt' || item?.type === 'graphic' ? item.templateId : item?.type === 'sfx' ? item.sfxId : item?.type === 'color_matte' ? 'color_matte' : '';
       if (!id || !/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new Error(`معرّف العنصر ${index + 1} غير صالح.`);
-      if (item.type === 'mogrt' && !MOTION_MOGRT_IDS.includes(id)) throw new Error(`قالب غير معروف: ${id}`);
+      if ((item.type === 'mogrt' || item.type === 'graphic') && !MOTION_MOGRT_IDS.includes(id)) throw new Error(`قالب غير معروف: ${id}`);
       if (item.type === 'sfx' && !MOTION_SFX_IDS.includes(id)) throw new Error(`مؤثر صوتي غير معروف: ${id}`);
       if (!Number.isInteger(Number(item.trackIndex)) || Number(item.trackIndex) < 0 || !Number.isFinite(Number(item.startTime)) || Number(item.startTime) < 0 || !Number.isFinite(Number(item.duration)) || Number(item.duration) <= 0) throw new Error(`التوقيت أو المسار غير صالح في العنصر ${index + 1}.`);
     });
+    if (scene.music != null && (!MOTION_MUSIC_IDS.includes(scene.music.musicId) || !Number.isFinite(Number(scene.music.volume)) || Number(scene.music.volume) < 0.05 || Number(scene.music.volume) > 0.8 || !Number.isFinite(Number(scene.music.duration)) || Number(scene.music.duration) < 1 || Number(scene.music.duration) > 180)) throw new Error('اختيار الموسيقى أو مستوى صوتها أو مدتها غير صالح.');
     return scene;
   }
 
@@ -4178,16 +4185,22 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const statusId = document.getElementById('section-motion-editor')?.classList.contains('hidden') ? 'motion-status' : 'motion-editor-status';
     try {
       if (!window.firebase?.auth?.().currentUser) throw new Error('سجّل الدخول إلى الموقع أولاً بالحساب المرتبط بإضافة Premiere.');
-      const scene = validateMotionScene(JSON.parse(cleanMotionJSON(document.getElementById('motion-json').value)));
-      const assetsBaseUrl = String(document.getElementById('motion-assets-url').value || '').trim().replace(/\/$/, '');
-      if (scene.elements.some(item => item.type !== 'sfx') && !/^https:\/\//i.test(assetsBaseUrl)) throw new Error('أدخل رابط R2 العام لأصول MOGRT مثل https://bucket.r2.dev.');
-      localStorage.setItem('mickey_motion_assets_url', assetsBaseUrl);
+      const scene = JSON.parse(cleanMotionJSON(document.getElementById('motion-json').value));
+      const style = document.getElementById('motion-style')?.value || 'social';
+      const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
+      const selectedMusic = document.getElementById('motion-music-track')?.value || 'auto';
+      if (musicEnabled) {
+        const musicId = selectedMusic === 'auto' ? MOTION_STYLE_MUSIC[style] : selectedMusic;
+        const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
+        scene.music = { musicId, duration: Number(document.getElementById('motion-duration')?.value) || 15, volume, fadeIn: 1.2, fadeOut: 1.5 };
+      } else delete scene.music;
+      validateMotionScene(scene);
       if (button) button.disabled = true;
       motionNotice('جارٍ إرسال المشهد إلى حسابك…', false, statusId);
       const user = firebase.auth().currentUser;
       const response = await fetch(`${MOTION_SCENE_API_URL}/?action=motion_scene_submit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
-        body: JSON.stringify({ scene, assetsBaseUrl })
+        body: JSON.stringify({ scene })
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
@@ -4199,7 +4212,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   async function motionCopyRepairPrompt() {
     try {
       const input = cleanMotionJSON(document.getElementById('motion-json').value); if (!input) throw new Error('الصق JSON أولاً.');
-      const text = `Repair this Premiere motion scene. Return JSON only. Preserve Arabic text and intent. Valid types: mogrt, color_matte, sfx. MOGRT IDs: ${MOTION_MOGRT_IDS.join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Root schema: {"version":1,"elements":[]}. Element fields: type,templateId,sfxId,trackIndex,startTime,duration,position:[x,y],scale,animationIn,animationOut,params:{text,color1,color2,numberValue}.\n\n${input}`;
+      const text = `Repair this Premiere motion scene. Return JSON only, with no markdown or explanation. Preserve Arabic text and intent. Valid types: graphic, color_matte, sfx (legacy mogrt is accepted). Graphic IDs: ${MOTION_MOGRT_IDS.join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Root schema: {"version":1,"elements":[],"music":{"musicId":"tech_corporate","duration":15,"volume":0.28,"fadeIn":1.2,"fadeOut":1.5}}. Element fields: type,templateId,sfxId,trackIndex,startTime,duration,position:[x,y],scale,animationIn,animationOut,params:{text,fontFamily,fontSize,textColor,color1,color2,numberValue,label}. Use different trackIndex values for overlapping layers.\n\n${input}`;
       await navigator.clipboard.writeText(text); motionNotice('تم نسخ طلب تصحيح JSON.');
     } catch (error) { motionNotice(error.message || 'تعذر نسخ طلب التصحيح.', true); }
   }
@@ -4210,8 +4223,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const picker = document.getElementById('motion-image');
     picker?.addEventListener('change', event => motionReadImage(event.target.files?.[0]));
     document.getElementById('motion-json')?.addEventListener('input', motionUpdateEditorCTA);
-    const baseUrl = document.getElementById('motion-assets-url');
-    if (baseUrl && !baseUrl.value) baseUrl.value = localStorage.getItem('mickey_motion_assets_url') || '';
+    const musicVolume = document.getElementById('motion-music-volume');
+    musicVolume?.addEventListener('input', () => { const label = document.getElementById('motion-music-volume-value'); if (label) label.textContent = `${musicVolume.value}%`; });
     motionUpdateEditorCTA();
   }
 
@@ -4322,7 +4335,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   function motionEditorIsText(item) {
-    return item.type === 'mogrt' && ['text_kinetic', 'text_badge', 'widget_counter', 'widget_social_card', 'logo_outro'].includes(item.templateId);
+    return (item.type === 'mogrt' || item.type === 'graphic') && ['text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro'].includes(item.templateId);
   }
 
   function motionEditorLabel(item) {
@@ -4448,7 +4461,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   function motionEditorDisplayText(item) {
-    if (item.templateId === 'widget_counter' && item.params?.numberValue != null) return String(item.params.numberValue);
+    if ((item.templateId === 'widget_counter' || item.templateId === 'widget_donut_ring') && item.params?.numberValue != null) return `${item.params.numberValue}${item.templateId === 'widget_donut_ring' ? '%' : ''}`;
     return String(item.params?.text || (item.templateId === 'widget_counter' ? '١٢٬٥٠٠' : 'اكتب النص هنا'));
   }
 
