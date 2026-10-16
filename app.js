@@ -4165,7 +4165,41 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     catch (error) { motionNotice(error.message || 'تعذر نسخ الطلب.', true); }
   }
 
-  function cleanMotionJSON(value) { return String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim(); }
+  function cleanMotionJSON(value) {
+    let text = String(value || '').trim();
+    if (/Repair this Premiere motion scene\./i.test(text) && /Return JSON only/i.test(text)) {
+      throw new Error('هذا هو برومبت التصحيح وليس رد الذكاء الاصطناعي. أرسله إلى ChatGPT أو Claude، ثم الصق الرد الذي يبدأ بكائن JSON هنا.');
+    }
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    text = text.replace(/\\([_\[\]])/g, '$1');
+    const start = text.indexOf('{');
+    if (start < 0) return text;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+      const character = text[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === '\\') escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') inString = true;
+      else if (character === '{') depth += 1;
+      else if (character === '}') {
+        depth -= 1;
+        if (depth === 0) return text.slice(start, index + 1);
+      }
+    }
+    return text.slice(start);
+  }
+
+  function parseMotionJSON(value) {
+    const text = cleanMotionJSON(value);
+    try { return JSON.parse(text); }
+    catch (_) { throw new Error('رد الذكاء الاصطناعي ليس JSON صالحاً. الصق كود JSON فقط، ولا تلصق برومبت التصحيح نفسه.'); }
+  }
 
   function validateMotionScene(scene) {
     if (!scene || !Array.isArray(scene.elements) || !scene.elements.length || scene.elements.length > 30) throw new Error('يجب أن يحتوي JSON على 1 إلى 30 عنصراً داخل elements.');
@@ -4185,7 +4219,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const statusId = document.getElementById('section-motion-editor')?.classList.contains('hidden') ? 'motion-status' : 'motion-editor-status';
     try {
       if (!window.firebase?.auth?.().currentUser) throw new Error('سجّل الدخول إلى الموقع أولاً بالحساب المرتبط بإضافة Premiere.');
-      const scene = JSON.parse(cleanMotionJSON(document.getElementById('motion-json').value));
+      const scene = parseMotionJSON(document.getElementById('motion-json').value);
       const style = document.getElementById('motion-style')?.value || 'social';
       const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
       const selectedMusic = document.getElementById('motion-music-track')?.value || 'auto';
@@ -4232,19 +4266,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const button = document.getElementById('motion-open-editor');
     const input = document.getElementById('motion-json');
     if (!button || !input) return;
-    try {
-      validateMotionScene(JSON.parse(cleanMotionJSON(input.value)));
-      button.classList.remove('hidden');
-      button.setAttribute('aria-hidden', 'false');
-    } catch (_) {
-      button.classList.add('hidden');
-      button.setAttribute('aria-hidden', 'true');
-    }
+    let ready = false;
+    try { validateMotionScene(parseMotionJSON(input.value)); ready = true; } catch (_) { ready = false; }
+    button.classList.toggle('is-ready', ready);
+    button.title = ready ? 'فتح معاينة المشهد وتعديل النص والخط' : 'الصق رد JSON صالحاً لفتح المشهد في المحرر';
+    button.setAttribute('aria-disabled', ready ? 'false' : 'true');
   }
 
   function motionOpenEditor() {
     try {
-      const scene = validateMotionScene(JSON.parse(cleanMotionJSON(document.getElementById('motion-json')?.value)));
+      const scene = validateMotionScene(parseMotionJSON(document.getElementById('motion-json')?.value));
       motionEditorScene = JSON.parse(JSON.stringify(scene));
       const requestedDuration = Number(document.getElementById('motion-duration')?.value) || 15;
       const contentEnd = Math.max(...motionEditorScene.elements.map(item => Number(item.startTime) + Number(item.duration)));
