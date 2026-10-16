@@ -1431,6 +1431,21 @@ window.MickeyStudio = (function () {
     return response.blob();
   }
 
+  async function hasTransparentPixels(blob) {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.min(256, bitmap.width);
+    canvas.height = Math.min(256, bitmap.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] < 250) return true;
+    }
+    return false;
+  }
+
   // AI background removal through the public BiRefNet Hugging Face Space.
   async function removeBackground() {
     if (!STATE.photoLab.bgSourceImage) {
@@ -1459,7 +1474,18 @@ window.MickeyStudio = (function () {
       const client = await Client.connect('ZhengPeng7/BiRefNet_demo');
       const file = await photoLabGradioFile(sourceImg, STATE.photoLab.bgSourceFile, 'photo.png');
       const result = await client.predict('/image', [await handle_file(file), '1024x1024', 'General']);
-      const processedBlob = await gradioOutputBlob(result?.data?.[0]);
+      const sliderImages = result?.data?.[0];
+      const candidates = Array.isArray(sliderImages) ? [...sliderImages].reverse() : [sliderImages];
+      let processedBlob = null;
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        const outputBlob = await gradioOutputBlob(candidate);
+        if (await hasTransparentPixels(outputBlob)) {
+          processedBlob = outputBlob;
+          break;
+        }
+      }
+      if (!processedBlob) throw new Error('لم يُرجع نموذج إزالة الخلفية صورة شفافة. أعد المحاولة أو استخدم صورة أوضح.');
       const cutoutImg = new Image();
       cutoutImg.src = URL.createObjectURL(processedBlob);
       await new Promise((resolve, reject) => { cutoutImg.onload = resolve; cutoutImg.onerror = reject; });
