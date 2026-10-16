@@ -133,6 +133,11 @@
 
     <!-- Bottom Controls & Account -->
     <div class="pt-4 border-t border-white/5 space-y-2">
+
+      <a href="assets/downloads/MickeyStudio-Premiere.zip" download class="w-full btn-secondary text-xs py-2 justify-center flex items-center gap-2" aria-label="تنزيل إضافة Premiere إصدار 2.8.33">
+        <i class="fa-solid fa-download text-cyan-300"></i>
+        <span>تنزيل إضافة Premiere · 2.8.33</span>
+      </a>
       
       <div class="flex items-center justify-end px-1">
         <button id="btn-toggle-sfx" onclick="MickeyStudio.toggleSound()" class="text-zinc-500 hover:text-zinc-200 p-1.5 transition-colors" title="كتم / تشغيل الصوت">
@@ -1382,38 +1387,17 @@
             </select>
           </div>
 
-          <!-- AI Model Selection -->
-          <div class="space-y-2">
-            <label for="transcribe-engine-select" class="text-xs font-medium text-zinc-400 block">محرك التفريغ والتحليل</label>
-            <select id="transcribe-engine-select" class="w-full p-2.5 text-xs">
-              <option value="gemini-multimodal" selected>💎 Google Gemini 1.5 / 2.0 Flash (فائق الدقة + تحليل مشاعر وتوقيتات)</option>
-              <option value="whisper-large">⚡ Whisper Large-v3 (نموذج ويسبر عالي الدقة)</option>
-              <option value="webspeech-live">🎙️ محرك المتصفح المباشر (تفريغ لحظي مجاني بلا قيود)</option>
-            </select>
+          <div class="space-y-2 border-t border-white/5 pt-3">
+            <label class="text-xs font-medium text-zinc-300 block">القص السريع · اكتشاف الصمت</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="text-[10px] text-zinc-500">عتبة الصوت<select id="web-silence-threshold" class="w-full mt-1 p-2 text-xs"><option value="-32">هادئ · ‎-32 dB</option><option value="-38" selected>متوازن · ‎-38 dB</option><option value="-45">حساس · ‎-45 dB</option></select></label>
+              <label class="text-[10px] text-zinc-500">أقل مدة للصمت<select id="web-silence-min" class="w-full mt-1 p-2 text-xs"><option value="0.3">0.3 ثانية</option><option value="0.5" selected>0.5 ثانية</option><option value="0.8">0.8 ثانية</option><option value="1">1 ثانية</option></select></label>
+            </div>
+            <button type="button" onclick="MickeyStudio.analyzeTranscribeSilence()" class="btn-secondary w-full py-2 text-xs">تحليل الصمت في الملف المحدد</button>
+            <div id="web-silence-results" class="hidden text-[10px] text-zinc-300 space-y-1" aria-live="polite"></div>
           </div>
 
-          <!-- Analysis Features (Checkboxes) -->
-          <div class="space-y-2 pt-2 border-t border-white/5">
-            <label class="text-xs font-medium text-zinc-400 block">خيارات التحليل المتقدم</label>
-            <div class="space-y-1.5 text-xs">
-              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
-                <input type="checkbox" id="transcribe-opt-srt" checked class="w-3.5 h-3.5 accent-white">
-                <span>توليد ملف ترجمة تزامني (SRT لبريمير)</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
-                <input type="checkbox" id="transcribe-opt-summary" checked class="w-3.5 h-3.5 accent-white">
-                <span>ملخص تنفيذي وأبرز النقاط المستخلصة</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
-                <input type="checkbox" id="transcribe-opt-tone" checked class="w-3.5 h-3.5 accent-white">
-                <span>تحليل نبرة الصوت، المشاعر، وسرعة الإلقاء</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer text-zinc-300">
-                <input type="checkbox" id="transcribe-opt-punct" checked class="w-3.5 h-3.5 accent-white">
-                <span>ضبط علامات الترقيم (فواصل، نقاط، استفهام)</span>
-              </label>
-            </div>
-          </div>
+          <p class="text-[10px] text-zinc-500">تُرسل الملفات إلى محرك Mickey Studio المتاح حاليًا؛ تظهر أدوات التحليل والملخص عند توفر بياناتها.</p>
 
         </div>
 
@@ -1538,6 +1522,13 @@
 
             <!-- Tab 2: SRT Subtitles -->
             <div id="view-transcribe-srt" class="flex-1 overflow-y-auto pr-1 hidden">
+              <div class="flex items-end gap-2 mb-2">
+                <label class="text-[10px] text-zinc-400">أقصى أحرف للسطر<input id="caption-max-chars" type="number" min="12" max="80" value="42" class="block mt-1 w-20 p-2 text-xs"></label>
+                <label class="text-[10px] text-zinc-400">أقصى كلمات للبطاقة<input id="caption-max-words" type="number" min="1" max="12" value="6" class="block mt-1 w-20 p-2 text-xs"></label>
+                <button type="button" onclick="MickeyStudio.reflowTranscribeSrt()" class="btn-secondary text-[10px] py-2 px-3">إعادة تقسيم الكابشن</button>
+                <span class="text-[10px] text-zinc-500">يحافظ على التوقيتات الموجودة ويقسّم كل بطاقة طويلة.</span>
+              </div>
+              <p id="transcribe-srt-status" class="text-[10px] text-zinc-500 mb-2"></p>
               <textarea id="transcribe-srt-output" rows="12" class="w-full h-full p-4 text-xs leading-relaxed resize-none text-emerald-300 font-mono bg-zinc-900/60 border border-white/5 rounded-xl select-all" dir="ltr"></textarea>
             </div>
 
