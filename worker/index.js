@@ -509,6 +509,11 @@ function validateMotionScene(scene) {
     if (!idPattern.test(String(assetId || ''))) fail(400, `معرّف الأصل في العنصر ${index + 1} غير صالح.`);
     if ((item.type === 'mogrt' || item.type === 'graphic') && !mogrtIds.has(assetId)) fail(400, `قالب غير معروف في العنصر ${index + 1}.`);
     if (item.type === 'sfx' && !sfxIds.has(assetId) && !extendedSfxIds.has(assetId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
+    if (['graphic', 'mogrt', 'color_matte'].includes(item.type)) {
+      const png = String(item.renderedPng || '');
+      if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(png)) fail(400, `الصورة الجاهزة للطبقة ${index + 1} غير موجودة. أعد إرسال المشهد من الموقع بعد تحديثه.`);
+      if (png.length > 6 * 1024 * 1024) fail(413, `الصورة الجاهزة للطبقة ${index + 1} كبيرة جداً.`);
+    }
     for (const key of ['trackIndex', 'startTime', 'duration']) {
       const value = Number(item[key]);
       if (!Number.isFinite(value) || value < 0 || (key === 'duration' && value === 0)) fail(400, `قيمة ${key} في العنصر ${index + 1} غير صالحة.`);
@@ -523,7 +528,7 @@ function validateMotionScene(scene) {
     if (!Number.isFinite(duration) || duration < 1 || duration > 180) fail(400, 'مدة موسيقى الخلفية غير صالحة.');
   }
   const serialized = JSON.stringify(scene);
-  if (serialized.length > 100000) fail(413, 'حجم المشهد أكبر من الحد المسموح.');
+  if (serialized.length > 18 * 1024 * 1024) fail(413, 'حجم ملفات المشهد أكبر من الحد المسموح. قلل عدد الطبقات الرسومية.');
   return scene;
 }
 

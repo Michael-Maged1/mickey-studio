@@ -4160,10 +4160,11 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   function motionScenePrompt() {
-    const idea = document.getElementById('motion-idea')?.value.trim();
+    let idea = document.getElementById('motion-idea')?.value.trim();
     const duration = Number(document.getElementById('motion-duration')?.value);
     if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
     if (!Number.isFinite(duration) || duration < 1 || duration > 180) throw new Error('المدة يجب أن تكون بين 1 و180 ثانية.');
+    idea = `Create a finished premium motion-graphics video, not a wireframe or preview board. Avoid a bright full-frame grid, an empty gradient, a lone oversized title, and generic centered-title layouts. Prefer a restrained aurora or color-matte background; use bg_grid only as a subtle texture. Build a clear hierarchy with a strong Arabic headline, concise supporting copy, and a complementary graphic or accent. Give the opening, middle, and ending distinct compositions with balanced negative space, safe margins, polished contrast, and readable text. Avoid decorative clutter, repeated cards, long copy, and invented facts. Preserve the user's Arabic wording and meaning.\n\nUSER'S IDEA: ${idea}`;
     const styleSelect = document.getElementById('motion-style'); const styleName = styleSelect.options[styleSelect.selectedIndex].text;
     const musicControl = document.getElementById('motion-music-track');
     const requestedMusic = musicControl?.value === 'auto' || !musicControl?.value ? MOTION_STYLE_MUSIC[styleSelect.value] : musicControl.value;
@@ -4267,6 +4268,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
           addedCount++;
         });
       }
+      motionNotice('جارٍ تجهيز الطبقات الرسومية من الموقع…', false, statusId);
+      await motionAttachRenderedLayers(scene);
       validateMotionScene(scene);
       if (button) button.disabled = true;
       motionNotice('جارٍ إرسال المشهد إلى حسابك…', false, statusId);
@@ -4280,6 +4283,39 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       motionNotice('تم إرسال المشهد. ستظهر شاشة استلام كاملة داخل Premiere تلقائياً، وستظل مفتوحة حتى تنشئ المشهد أو تغلقها.', false, statusId);
     } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true, statusId); }
     finally { if (button) button.disabled = false; }
+  }
+
+  async function motionAttachRenderedLayers(scene) {
+    const visualItems = scene.elements.filter(item => ['graphic', 'mogrt', 'color_matte'].includes(item.type));
+    if (!visualItems.length) return;
+    if (typeof HTMLCanvasElement === 'undefined' || typeof HTMLCanvasElement.prototype.toDataURL !== 'function') {
+      throw new Error('متصفح الموقع لا يدعم تجهيز طبقات PNG المطلوبة. افتح Mickey Studio في Chrome أو Edge ثم أعد الإرسال.');
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('تعذر إنشاء لوحة تجهيز الرسومات في الموقع.');
+    if (document.fonts?.ready) await document.fonts.ready;
+    const previousScene = motionEditorScene;
+    let totalBytes = 0;
+    try {
+      for (let index = 0; index < visualItems.length; index += 1) {
+        const source = visualItems[index];
+        const item = { ...source, startTime: 0, duration: 180, position: [960, 540], scale: 100, animationIn: 'none', animationOut: 'none' };
+        const isBackground = item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId);
+        motionEditorScene = { ...scene, elements: [item] };
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        motionEditorDrawExportFrame(context, 0.5, canvas.width, canvas.height, !isBackground);
+        const png = canvas.toDataURL('image/png');
+        if (!png.startsWith('data:image/png;base64,')) throw new Error(`تعذر تجهيز الطبقة الرسومية رقم ${index + 1}.`);
+        totalBytes += png.length;
+        if (totalBytes > 18 * 1024 * 1024) throw new Error('حجم الطبقات الرسومية كبير جداً. قلل عدد العناصر أو أرسل المشهد على دفعتين.');
+        source.renderedPng = png;
+      }
+    } finally {
+      motionEditorScene = previousScene;
+    }
   }
 
   async function motionCopyRepairPrompt() {
@@ -4606,52 +4642,31 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const stage = document.getElementById('motion-preview-stage');
     if (!stage) return;
     stage.replaceChildren();
-    const visible = motionEditorScene.elements.map((item, index) => ({ item, index })).filter(({ item }) => {
-      if (item.type === 'sfx') return false;
-      const start = Number(item.startTime) || 0;
-      return motionEditorTime >= start && motionEditorTime <= start + Number(item.duration);
+    if (!motionEditorScene) return;
+    const dimensions = motionEditorAspectDimensions();
+    const canvas = document.createElement('canvas');
+    canvas.className = 'motion-preview-canvas';
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+    const context = canvas.getContext('2d');
+    if (context) motionEditorDrawExportFrame(context, motionEditorTime, canvas.width, canvas.height, false, motionEditorSelectedIndex);
+    canvas.addEventListener('click', event => {
+      const bounds = canvas.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width * 1920;
+      const y = (event.clientY - bounds.top) / bounds.height * 1080;
+      const candidates = motionEditorScene.elements.map((item, index) => ({ item, index })).filter(({ item }) => motionEditorIsText(item) && motionEditorTime >= (Number(item.startTime) || 0) && motionEditorTime <= (Number(item.startTime) || 0) + Number(item.duration));
+      if (!candidates.length) return;
+      const nearest = candidates.reduce((best, candidate) => {
+        const position = Array.isArray(candidate.item.position) ? candidate.item.position : [960, 540];
+        const distance = Math.hypot(x - Number(position[0]), y - Number(position[1]));
+        return distance < best.distance ? { index: candidate.index, distance } : best;
+      }, { index: candidates[0].index, distance: Infinity });
+      motionEditorSelectedIndex = nearest.index;
+      motionEditorRender();
     });
-    const bgItem = [...visible].reverse().find(({ item }) => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
-    stage.style.background = motionEditorBackground(bgItem?.item);
-    if (bgItem?.item.templateId === 'bg_grid') {
-      const grid = document.createElement('div');
-      grid.className = 'motion-preview-grid';
-      const gridColor = bgItem.item.params?.color2 || '#20D6C7';
-      grid.style.backgroundImage = `linear-gradient(${gridColor}27 1px, transparent 1px), linear-gradient(90deg, ${gridColor}27 1px, transparent 1px)`;
-      stage.appendChild(grid);
-    }
-    if (bgItem?.item.templateId === 'bg_aurora') {
-      const glow = document.createElement('div');
-      glow.className = 'motion-preview-glow';
-      const color1 = bgItem.item.params?.color1 || '#6D4AFF';
-      const color2 = bgItem.item.params?.color2 || '#20D6C7';
-      glow.style.background = `radial-gradient(circle at 25% 35%, ${color1}66, transparent 42%), radial-gradient(circle at 78% 72%, ${color2}55, transparent 45%)`;
-      stage.appendChild(glow);
-    }
-    visible.forEach(({ item, index }) => {
-      if (!motionEditorIsText(item)) return;
-      const params = item.params || {};
-      const layer = document.createElement('div');
-      layer.className = `motion-preview-layer${item.templateId === 'text_badge' ? ' is-badge' : ''}${index === motionEditorSelectedIndex ? ' is-selected' : ''}`;
-      const position = Array.isArray(item.position) ? item.position : [960, 540];
-      const animation = motionEditorLayerAnimation(item);
-      layer.style.inset = 'auto';
-      layer.style.left = `${Math.max(0, Math.min(100, Number(position[0]) / 19.2))}%`;
-      layer.style.top = `${Math.max(0, Math.min(100, Number(position[1]) / 10.8))}%`;
-      layer.style.width = '86%';
-      layer.style.transform = `translate(-50%, calc(-50% + ${animation.offsetY}px)) scale(${Math.max(0.02, Math.min(3, (Number(item.scale) || 100) / 100 * animation.scale))})`;
-      layer.style.opacity = String(animation.opacity);
-      layer.style.color = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : '#FFFFFF';
-      layer.style.fontFamily = `${params.fontFamily || 'Readex Pro'}, Cairo, sans-serif`;
-      const copy = document.createElement('span');
-      copy.className = 'motion-preview-copy';
-      copy.style.fontSize = `clamp(12px, ${Math.max(1.4, Math.min(18, (Number(params.fontSize) || 64) / 1080 * 100))}cqw, 88px)`;
-      copy.textContent = motionEditorDisplayText(item);
-      layer.appendChild(copy);
-      layer.addEventListener('click', () => { motionEditorSelectedIndex = index; motionEditorRender(); });
-      stage.appendChild(layer);
-    });
-    if (!visible.some(({ item }) => motionEditorIsText(item)) && !bgItem) {
+    stage.appendChild(canvas);
+    const hasVisibleElements = motionEditorScene.elements.some(item => item.type !== 'sfx' && motionEditorTime >= (Number(item.startTime) || 0) && motionEditorTime <= (Number(item.startTime) || 0) + Number(item.duration));
+    if (!hasVisibleElements) {
       const placeholder = document.createElement('div');
       placeholder.className = 'motion-preview-placeholder';
       placeholder.innerHTML = '<i class="fa-solid fa-clapperboard"></i><span>لا توجد طبقة مرئية عند هذا التوقيت</span>';
@@ -4679,13 +4694,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const animationIn = String(item.animationIn || 'none').toLowerCase();
     if (animationIn === 'pop-in' && elapsed < .48) {
       const progress = elapsed / .48;
-      result.scale = progress < .68 ? Math.max(.02, progress / .68 * 1.1) : 1.1 - (progress - .68) / .32 * .1;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      result.scale = Math.max(.02, eased * 1.08);
+      if (eased > .82) result.scale = 1 + (eased - .82) * .44;
     } else if (animationIn === 'slide-up' && elapsed < .42) {
       const progress = elapsed / .42;
-      result.offsetY = (1 - progress) * 78;
-      result.opacity = Math.max(.05, progress);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      result.offsetY = (1 - eased) * 78;
+      result.opacity = Math.max(.05, eased);
     } else if (animationIn === 'fade-in' && elapsed < .45) {
-      result.opacity = Math.max(.05, elapsed / .45);
+      result.opacity = Math.max(.05, 1 - Math.pow(1 - elapsed / .45, 3));
     }
     const animationOut = String(item.animationOut || 'none').toLowerCase();
     if (animationOut === 'fade-out' && remaining < .45) {
@@ -4769,7 +4787,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     motionEditorFrame = requestAnimationFrame(motionEditorPlayFrame);
   }
 
-  function motionEditorDrawExportFrame(context, time, width, height) {
+  function motionEditorDrawExportFrame(context, time, width, height, transparent = false, selectedIndex = -1) {
     const all = motionEditorScene.elements;
     const visible = all.filter(item => item.type !== 'sfx' && time >= (Number(item.startTime) || 0) && time <= (Number(item.startTime) || 0) + (Number(item.duration) || 0));
     const bg = [...visible].reverse().find(item => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
@@ -4777,19 +4795,41 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const c1 = /^#[0-9a-f]{6}$/i.test(p.color1 || '') ? p.color1 : '#1A2744';
     const c2 = /^#[0-9a-f]{6}$/i.test(p.color2 || '') ? p.color2 : '#3F2A70';
     context.clearRect(0, 0, width, height);
-    const gradient = context.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, c1); gradient.addColorStop(1, '#09090F'); context.fillStyle = gradient; context.fillRect(0, 0, width, height);
-    const glow = context.createRadialGradient(width * .24, height * .18, 0, width * .24, height * .18, Math.max(width, height) * .75);
-    glow.addColorStop(0, `${c2}77`); glow.addColorStop(1, `${c2}00`); context.fillStyle = glow; context.fillRect(0, 0, width, height);
-    if (bg?.templateId === 'bg_grid') {
-      context.save(); context.strokeStyle = `${c2}2E`; context.lineWidth = Math.max(1, width / 1800);
-      const step = Math.max(30, Math.round(width / 16));
-      for (let x = 0; x <= width; x += step) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
-      for (let y = 0; y <= height; y += step) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+    if (!transparent) {
+      const gradient = context.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, '#11131A'); gradient.addColorStop(.48, c1); gradient.addColorStop(1, '#080A10'); context.fillStyle = gradient; context.fillRect(0, 0, width, height);
+      const glow = context.createRadialGradient(width * .25, height * .16, 0, width * .25, height * .16, Math.max(width, height) * .76);
+      glow.addColorStop(0, `${c2}55`); glow.addColorStop(.48, `${c1}24`); glow.addColorStop(1, `${c2}00`); context.fillStyle = glow; context.fillRect(0, 0, width, height);
+      const lowerGlow = context.createRadialGradient(width * .86, height * .92, 0, width * .86, height * .92, Math.max(width, height) * .48);
+      lowerGlow.addColorStop(0, `${c2}27`); lowerGlow.addColorStop(1, `${c2}00`); context.fillStyle = lowerGlow; context.fillRect(0, 0, width, height);
+      if (bg?.templateId === 'bg_grid') {
+        context.save(); context.lineWidth = Math.max(1, width / 2400);
+        const step = Math.max(48, Math.round(width / 12));
+        for (let x = 0; x <= width; x += step) { context.globalAlpha = x % (step * 4) === 0 ? .12 : .055; context.strokeStyle = c2; context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
+        for (let y = 0; y <= height; y += step) { context.globalAlpha = y % (step * 4) === 0 ? .12 : .055; context.strokeStyle = c2; context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+        context.restore();
+      }
+      if (bg?.templateId === 'bg_aurora') {
+        context.save(); context.globalAlpha = .14; context.strokeStyle = c2; context.lineWidth = Math.max(2, width / 700);
+        for (let index = 0; index < 3; index += 1) { context.beginPath(); context.ellipse(width * (.18 + index * .32), height * (.84 - index * .12), width * .42, height * (.16 + index * .015), -.18, Math.PI, Math.PI * 1.92); context.stroke(); }
+        context.restore();
+      }
+      const vignette = context.createRadialGradient(width * .5, height * .48, Math.min(width, height) * .18, width * .5, height * .48, Math.max(width, height) * .7);
+      vignette.addColorStop(0, '#00000000'); vignette.addColorStop(1, '#03050AB8'); context.fillStyle = vignette; context.fillRect(0, 0, width, height);
+      context.save();
+      const inset = Math.max(18, width * .035), edge = Math.max(1, width / 1800);
+      context.strokeStyle = '#FFFFFF16'; context.lineWidth = edge; context.beginPath(); context.roundRect(inset, inset, width - inset * 2, height - inset * 2, Math.max(12, width * .012)); context.stroke();
+      const corner = Math.max(18, width * .026), offset = inset + Math.max(8, width * .01);
+      context.strokeStyle = `${c2}99`; context.lineWidth = Math.max(1.5, width / 1100); context.globalAlpha = .7;
+      [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([dx, dy]) => {
+        const x = dx === 1 ? offset : width - offset, y = dy === 1 ? offset : height - offset;
+        context.beginPath(); context.moveTo(x, y + dy * corner); context.lineTo(x, y); context.lineTo(x + dx * corner, y); context.stroke();
+      });
       context.restore();
     }
     visible.forEach(item => {
       if (!motionEditorIsText(item)) return;
+      const itemIndex = all.indexOf(item);
       const params = item.params || {};
       const x = (Array.isArray(item.position) ? Number(item.position[0]) : 960) / 1920 * width;
       const y = (Array.isArray(item.position) ? Number(item.position[1]) : 540) / 1080 * height;
@@ -4805,26 +4845,48 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       context.font = `800 ${fontSize}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`;
       if (item.templateId === 'text_badge') {
         const boxWidth = Math.min(width * .86, Math.max(fontSize * 4, context.measureText(text).width + fontSize * 1.5));
-        const boxHeight = fontSize * 1.8; context.fillStyle = `${accent}D9`;
-        context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, Math.min(28, boxHeight / 3)); context.fill();
+        const boxHeight = fontSize * 1.75;
+        context.shadowColor = `${accent}55`; context.shadowBlur = fontSize * .46;
+        context.fillStyle = '#0A0D12E8'; context.strokeStyle = `${accent}88`; context.lineWidth = Math.max(1, fontSize * .025);
+        context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, boxHeight * .48); context.fill(); context.stroke();
+        context.shadowBlur = 0; context.fillStyle = accent; context.beginPath(); context.roundRect(-boxWidth / 2 + boxHeight * .2, -boxHeight * .14, boxHeight * .28, boxHeight * .28, boxHeight * .14); context.fill();
+        context.fillStyle = '#FFFFFF12'; context.beginPath(); context.roundRect(-boxWidth / 2 + 1, -boxHeight / 2 + 1, boxWidth - 2, boxHeight * .12, boxHeight * .08); context.fill();
       } else if (item.templateId === 'widget_counter') {
         const boxWidth = Math.min(width * .78, fontSize * 8); const boxHeight = fontSize * 4.2;
-        context.fillStyle = '#10131DDC'; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, fontSize * .35); context.fill();
-        context.strokeStyle = `${accent}CC`; context.lineWidth = Math.max(2, fontSize / 18); context.stroke();
+        context.shadowColor = '#00000066'; context.shadowBlur = fontSize * .55; context.fillStyle = '#0B0E14F2'; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, fontSize * .38); context.fill();
+        context.shadowBlur = 0; context.strokeStyle = '#FFFFFF22'; context.lineWidth = Math.max(1, fontSize / 28); context.stroke();
+        context.fillStyle = accent; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, Math.max(4, fontSize * .07), boxHeight, fontSize * .04); context.fill();
+        const label = String(params.label || '').trim();
+        if (label) { context.textAlign = 'center'; context.textBaseline = 'middle'; context.font = `600 ${fontSize * .34}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`; context.fillStyle = '#B9C1CE'; context.fillText(label, 0, -boxHeight * .23, boxWidth * .8); }
       } else if (item.templateId === 'widget_donut_ring') {
         const radius = Math.min(width, height) * .2; const value = Math.max(0, Math.min(100, Number(params.numberValue) || 72));
         context.lineWidth = Math.max(8, radius * .13); context.strokeStyle = '#FFFFFF26'; context.beginPath(); context.arc(0, 0, radius, 0, Math.PI * 2); context.stroke();
         context.strokeStyle = accent; context.lineCap = 'round'; context.beginPath(); context.arc(0, 0, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * value / 100); context.stroke();
         context.font = `800 ${fontSize * 1.1}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`;
         context.fillStyle = textColor; context.fillText(`${value}%`, 0, 0); context.restore(); return;
+      } else if (item.templateId === 'widget_social_card') {
+        const boxWidth = Math.min(width * .78, Math.max(fontSize * 6, context.measureText(text).width + fontSize * 2.1)); const boxHeight = fontSize * 2.15;
+        context.shadowColor = '#00000070'; context.shadowBlur = fontSize * .4; context.fillStyle = '#10141BEF'; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, fontSize * .32); context.fill();
+        context.shadowBlur = 0; context.strokeStyle = '#FFFFFF24'; context.lineWidth = Math.max(1, fontSize / 28); context.stroke();
+        context.fillStyle = accent; context.beginPath(); context.arc(-boxWidth / 2 + boxHeight * .52, 0, boxHeight * .22, 0, Math.PI * 2); context.fill();
+        context.fillStyle = '#FFFFFF'; context.font = `700 ${fontSize * .24}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText('✦', -boxWidth / 2 + boxHeight * .52, 0);
       }
-      context.fillStyle = textColor; context.shadowColor = `${accent}AA`; context.shadowBlur = fontSize * .24;
-      const maxWidth = width * .84; const words = String(text).split(/\s+/); const lines = []; let line = '';
+      context.fillStyle = textColor; context.shadowColor = '#000000B8'; context.shadowBlur = fontSize * .3; context.shadowOffsetY = fontSize * .045;
+      const maxWidth = item.templateId === 'widget_counter' ? width * .7 : item.templateId === 'widget_social_card' ? width * .68 : width * .84; const words = String(text).split(/\s+/); const lines = []; let line = '';
       words.forEach(word => { const test = line ? `${line} ${word}` : word; if (line && context.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test; });
       if (line) lines.push(line); const shown = lines.slice(0, 4); const lineHeight = fontSize * 1.24;
       shown.forEach((part, index) => context.fillText(part, 0, (index - (shown.length - 1) / 2) * lineHeight, maxWidth));
       if (['text_kinetic', 'logo_outro'].includes(item.templateId)) {
-        context.shadowBlur = 0; const bar = context.createLinearGradient(-width * .32, 0, width * .32, 0); bar.addColorStop(0, `${accent}00`); bar.addColorStop(.5, `${accent}DD`); bar.addColorStop(1, `${c2}00`); context.fillStyle = bar; context.fillRect(-width * .32, fontSize * .95, width * .64, Math.max(3, fontSize * .07));
+        context.shadowBlur = 0; context.shadowOffsetY = 0;
+        const lineY = (shown.length - 1) * lineHeight / 2 + fontSize * .76;
+        const bar = context.createLinearGradient(-width * .29, 0, width * .29, 0); bar.addColorStop(0, `${accent}00`); bar.addColorStop(.26, `${accent}55`); bar.addColorStop(.5, `${accent}EE`); bar.addColorStop(.74, `${c2}77`); bar.addColorStop(1, `${c2}00`); context.fillStyle = bar; context.fillRect(-width * .29, lineY, width * .58, Math.max(3, fontSize * .055));
+        if (item.templateId === 'logo_outro') { context.strokeStyle = `${accent}99`; context.lineWidth = Math.max(2, fontSize * .035); context.beginPath(); context.arc(0, -(shown.length * lineHeight / 2 + fontSize * .55), fontSize * .19, 0, Math.PI * 2); context.stroke(); }
+      }
+      if (item.templateId === 'text_badge' || item.templateId === 'widget_counter' || item.templateId === 'widget_social_card') { context.shadowBlur = 0; context.shadowOffsetY = 0; }
+      if (selectedIndex === itemIndex) {
+        context.shadowBlur = 0; context.shadowOffsetY = 0; context.strokeStyle = '#FB923C'; context.lineWidth = Math.max(1.5, width / 1200); context.setLineDash([Math.max(6, width / 110), Math.max(4, width / 180)]);
+        const selectionWidth = Math.min(width * .88, Math.max(fontSize * 4.2, ...shown.map(part => context.measureText(part).width + fontSize * .5)));
+        context.strokeRect(-selectionWidth / 2, -(shown.length * lineHeight) / 2 - fontSize * .32, selectionWidth, shown.length * lineHeight + fontSize * .95);
       }
       context.restore();
     });
