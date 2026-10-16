@@ -4109,6 +4109,18 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   let motionEditorPlaying = false;
   let motionEditorFrame = 0;
   let motionEditorLastFrame = 0;
+  let motionEditorAspect = '16:9';
+  let motionEditorAudioContext = null;
+  let motionEditorAudioNodes = [];
+  let motionEditorExporting = false;
+  let motionEditorLastStyledJson = '';
+  const motionEditorAudioCache = new Map();
+  const MOTION_EDITOR_PALETTES = [
+    ['#111827', '#F97316', '#F7C548'], ['#101C2C', '#20D6C7', '#6D5DFB'], ['#21152F', '#FF4F87', '#A78BFA'],
+    ['#0E2237', '#28C7FA', '#7A5CFA'], ['#2A1D16', '#F59E0B', '#EF4444'], ['#14231B', '#A3E635', '#06B6D4'],
+    ['#201528', '#E879F9', '#38BDF8'], ['#202138', '#F4B942', '#F06A6A'], ['#102725', '#2DD4BF', '#FB7185'],
+    ['#18233A', '#60A5FA', '#C084FC'], ['#2A1720', '#FB7185', '#FDBA74'], ['#14251F', '#4ADE80', '#22D3EE']
+  ];
 
   function motionNotice(text, error = false, targetId = 'motion-status') {
     const node = document.getElementById(targetId);
@@ -4302,11 +4314,26 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function motionOpenEditor() {
     try {
-      const scene = validateMotionScene(parseMotionJSON(document.getElementById('motion-json')?.value));
+      const sourceJSON = document.getElementById('motion-json')?.value || '';
+      const scene = validateMotionScene(parseMotionJSON(sourceJSON));
       motionEditorScene = JSON.parse(JSON.stringify(scene));
       const requestedDuration = Number(document.getElementById('motion-duration')?.value) || 15;
       const contentEnd = Math.max(...motionEditorScene.elements.map(item => Number(item.startTime) + Number(item.duration)));
       motionEditorDuration = Math.max(1, Math.min(180, Math.max(requestedDuration, contentEnd)));
+      motionEditorAspect = ['16:9', '9:16', '1:1'].includes(motionEditorScene.aspectRatio) ? motionEditorScene.aspectRatio : '16:9';
+      const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
+      if (musicEnabled && !motionEditorScene.music) {
+        const style = document.getElementById('motion-style')?.value || 'social';
+        const selectedMusic = document.getElementById('motion-music-track')?.value || 'auto';
+        const musicId = selectedMusic === 'auto' ? MOTION_STYLE_MUSIC[style] || 'social_upbeat' : selectedMusic;
+        const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
+        motionEditorScene.music = { musicId, duration: motionEditorDuration, volume, fadeIn: 1.2, fadeOut: 1.5 };
+      }
+      if (sourceJSON !== motionEditorLastStyledJson) {
+        motionEditorApplyPalette();
+        motionEditorApplyCompositionVariation();
+        motionEditorLastStyledJson = JSON.stringify(motionEditorScene, null, 2);
+      }
       motionEditorSelectedIndex = motionEditorScene.elements.findIndex(item => item.type !== 'sfx');
       motionEditorTime = 0;
       motionEditorPlaying = false;
@@ -4315,6 +4342,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       motionEditorRender();
       switchTab('motion-editor');
       motionEditorRender();
+      motionEditorPreloadAudio();
     } catch (error) {
       motionNotice(error.message || 'تعذر فتح المحرر. راجع JSON المشهد.', true);
     }
@@ -4322,10 +4350,136 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function motionEditorRender() {
     if (!motionEditorScene) return;
+    motionEditorUpdateAspectPreview();
     motionEditorRenderTimeline();
     motionEditorRenderProperties();
     motionEditorRenderPreview();
     motionEditorUpdatePlaybackControls();
+  }
+
+  function motionEditorApplyPalette() {
+    if (!motionEditorScene) return;
+    const chosen = MOTION_EDITOR_PALETTES[Math.floor(Math.random() * MOTION_EDITOR_PALETTES.length)];
+    const accents = motionPalette.length >= 2 ? motionPalette : chosen.slice(1);
+    const color1 = chosen[0], color2 = accents[Math.floor(Math.random() * accents.length)];
+    const color3 = accents[(accents.indexOf(color2) + 1) % accents.length] || chosen[2];
+    motionEditorScene.elements.forEach(item => {
+      if (!['graphic', 'mogrt', 'color_matte'].includes(item.type)) return;
+      item.params = item.params && typeof item.params === 'object' ? item.params : {};
+      const isBackground = item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId);
+      item.params.color1 = isBackground ? color1 : color2;
+      item.params.color2 = isBackground ? color2 : color3;
+    });
+    const jsonField = document.getElementById('motion-json');
+    if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
+    motionUpdateEditorCTA();
+  }
+
+  function motionEditorApplyCompositionVariation() {
+    if (!motionEditorScene) return;
+    const variant = Math.floor(Math.random() * 4);
+    const layers = motionEditorScene.elements.filter(item => motionEditorIsText(item));
+    layers.forEach((item, index) => {
+      const position = Array.isArray(item.position) ? item.position : [960, 540];
+      let x = Number(position[0]) || 960, y = Number(position[1]) || 540;
+      if (variant === 0) x = 1920 - x;
+      else if (variant === 1) { x += index % 2 ? 130 : -130; y += index % 2 ? 55 : -55; }
+      else if (variant === 2) { x += index % 2 ? -150 : 150; y += index % 2 ? -35 : 70; }
+      else { y += index === 0 ? -90 : index * 35; item.scale = Math.max(70, Math.min(120, (Number(item.scale) || 100) * (index === 0 ? 1.08 : 0.94))); }
+      item.position = [Math.max(160, Math.min(1760, Math.round(x))), Math.max(140, Math.min(940, Math.round(y)))];
+    });
+    const jsonField = document.getElementById('motion-json');
+    if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
+    motionUpdateEditorCTA();
+  }
+
+  function motionEditorAspectDimensions() {
+    if (motionEditorAspect === '9:16') return { width: 1080, height: 1920, ratio: 9 / 16 };
+    if (motionEditorAspect === '1:1') return { width: 1080, height: 1080, ratio: 1 };
+    return { width: 1920, height: 1080, ratio: 16 / 9 };
+  }
+
+  function motionEditorSetAspect(value) {
+    if (!['16:9', '9:16', '1:1'].includes(value)) return;
+    motionEditorAspect = value;
+    if (motionEditorScene) motionEditorScene.aspectRatio = value;
+    motionEditorUpdateAspectPreview();
+    const jsonField = document.getElementById('motion-json');
+    if (jsonField && motionEditorScene) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
+    motionEditorRenderPreview();
+  }
+
+  function motionEditorUpdateAspectPreview() {
+    const dimensions = motionEditorAspectDimensions();
+    const select = document.getElementById('motion-aspect-ratio');
+    const label = document.getElementById('motion-preview-resolution');
+    const stage = document.getElementById('motion-preview-stage');
+    if (select) select.value = motionEditorAspect;
+    if (label) label.textContent = `${dimensions.width} × ${dimensions.height}`;
+    if (!stage) return;
+    stage.style.aspectRatio = `${dimensions.width} / ${dimensions.height}`;
+    const wrap = stage.parentElement;
+    const bounds = wrap?.getBoundingClientRect();
+    const availableHeight = Math.max(120, (bounds?.height || Math.max(180, window.innerHeight - 470)) - 4);
+    const availableWidth = Math.max(160, (bounds?.width || window.innerWidth - 330) - 8);
+    const width = Math.min(940, availableWidth, availableHeight * dimensions.ratio);
+    stage.style.width = `${Math.max(160, width)}px`;
+  }
+
+  async function motionEditorLoadAudio(kind, id) {
+    const cacheKey = `${kind}:${id}`;
+    if (motionEditorAudioCache.has(cacheKey)) return motionEditorAudioCache.get(cacheKey);
+    const loading = fetch(`assets/motion-audio/${kind}/${encodeURIComponent(id)}.wav`, { cache: 'force-cache' })
+      .then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.arrayBuffer(); })
+      .then(data => {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error('Web Audio غير مدعوم في هذا المتصفح.');
+        if (!motionEditorAudioContext) motionEditorAudioContext = new AudioContextClass();
+        return motionEditorAudioContext.decodeAudioData(data.slice(0));
+      });
+    motionEditorAudioCache.set(cacheKey, loading);
+    try { const buffer = await loading; motionEditorAudioCache.set(cacheKey, buffer); return buffer; }
+    catch (error) { motionEditorAudioCache.delete(cacheKey); throw error; }
+  }
+
+  async function motionEditorPreloadAudio() {
+    if (!motionEditorScene) return;
+    const jobs = motionEditorScene.elements.filter(item => item.type === 'sfx').map(item => ['sfx', item.sfxId]);
+    if (motionEditorScene.music?.musicId) jobs.push(['music', motionEditorScene.music.musicId]);
+    await Promise.allSettled(jobs.map(([kind, id]) => motionEditorLoadAudio(kind, id)));
+  }
+
+  function motionEditorStopAudio() {
+    motionEditorAudioNodes.forEach(node => { try { node.stop(); } catch (_) {} try { node.disconnect(); } catch (_) {} });
+    motionEditorAudioNodes = [];
+  }
+
+  async function motionEditorScheduleAudio(offsetSeconds, outputNode = null) {
+    if (!motionEditorScene) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error('تشغيل الصوت يحتاج متصفحاً يدعم Web Audio.');
+    if (!motionEditorAudioContext) motionEditorAudioContext = new AudioContextClass();
+    await motionEditorAudioContext.resume();
+    const context = motionEditorAudioContext;
+    const now = context.currentTime + 0.08;
+    const destination = outputNode || context.destination;
+    const audioItems = motionEditorScene.elements.filter(item => item.type === 'sfx');
+    const jobs = audioItems.map(item => ({ kind: 'sfx', id: item.sfxId, time: Number(item.startTime) || 0, duration: Number(item.duration) || 0.5, volume: 0.82 }));
+    if (motionEditorScene.music?.musicId) jobs.push({ kind: 'music', id: motionEditorScene.music.musicId, time: 0, duration: Number(motionEditorScene.music.duration) || motionEditorDuration, volume: Math.max(0.05, Math.min(0.8, Number(motionEditorScene.music.volume) || 0.28)) });
+    const buffers = await Promise.all(jobs.map(async job => ({ job, buffer: await motionEditorLoadAudio(job.kind, job.id) })));
+    if (!outputNode && !motionEditorPlaying) return;
+    buffers.forEach(({ job, buffer }) => {
+      const remaining = job.time + job.duration - offsetSeconds;
+      if (remaining <= 0) return;
+      const source = context.createBufferSource(); source.buffer = buffer; source.loop = job.kind === 'music';
+      const gain = context.createGain(); gain.gain.value = job.volume; source.connect(gain); gain.connect(destination);
+      const startAt = now + Math.max(0, job.time - offsetSeconds);
+      const bufferOffset = job.kind === 'music' ? Math.max(0, offsetSeconds - job.time) % Math.max(0.01, buffer.duration) : Math.max(0, offsetSeconds - job.time);
+      if (job.kind === 'sfx' && bufferOffset >= buffer.duration) return;
+      source.start(startAt, bufferOffset);
+      source.stop(now + Math.max(0.02, Math.min(remaining, motionEditorDuration - offsetSeconds)));
+      motionEditorAudioNodes.push(source, gain);
+    });
   }
 
   function motionEditorRenderTimeline() {
@@ -4376,12 +4530,32 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       row.append(label, lane);
       timeline.appendChild(row);
     }
+    if (motionEditorScene.music?.musicId) {
+      const musicRow = document.createElement('div');
+      musicRow.className = 'motion-track-row';
+      const musicLabel = document.createElement('span');
+      musicLabel.className = 'motion-track-label';
+      musicLabel.textContent = 'موسيقى';
+      const musicLane = document.createElement('div');
+      musicLane.className = 'motion-track-lane';
+      const musicClip = document.createElement('button');
+      musicClip.type = 'button';
+      musicClip.className = 'motion-clip clip-music';
+      musicClip.style.left = '0%';
+      musicClip.style.width = `${Math.min(100, (Number(motionEditorScene.music.duration) || motionEditorDuration) / motionEditorDuration * 100)}%`;
+      musicClip.textContent = `♫ ${motionEditorScene.music.musicId}`;
+      musicClip.title = `موسيقى خلفية · ${motionEditorScene.music.musicId}`;
+      musicClip.addEventListener('click', () => { const status = document.getElementById('motion-editor-status'); if (status) status.textContent = 'الموسيقى ستعمل أثناء المعاينة والتصدير.'; });
+      musicLane.appendChild(musicClip);
+      musicRow.append(musicLabel, musicLane);
+      timeline.insertBefore(musicRow, timeline.children[1] || null);
+    }
     const playhead = document.createElement('div');
     playhead.className = 'motion-playhead-line';
     timeline.appendChild(playhead);
     motionEditorUpdatePlayheadLine();
     const summary = document.getElementById('motion-timeline-summary');
-    if (summary) summary.textContent = `${elements.length} مقاطع · ${motionEditorDuration.toFixed(1)} ثانية`;
+    if (summary) summary.textContent = `${elements.length + (motionEditorScene.music?.musicId ? 1 : 0)} مقاطع · ${motionEditorScene.music?.musicId ? 'موسيقى ومؤثرات مضافة' : 'بدون موسيقى'} · ${motionEditorDuration.toFixed(1)} ثانية`;
   }
 
   function motionEditorUpdatePlayheadLine() {
@@ -4442,11 +4616,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (bgItem?.item.templateId === 'bg_grid') {
       const grid = document.createElement('div');
       grid.className = 'motion-preview-grid';
+      const gridColor = bgItem.item.params?.color2 || '#20D6C7';
+      grid.style.backgroundImage = `linear-gradient(${gridColor}27 1px, transparent 1px), linear-gradient(90deg, ${gridColor}27 1px, transparent 1px)`;
       stage.appendChild(grid);
     }
     if (bgItem?.item.templateId === 'bg_aurora') {
       const glow = document.createElement('div');
       glow.className = 'motion-preview-glow';
+      const color1 = bgItem.item.params?.color1 || '#6D4AFF';
+      const color2 = bgItem.item.params?.color2 || '#20D6C7';
+      glow.style.background = `radial-gradient(circle at 25% 35%, ${color1}66, transparent 42%), radial-gradient(circle at 78% 72%, ${color2}55, transparent 45%)`;
       stage.appendChild(glow);
     }
     visible.forEach(({ item, index }) => {
@@ -4482,19 +4661,20 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function motionEditorBackground(item) {
     if (!item) return 'radial-gradient(ellipse at 50% 110%, #293950 0%, #141b2b 48%, #090b13 100%)';
+    const color1 = /^#[0-9a-f]{6}$/i.test(item.params?.color1 || '') ? item.params.color1 : '#171722';
+    const color2 = /^#[0-9a-f]{6}$/i.test(item.params?.color2 || '') ? item.params.color2 : '#25263D';
     if (item.type === 'color_matte') {
-      const color = /^#[0-9a-f]{6}$/i.test(item.params?.color1 || '') ? item.params.color1 : '#171722';
-      return `linear-gradient(145deg, ${color}, #09090b)`;
+      return `radial-gradient(ellipse at 15% 15%, ${color2}88 0%, transparent 50%), linear-gradient(145deg, ${color1}, #09090b)`;
     }
-    if (item.templateId === 'bg_grid') return 'linear-gradient(145deg, #0f172a, #111827 55%, #09090b)';
-    return 'radial-gradient(ellipse at 20% 10%, #56388e 0%, transparent 36%), radial-gradient(ellipse at 85% 88%, #164d66 0%, transparent 38%), linear-gradient(145deg, #121326, #080a12 70%)';
+    if (item.templateId === 'bg_grid') return `radial-gradient(ellipse at 15% 15%, ${color1}55 0%, transparent 48%), linear-gradient(145deg, ${color1}33, ${color2}28 55%, #09090b)`;
+    return `radial-gradient(ellipse at 20% 10%, ${color1} 0%, transparent 38%), radial-gradient(ellipse at 85% 88%, ${color2} 0%, transparent 40%), linear-gradient(145deg, #121326, #080a12 70%)`;
   }
 
-  function motionEditorLayerAnimation(item) {
+  function motionEditorLayerAnimation(item, atTime = motionEditorTime) {
     const start = Number(item.startTime) || 0;
     const end = start + (Number(item.duration) || 0);
-    const elapsed = Math.max(0, motionEditorTime - start);
-    const remaining = Math.max(0, end - motionEditorTime);
+    const elapsed = Math.max(0, atTime - start);
+    const remaining = Math.max(0, end - atTime);
     const result = { scale: 1, offsetY: 0, opacity: 1 };
     const animationIn = String(item.animationIn || 'none').toLowerCase();
     if (animationIn === 'pop-in' && elapsed < .48) {
@@ -4537,6 +4717,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function motionEditorSetTime(value) {
     motionEditorTime = Math.max(0, Math.min(motionEditorDuration, Number(value) || 0));
+    if (motionEditorPlaying) { motionEditorStopAudio(); motionEditorScheduleAudio(motionEditorTime).catch(error => console.warn('[MotionEditor] Audio preview failed:', error)); }
     motionEditorUpdatePlayheadLine();
     motionEditorRenderPreview();
     motionEditorUpdatePlaybackControls();
@@ -4560,8 +4741,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!motionEditorScene) return;
     motionEditorPlaying = !motionEditorPlaying;
     motionEditorLastFrame = 0;
-    if (motionEditorPlaying) motionEditorFrame = requestAnimationFrame(motionEditorPlayFrame);
-    else if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
+    if (motionEditorPlaying) {
+      motionEditorFrame = requestAnimationFrame(motionEditorPlayFrame);
+      motionEditorScheduleAudio(motionEditorTime).catch(error => {
+        const status = document.getElementById('motion-editor-status');
+        if (status) status.textContent = `تعذر تشغيل الصوت: ${error.message}`;
+      });
+    } else {
+      if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
+      motionEditorStopAudio();
+    }
     motionEditorUpdatePlaybackControls();
   }
 
@@ -4569,16 +4758,149 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!motionEditorPlaying) return;
     if (motionEditorLastFrame) motionEditorTime += (timestamp - motionEditorLastFrame) / 1000;
     motionEditorLastFrame = timestamp;
-    if (motionEditorTime >= motionEditorDuration) motionEditorTime = 0;
+    if (motionEditorTime >= motionEditorDuration) {
+      motionEditorTime = 0;
+      motionEditorStopAudio();
+      motionEditorScheduleAudio(0).catch(error => console.warn('[MotionEditor] Audio loop restart failed:', error));
+    }
     motionEditorRenderPreview();
     motionEditorUpdatePlayheadLine();
     motionEditorUpdatePlaybackControls();
     motionEditorFrame = requestAnimationFrame(motionEditorPlayFrame);
   }
 
+  function motionEditorDrawExportFrame(context, time, width, height) {
+    const all = motionEditorScene.elements;
+    const visible = all.filter(item => item.type !== 'sfx' && time >= (Number(item.startTime) || 0) && time <= (Number(item.startTime) || 0) + (Number(item.duration) || 0));
+    const bg = [...visible].reverse().find(item => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
+    const p = bg?.params || {};
+    const c1 = /^#[0-9a-f]{6}$/i.test(p.color1 || '') ? p.color1 : '#1A2744';
+    const c2 = /^#[0-9a-f]{6}$/i.test(p.color2 || '') ? p.color2 : '#3F2A70';
+    context.clearRect(0, 0, width, height);
+    const gradient = context.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, c1); gradient.addColorStop(1, '#09090F'); context.fillStyle = gradient; context.fillRect(0, 0, width, height);
+    const glow = context.createRadialGradient(width * .24, height * .18, 0, width * .24, height * .18, Math.max(width, height) * .75);
+    glow.addColorStop(0, `${c2}77`); glow.addColorStop(1, `${c2}00`); context.fillStyle = glow; context.fillRect(0, 0, width, height);
+    if (bg?.templateId === 'bg_grid') {
+      context.save(); context.strokeStyle = `${c2}2E`; context.lineWidth = Math.max(1, width / 1800);
+      const step = Math.max(30, Math.round(width / 16));
+      for (let x = 0; x <= width; x += step) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
+      for (let y = 0; y <= height; y += step) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+      context.restore();
+    }
+    visible.forEach(item => {
+      if (!motionEditorIsText(item)) return;
+      const params = item.params || {};
+      const x = (Array.isArray(item.position) ? Number(item.position[0]) : 960) / 1920 * width;
+      const y = (Array.isArray(item.position) ? Number(item.position[1]) : 540) / 1080 * height;
+      const animation = motionEditorLayerAnimation(item, time);
+      const scale = Math.max(.02, Math.min(3, (Number(item.scale) || 100) / 100 * animation.scale));
+      const fontSize = Math.max(22, Math.min(height * .16, (Number(params.fontSize) || 68) * height / 1080));
+      const text = motionEditorDisplayText(item);
+      const accent = /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : c1;
+      const textColor = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : '#FFFFFF';
+      context.save(); context.globalAlpha = Math.max(0, Math.min(1, animation.opacity));
+      context.translate(x, y + animation.offsetY * height / 1080); context.scale(scale, scale);
+      context.direction = 'rtl'; context.textAlign = 'center'; context.textBaseline = 'middle';
+      context.font = `800 ${fontSize}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`;
+      if (item.templateId === 'text_badge') {
+        const boxWidth = Math.min(width * .86, Math.max(fontSize * 4, context.measureText(text).width + fontSize * 1.5));
+        const boxHeight = fontSize * 1.8; context.fillStyle = `${accent}D9`;
+        context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, Math.min(28, boxHeight / 3)); context.fill();
+      } else if (item.templateId === 'widget_counter') {
+        const boxWidth = Math.min(width * .78, fontSize * 8); const boxHeight = fontSize * 4.2;
+        context.fillStyle = '#10131DDC'; context.beginPath(); context.roundRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, fontSize * .35); context.fill();
+        context.strokeStyle = `${accent}CC`; context.lineWidth = Math.max(2, fontSize / 18); context.stroke();
+      } else if (item.templateId === 'widget_donut_ring') {
+        const radius = Math.min(width, height) * .2; const value = Math.max(0, Math.min(100, Number(params.numberValue) || 72));
+        context.lineWidth = Math.max(8, radius * .13); context.strokeStyle = '#FFFFFF26'; context.beginPath(); context.arc(0, 0, radius, 0, Math.PI * 2); context.stroke();
+        context.strokeStyle = accent; context.lineCap = 'round'; context.beginPath(); context.arc(0, 0, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * value / 100); context.stroke();
+        context.font = `800 ${fontSize * 1.1}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`;
+        context.fillStyle = textColor; context.fillText(`${value}%`, 0, 0); context.restore(); return;
+      }
+      context.fillStyle = textColor; context.shadowColor = `${accent}AA`; context.shadowBlur = fontSize * .24;
+      const maxWidth = width * .84; const words = String(text).split(/\s+/); const lines = []; let line = '';
+      words.forEach(word => { const test = line ? `${line} ${word}` : word; if (line && context.measureText(test).width > maxWidth) { lines.push(line); line = word; } else line = test; });
+      if (line) lines.push(line); const shown = lines.slice(0, 4); const lineHeight = fontSize * 1.24;
+      shown.forEach((part, index) => context.fillText(part, 0, (index - (shown.length - 1) / 2) * lineHeight, maxWidth));
+      if (['text_kinetic', 'logo_outro'].includes(item.templateId)) {
+        context.shadowBlur = 0; const bar = context.createLinearGradient(-width * .32, 0, width * .32, 0); bar.addColorStop(0, `${accent}00`); bar.addColorStop(.5, `${accent}DD`); bar.addColorStop(1, `${c2}00`); context.fillStyle = bar; context.fillRect(-width * .32, fontSize * .95, width * .64, Math.max(3, fontSize * .07));
+      }
+      context.restore();
+    });
+  }
+
+  async function motionExportVideo() {
+    const button = document.getElementById('motion-editor-export');
+    const status = document.getElementById('motion-editor-status');
+    if (!motionEditorScene || motionEditorExporting) return;
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { if (status) status.textContent = 'تصدير WebM غير مدعوم في هذا المتصفح.'; return; }
+    motionEditorExporting = true;
+    if (motionEditorPlaying) { motionEditorPlaying = false; if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame); motionEditorFrame = 0; motionEditorStopAudio(); motionEditorUpdatePlaybackControls(); }
+    if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-2"></i>جارٍ التصدير…'; }
+    let stream = null, recorder = null, exportAudioStream = null, raf = 0;
+    try {
+      const dimensions = motionEditorAspectDimensions();
+      const canvas = document.createElement('canvas'); canvas.width = dimensions.width; canvas.height = dimensions.height;
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('تعذر تجهيز لوحة تصدير الفيديو.');
+      motionEditorDrawExportFrame(context, 0, canvas.width, canvas.height);
+      stream = canvas.captureStream(30);
+      if (motionEditorScene.music?.musicId || motionEditorScene.elements.some(item => item.type === 'sfx')) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error('المتصفح لا يدعم تصدير الصوت.');
+        if (!motionEditorAudioContext) motionEditorAudioContext = new AudioContextClass();
+        exportAudioStream = motionEditorAudioContext.createMediaStreamDestination();
+        await motionEditorAudioContext.resume();
+        await motionEditorScheduleAudio(0, exportAudioStream);
+        exportAudioStream.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+      }
+      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
+      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const chunks = [];
+      recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+      const stopped = new Promise((resolve, reject) => { recorder.onstop = resolve; recorder.onerror = event => reject(event.error || new Error('فشل تسجيل الفيديو.')); });
+      motionEditorExporting = true;
+      const start = performance.now();
+      recorder.start(1000);
+      if (status) status.textContent = `جارٍ تسجيل ${dimensions.width}×${dimensions.height} مع الموسيقى والمؤثرات…`;
+      await new Promise((resolve, reject) => {
+        const draw = now => {
+          if (recorder.state !== 'recording') { resolve(); return; }
+          const elapsed = (now - start) / 1000;
+          motionEditorDrawExportFrame(context, Math.min(motionEditorDuration, elapsed), canvas.width, canvas.height);
+          if (status) status.textContent = `جارٍ التصدير… ${Math.min(100, Math.floor(elapsed / motionEditorDuration * 100))}%`;
+          if (elapsed >= motionEditorDuration) { recorder.stop(); resolve(); return; }
+          raf = requestAnimationFrame(draw);
+        };
+        raf = requestAnimationFrame(draw);
+        recorder.onerror = event => reject(event.error || new Error('فشل تسجيل الفيديو.'));
+      });
+      await stopped;
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+      if (!blob.size) throw new Error('ملف الفيديو الناتج فارغ.');
+      const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = `mickey-motion-${motionEditorAspect.replace(':', 'x')}-${Date.now()}.webm`;
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (status) status.textContent = 'اكتمل التصدير. تم تنزيل ملف WebM بالصوت والمقاس المختار.';
+    } catch (error) {
+      if (recorder?.state === 'recording') recorder.stop();
+      if (status) status.textContent = error.message || 'تعذر تصدير الفيديو.';
+    } finally {
+      if (raf) cancelAnimationFrame(raf);
+      motionEditorStopAudio();
+      stream?.getTracks().forEach(track => track.stop());
+      exportAudioStream?.stream.getTracks().forEach(track => track.stop());
+      motionEditorExporting = false;
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-download ml-2"></i>تصدير WebM'; }
+    }
+  }
+
   function motionBackToPrompt() {
     motionEditorPlaying = false;
     if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
+    motionEditorStopAudio();
     motionEditorFrame = 0;
     switchTab('motion-builder');
   }
@@ -4595,6 +4917,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       size?.addEventListener('input', () => motionEditorUpdateSelected('fontSize', Math.max(12, Math.min(220, Number(size.value) || 64))));
       color?.addEventListener('input', () => motionEditorUpdateSelected('textColor', color.value.toUpperCase()));
       playhead?.addEventListener('input', () => motionEditorSetTime(playhead.value));
+      document.getElementById('motion-aspect-ratio')?.addEventListener('change', event => motionEditorSetAspect(event.target.value));
+      window.addEventListener('resize', motionEditorUpdateAspectPreview);
       const marker = document.createElement('span');
       marker.id = 'motion-editor-shell-ready';
       marker.hidden = true;
@@ -5043,6 +5367,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     motionCopyRepairPrompt,
     motionOpenEditor,
     motionTogglePlayback,
+    motionExportVideo,
     motionBackToPrompt,
     toggleSound,
     handleAuthClick,
