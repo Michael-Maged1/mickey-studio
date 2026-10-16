@@ -4166,7 +4166,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     return match?.[1] || 'Identify the main concrete subject in the user brief and make it the unmistakable hero visual. Choose supporting motifs, setting, and colors from that subject; never use generic abstract decoration as a substitute for the subject.';
   }
 
-  function motionScenePrompt() {
+  function motionScenePromptRaw() {
     let idea = document.getElementById('motion-idea')?.value.trim();
     const duration = Number(document.getElementById('motion-duration')?.value);
     if (!idea) throw new Error('اكتب فكرة الفيديو أولاً.');
@@ -4191,6 +4191,13 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     ];
     const variation = variationDirections[Math.floor(Math.random() * variationDirections.length)];
     return `You are a senior Motion Graphics Director designing a polished Arabic motion-graphics scene for a Premiere Pro UXP extension. Return exactly one valid JSON object and absolutely no Markdown, preamble, or explanation. Preserve the user's Arabic idea and spelling. Produce a visually coherent edit with clear hierarchy, deliberate pacing, readable Arabic typography, and a strong opening and ending.\n\nCREATIVE VARIATION ID: ${variationId}. Treat this as a new art direction, not a reusable preset.\nMANDATORY COMPOSITION DIRECTION FOR THIS GENERATION: ${variation}\nDo not repeat a generic centered-title-on-gradient layout. Vary title alignment, scale, negative space, graphic choice, card shape, color balance, and entrance animation. Use at least three visibly different layout treatments across the opening, middle, and ending. Avoid repeating identical timing and positions across separate scenes.\nART DIRECTION: Design an actual motion-graphics spot, not plain text on a dark gradient. Give the hero copy a designed treatment using a glass/solid card, clipped color band, icon medallion, geometric frame, orbital accent, or a purposeful combination. Use icons and shapes as visual storytelling, not random decoration. Animate typography and graphic motifs in coordinated beats; use small supporting labels and clear scale contrast. Keep copy concise, Arabic letterforms unobstructed, and avoid placing titles at arbitrary scattered coordinates. Create a visual payoff at the ending.\n\nUSER BRIEF (Arabic):\n${idea}\n\nVISUAL STYLE: ${styleName}. ${MOTION_STYLE_GUIDES[styleSelect.value]}\nTOTAL DURATION: ${duration} seconds.\nREFERENCE PALETTE: ${motionPalette.length ? motionPalette.join(', ') : 'Use a sophisticated palette appropriate to the selected style.'}\n\nOUTPUT CONTRACT\nRoot schema: {"version":1,"elements":[...]}. Return 7-20 elements (maximum 30), including at least 3 sound-effect elements. Each element occupies its own visual/audio layer; use trackIndex 0 for background, 1 for primary title, 2 for supporting text, 3+ for accents/widgets. Put simultaneous elements on different trackIndex values so they do not overwrite. Keep visuals inside the requested duration and leave comfortable margins. Use 1920x1080 canvas coordinates; position is the layer anchor [x,y]. Use natural concise Arabic copy and don't invent facts or numbers.\n\nAllowed schemas:\nGraphic: {"type":"graphic","templateId":"bg_aurora|bg_grid|text_kinetic|text_badge|widget_counter|widget_donut_ring|widget_social_card|logo_outro","trackIndex":1,"startTime":0,"duration":3,"position":[960,540],"scale":100,"animationIn":"none|pop-in|zoom-in|bounce-in|slide-up|slide-left|slide-right|word-reveal|fade-in","animationOut":"none|fade-out|zoom-out|slide-down|slide-left|slide-right","params":{"text":"Arabic text","fontFamily":"Readex Pro","fontSize":72,"textColor":"#FFFFFF","color1":"#RRGGBB","color2":"#RRGGBB","numberValue":100,"label":"Arabic label"}}\nSolid background: {"type":"color_matte","trackIndex":0,"startTime":0,"duration":${duration},"position":[960,540],"scale":100,"animationIn":"none","animationOut":"none","params":{"color1":"#10131F"}}\nSound effect: {"type":"sfx","sfxId":"whoosh|pop|click|riser|impact|sparkle|soft_whoosh|swipe|bass_hit|notification","trackIndex":0,"startTime":1.2,"duration":0.5,"params":{}}\nMusic (root field, separate from elements): ${musicEnabled ? `"music":{"musicId":"${requestedMusic}","duration":${duration},"volume":${musicVolume.toFixed(2)},"fadeIn":1.2,"fadeOut":1.5}` : 'omit the music property because the user disabled background music'}\n\nGraphic IDs: ${MOTION_MOGRT_IDS.filter(id => id !== 'color_matte').join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Background templates render full-frame backgrounds; foreground templates render transparent overlays. Use hex colors, font sizes 30-130, scale 70-115, and valid times. Distribute beats across the full duration; do not stack unrelated content or put all elements at time zero. Include 3-5 varied SFX precisely synchronized to meaningful visual reveals. Use varied entrance/exit animations (pop-in, zoom-in, bounce-in, slide-left/right/up, or word-reveal) that match each beat. Keep at least one visual motif recurring across scenes for cohesion. Return JSON only.`;
+  }
+
+  function motionScenePrompt() {
+    return motionScenePromptRaw().replace(
+      'Each element occupies its own visual/audio layer; use trackIndex 0 for background, 1 for primary title, 2 for supporting text, 3+ for accents/widgets. Put simultaneous elements on different trackIndex values so they do not overwrite. Keep visuals inside the requested duration and leave comfortable margins.',
+      'trackIndex controls timeline layer order only; it never determines screen position, and elements on different tracks can still overlap visually. Give every visible element a deliberate position independent of trackIndex. For simultaneous elements, reserve separate composition zones: keep headlines and supporting copy apart, balance text against a complementary widget on the opposite side when possible, and leave 7% safe margins.'
+    );
   }
 
   async function motionGeneratePrompt() {
@@ -4234,6 +4241,96 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     catch (_) { throw new Error('رد الذكاء الاصطناعي ليس JSON صالحاً. الصق كود JSON فقط، ولا تلصق برومبت التصحيح نفسه.'); }
   }
 
+  function motionAutoLayoutScene(scene) {
+    const aspect = ['16:9', '9:16', '1:1'].includes(scene.aspectRatio) ? scene.aspectRatio : '16:9';
+    const canvasSize = aspect === '9:16' ? { width: 720, height: 1280 } : aspect === '1:1' ? { width: 1080, height: 1080 } : { width: 1280, height: 720 };
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasSize.width;
+    canvas.height = canvasSize.height;
+    const context = canvas.getContext('2d');
+    if (!context) return { adjusted: 0, unresolved: 0 };
+    const safe = { left: canvas.width * .07, right: canvas.width * .93, top: canvas.height * .08, bottom: canvas.height * .92 };
+    const items = scene.elements
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => ['graphic', 'mogrt'].includes(item.type) && !['bg_aurora', 'bg_grid'].includes(item.templateId) && motionEditorIsText(item))
+      .sort((left, right) => Number(left.item.startTime) - Number(right.item.startTime) || right.index - left.index);
+    const placed = [];
+    const layoutStats = { adjusted: 0, unresolved: 0 };
+
+    function measure(item, scaleFactor = 1) {
+      const params = item.params || {};
+      const fontSize = Math.max(22, Math.min(canvas.height * .16, (Number(params.fontSize) || 68) * canvas.height / 1080));
+      const text = String(params.text || params.label || (params.numberValue != null ? params.numberValue : '')).trim();
+      context.font = `800 ${fontSize}px "${String(params.fontFamily || 'Readex Pro').replace(/["\\]/g, '')}", Cairo, Arial, sans-serif`;
+      const maxWidth = item.templateId === 'widget_counter' ? canvas.width * .7 : item.templateId === 'widget_social_card' ? canvas.width * .68 : canvas.width * .84;
+      const lines = [];
+      let line = '';
+      text.split(/\s+/).forEach(word => {
+        const test = line ? `${line} ${word}` : word;
+        if (line && context.measureText(test).width > maxWidth) { lines.push(line); line = word; }
+        else line = test;
+      });
+      if (line) lines.push(line);
+      const shown = lines.slice(0, 4);
+      const textWidth = Math.max(1, ...shown.map(part => context.measureText(part).width));
+      const lineHeight = fontSize * 1.24;
+      let width = Math.min(maxWidth, textWidth + fontSize * .8);
+      let height = Math.max(lineHeight, shown.length * lineHeight) + fontSize * .8;
+      if (item.templateId === 'text_badge') { width = Math.min(canvas.width * .86, Math.max(fontSize * 4.8, textWidth + fontSize * 2.15)); height = Math.max(height, fontSize * 1.86); }
+      if (item.templateId === 'widget_counter') { width = Math.min(canvas.width * .78, fontSize * 8); height = Math.max(height, fontSize * 4.2); }
+      if (item.templateId === 'widget_social_card') { width = Math.min(canvas.width * .78, Math.max(fontSize * 6, textWidth + fontSize * 2.1)); height = Math.max(height, fontSize * 2.15); }
+      if (item.templateId === 'widget_donut_ring') { width = height = Math.min(canvas.width, canvas.height) * .46; }
+      const visualScale = Math.max(.02, Math.min(3, (Number(item.scale) || 100) / 100 * scaleFactor));
+      width = width * visualScale + canvas.width * .035;
+      height = height * visualScale + canvas.height * .045;
+      return { width, height };
+    }
+
+    function boundsAt(item, x, y, box) {
+      const px = x / 1920 * canvas.width;
+      const py = y / 1080 * canvas.height;
+      return { left: px - box.width / 2, right: px + box.width / 2, top: py - box.height / 2, bottom: py + box.height / 2 };
+    }
+
+    function overlaps(left, right) {
+      const leftStart = Number(left.item.startTime) || 0;
+      const rightStart = Number(right.item.startTime) || 0;
+      const timeOverlap = leftStart < rightStart + (Number(right.item.duration) || 0) && rightStart < leftStart + (Number(left.item.duration) || 0);
+      const a = left.bounds, b = right.bounds;
+      return timeOverlap && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }
+
+    items.forEach(({ item, index }) => {
+      const original = Array.isArray(item.position) ? [Number(item.position[0]) || 960, Number(item.position[1]) || 540] : [960, 540];
+      const columns = aspect === '9:16' ? [.22, .5, .78] : [.2, .5, .8];
+      const rows = aspect === '9:16' ? [.14, .31, .48, .65, .82] : [.16, .33, .5, .67, .84];
+      const candidates = [[original[0] / 1920, original[1] / 1080]];
+      rows.forEach(y => columns.forEach(x => candidates.push([x, y])));
+      const unique = candidates.filter((candidate, candidateIndex) => candidates.findIndex(value => value[0] === candidate[0] && value[1] === candidate[1]) === candidateIndex)
+        .sort((left, right) => Math.hypot(left[0] - original[0] / 1920, left[1] - original[1] / 1080) - Math.hypot(right[0] - original[0] / 1920, right[1] - original[1] / 1080));
+      let selected = null;
+      let selectedScale = 1;
+      for (const scaleFactor of [1, .9, .8, .7, .62]) {
+        const box = measure(item, scaleFactor);
+        for (const [x, y] of unique) {
+          const px = Math.max(safe.left + box.width / 2, Math.min(safe.right - box.width / 2, x * canvas.width));
+          const py = Math.max(safe.top + box.height / 2, Math.min(safe.bottom - box.height / 2, y * canvas.height));
+          const position = [px / canvas.width * 1920, py / canvas.height * 1080];
+          const candidate = { item, bounds: boundsAt(item, position[0], position[1], box) };
+          if (placed.every(other => !overlaps(candidate, other))) { selected = position; selectedScale = scaleFactor; break; }
+        }
+        if (selected) break;
+      }
+      if (!selected) { layoutStats.unresolved += 1; selected = original; }
+      if (Math.abs(selected[0] - original[0]) > 1 || Math.abs(selected[1] - original[1]) > 1 || selectedScale < 1) layoutStats.adjusted += 1;
+      item.position = selected.map(value => Math.round(value));
+      if (selectedScale < 1) item.scale = Math.max(60, Math.round((Number(item.scale) || 100) * selectedScale));
+      const box = measure(item);
+      placed.push({ item, index, bounds: boundsAt(item, item.position[0], item.position[1], box) });
+    });
+    return layoutStats;
+  }
+
   function validateMotionScene(scene) {
     if (!scene || !Array.isArray(scene.elements) || !scene.elements.length || scene.elements.length > 30) throw new Error('يجب أن يحتوي JSON على 1 إلى 30 عنصراً داخل elements.');
     scene.elements.forEach((item, index) => {
@@ -4253,6 +4350,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     try {
       if (!window.firebase?.auth?.().currentUser) throw new Error('سجّل الدخول إلى الموقع أولاً بالحساب المرتبط بإضافة Premiere.');
       const scene = parseMotionJSON(document.getElementById('motion-json').value);
+      validateMotionScene(scene);
       const style = document.getElementById('motion-style')?.value || 'social';
       const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
       const selectedMusic = document.getElementById('motion-music-track')?.value || 'auto';
@@ -4261,10 +4359,13 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
         scene.music = { musicId, duration: Number(document.getElementById('motion-duration')?.value) || 15, volume, fadeIn: 1.2, fadeOut: 1.5 };
       } else delete scene.music;
+      const layout = motionAutoLayoutScene(scene);
       if (motionEditorEnsureTextContrast(scene)) {
         const jsonField = document.getElementById('motion-json');
         if (jsonField) jsonField.value = JSON.stringify(scene, null, 2);
       }
+      const jsonField = document.getElementById('motion-json');
+      if (jsonField && layout.adjusted) jsonField.value = JSON.stringify(scene, null, 2);
       const sfxElements = scene.elements.filter(item => item.type === 'sfx').slice(0, 2);
       scene.elements = scene.elements.filter(item => item.type !== 'sfx').concat(sfxElements.map((item, index) => ({
         ...item,
@@ -4284,6 +4385,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
       motionNotice('تم إرسال المشهد. ستظهر شاشة استلام كاملة داخل Premiere تلقائياً، وستظل مفتوحة حتى تنشئ المشهد أو تغلقها.', false, statusId);
+      if (layout.unresolved) motionNotice(`تم الإرسال، لكن تعذر تفادي ${layout.unresolved} تداخلات تلقائياً. راجع المعاينة قبل إدراج المشهد.`, true, statusId);
+      else if (layout.adjusted) motionNotice(`تم إرسال المشهد بعد إعادة ترتيب ${layout.adjusted} عنصر تلقائياً لمنع التداخل.`, false, statusId);
     } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true, statusId); }
     finally { if (button) button.disabled = false; }
   }
@@ -4362,6 +4465,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const sourceJSON = document.getElementById('motion-json')?.value || '';
       const scene = validateMotionScene(parseMotionJSON(sourceJSON));
       motionEditorScene = JSON.parse(JSON.stringify(scene));
+      const layout = motionAutoLayoutScene(motionEditorScene);
       const requestedDuration = Number(document.getElementById('motion-duration')?.value) || 15;
       const contentEnd = Math.max(...motionEditorScene.elements.map(item => Number(item.startTime) + Number(item.duration)));
       motionEditorDuration = Math.max(1, Math.min(180, Math.max(requestedDuration, contentEnd)));
@@ -4374,7 +4478,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
         motionEditorScene.music = { musicId, duration: motionEditorDuration, volume, fadeIn: 1.2, fadeOut: 1.5 };
       }
-      if (motionEditorEnsureTextContrast(motionEditorScene)) {
+      motionEditorEnsureTextContrast(motionEditorScene);
+      if (layout.adjusted || layout.unresolved) {
         const jsonField = document.getElementById('motion-json');
         if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
       }
@@ -4387,6 +4492,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       switchTab('motion-editor');
       motionEditorRender();
       motionEditorPreloadAudio();
+      if (layout.unresolved) motionNotice(`تم ترتيب المشهد تلقائياً، لكن بقي ${layout.unresolved} تداخلات تحتاج مراجعة يدوية.`, true, 'motion-editor-status');
+      else if (layout.adjusted) motionNotice(`تم توزيع ${layout.adjusted} عنصر تلقائياً لتجنب تداخل النصوص والقوالب.`, false, 'motion-editor-status');
     } catch (error) {
       motionNotice(error.message || 'تعذر فتح المحرر. راجع JSON المشهد.', true);
     }
@@ -4411,10 +4518,12 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!['16:9', '9:16', '1:1'].includes(value)) return;
     motionEditorAspect = value;
     if (motionEditorScene) motionEditorScene.aspectRatio = value;
+    const layout = motionEditorScene ? motionAutoLayoutScene(motionEditorScene) : { adjusted: 0, unresolved: 0 };
     motionEditorUpdateAspectPreview();
     const jsonField = document.getElementById('motion-json');
     if (jsonField && motionEditorScene) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
     motionEditorRenderPreview();
+    if (layout.adjusted) motionNotice(`أُعيد توزيع ${layout.adjusted} عنصر ليتناسب مع مقاس الفيديو الجديد.`, false, 'motion-editor-status');
   }
 
   function motionEditorUpdateAspectPreview() {
@@ -4893,7 +5002,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function motionEditorDrawExportFrame(context, time, width, height, transparent = false, selectedIndex = -1) {
     const all = motionEditorScene.elements;
-    const visible = all.filter(item => item.type !== 'sfx' && time >= (Number(item.startTime) || 0) && time <= (Number(item.startTime) || 0) + (Number(item.duration) || 0));
+    const visible = all.map((item, index) => ({ item, index })).filter(({ item }) => item.type !== 'sfx' && time >= (Number(item.startTime) || 0) && time <= (Number(item.startTime) || 0) + (Number(item.duration) || 0)).sort((left, right) => Number(left.item.trackIndex) - Number(right.item.trackIndex) || left.index - right.index).map(({ item }) => item);
     const bg = [...visible].reverse().find(item => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
     const p = bg?.params || {};
     const c1 = /^#[0-9a-f]{6}$/i.test(p.color1 || '') ? p.color1 : '#1A2744';
