@@ -27,7 +27,16 @@ $FIREBASE_WEB_API_KEY = 'AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg';
 
 // Parse incoming request parameters (GET or JSON POST)
 $rawInput = file_get_contents('php://input');
-$postData = json_decode($rawInput, true) ?: [];
+$isBinaryQuickCutRequest = ($_GET['action'] ?? '') === 'analyze_video_silence' && preg_match('/^video\//i', $_SERVER['CONTENT_TYPE'] ?? '');
+$postData = $isBinaryQuickCutRequest ? [
+    'action' => 'analyze_video_silence',
+    '_video_binary' => $rawInput,
+    'mime_type' => $_SERVER['CONTENT_TYPE'] ?? '',
+    'start_seconds' => $_GET['start_seconds'] ?? null,
+    'end_seconds' => $_GET['end_seconds'] ?? null,
+    'threshold_db' => $_GET['threshold_db'] ?? null,
+    'minimum_seconds' => $_GET['minimum_seconds'] ?? null,
+] : (json_decode($rawInput, true) ?: []);
 
 $GLOBALS['PROVIDER_KEYS'] = $PROVIDER_KEYS;
 $action = $_GET['action'] ?? $postData['action'] ?? 'status';
@@ -1250,10 +1259,12 @@ function handleTranscribeAudio($data) {
 
 function handleAnalyzeVideoSilence($data) {
     header('Content-Type: application/json; charset=utf-8');
+    $rawVideoBytes = isset($data['_video_binary']) && is_string($data['_video_binary']) ? $data['_video_binary'] : null;
     $videoBase64 = preg_replace('/^data:[^,]+,/', '', (string)($data['video_base64'] ?? ''));
     $mimeType = strtolower(trim(explode(';', (string)($data['mime_type'] ?? ''))[0]));
-    if ($videoBase64 === '') sendJsonResponse(400, ['success' => false, 'error' => 'ملف الفيديو غير موجود.']);
-    if (strlen($videoBase64) > 16800000) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (12 ميجابايت).']);
+    if ($rawVideoBytes === null && $videoBase64 === '') sendJsonResponse(400, ['success' => false, 'error' => 'ملف الفيديو غير موجود.']);
+    if ($rawVideoBytes !== null && strlen($rawVideoBytes) > 50 * 1024 * 1024) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (50 ميجابايت).']);
+    if ($rawVideoBytes === null && strlen($videoBase64) > 26700000) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (20 ميجابايت).']);
     if (!preg_match('/^video\/(mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)$/', $mimeType)) {
         sendJsonResponse(415, ['success' => false, 'error' => 'صيغة الفيديو غير مدعومة لتحليل الصمت.']);
     }
@@ -1269,10 +1280,18 @@ function handleAnalyzeVideoSilence($data) {
         $threshold, $minimum, $start, $end
     );
     foreach (getActiveGeminiKeys() as $apiKey) {
+        $uploadedFile = null;
+        if ($rawVideoBytes !== null || strlen($videoBase64) > 16800000) {
+            $uploadBytes = $rawVideoBytes ?? base64_decode($videoBase64, true);
+            $uploadedFile = $uploadBytes === false ? null : uploadGeminiVideoFile($uploadBytes, $mimeType, $apiKey);
+            if (!$uploadedFile) continue;
+        }
         foreach (['gemini-3.8-flash', 'gemini-3.6-flash'] as $modelName) {
             $payload = [
                 'contents' => [[ 'role' => 'user', 'parts' => [
-                    ['inlineData' => ['mimeType' => $mimeType, 'data' => $videoBase64]],
+                    $uploadedFile
+                        ? ['fileData' => ['mimeType' => $mimeType, 'fileUri' => $uploadedFile['uri']]]
+                        : ['inlineData' => ['mimeType' => $mimeType, 'data' => $videoBase64]],
                     ['text' => $prompt]
                 ]]],
                 'generationConfig' => ['temperature' => 0, 'responseMimeType' => 'application/json', 'maxOutputTokens' => 3000]
@@ -1302,10 +1321,68 @@ function handleAnalyzeVideoSilence($data) {
                 $rangeEnd = max(0, min($duration, $rangeEnd));
                 if ($rangeEnd - $rangeStart >= $minimum) $silences[] = ['start_seconds' => $rangeStart, 'end_seconds' => $rangeEnd];
             }
+            if ($uploadedFile) deleteGeminiVideoFile($uploadedFile['name'], $apiKey);
             sendJsonResponse(200, ['success' => true, 'data' => ['silences' => $silences], 'provider' => $modelName]);
         }
+        if ($uploadedFile) deleteGeminiVideoFile($uploadedFile['name'], $apiKey);
     }
     sendJsonResponse(502, ['success' => false, 'error' => 'تعذر تحليل صوت الفيديو. تحقق من مفتاح Gemini أو جرّب مقطعًا أقصر.']);
+}
+
+function uploadGeminiVideoFile($videoBytes, $mimeType, $apiKey) {
+    $uploadUrl = '';
+    $start = curl_init('https://generativelanguage.googleapis.com/upload/v1beta/files?key=' . urlencode($apiKey));
+    curl_setopt_array($start, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode(['file' => ['display_name' => 'mickey-quickcut-' . time()]]),
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json', 'X-Goog-Upload-Protocol: resumable', 'X-Goog-Upload-Command: start',
+            'X-Goog-Upload-Header-Content-Length: ' . strlen($videoBytes), 'X-Goog-Upload-Header-Content-Type: ' . $mimeType
+        ],
+        CURLOPT_HEADERFUNCTION => function ($curl, $header) use (&$uploadUrl) {
+            if (stripos($header, 'x-goog-upload-url:') === 0) $uploadUrl = trim(substr($header, strlen('x-goog-upload-url:')));
+            return strlen($header);
+        },
+        CURLOPT_TIMEOUT => 60, CURLOPT_SSL_VERIFYPEER => true
+    ]);
+    $startResponse = curl_exec($start);
+    $startCode = curl_getinfo($start, CURLINFO_HTTP_CODE);
+    curl_close($start);
+    if ($startResponse === false || $startCode < 200 || $startCode >= 300 || !preg_match('#^https://generativelanguage\.googleapis\.com/upload/v1beta/files/#', $uploadUrl)) return null;
+
+    $upload = curl_init($uploadUrl);
+    curl_setopt_array($upload, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $videoBytes,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/octet-stream', 'X-Goog-Upload-Offset: 0', 'X-Goog-Upload-Command: upload, finalize'],
+        CURLOPT_TIMEOUT => 90, CURLOPT_SSL_VERIFYPEER => true
+    ]);
+    $uploadResponse = curl_exec($upload);
+    $uploadCode = curl_getinfo($upload, CURLINFO_HTTP_CODE);
+    curl_close($upload);
+    $file = json_decode((string)$uploadResponse, true)['file'] ?? [];
+    if ($uploadResponse === false || $uploadCode < 200 || $uploadCode >= 300 || empty($file['name']) || empty($file['uri'])) return null;
+    $fileName = (string)($file['name'] ?? '');
+    if (!preg_match('#^files/[A-Za-z0-9_-]+$#', $fileName)) return null;
+    for ($attempt = 0; ($file['state'] ?? '') === 'PROCESSING' && $attempt < 20; $attempt++) {
+        usleep(2000000);
+        $status = curl_init('https://generativelanguage.googleapis.com/v1beta/' . $fileName . '?key=' . urlencode($apiKey));
+        curl_setopt_array($status, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => true]);
+        $statusResponse = curl_exec($status);
+        $statusCode = curl_getinfo($status, CURLINFO_HTTP_CODE);
+        curl_close($status);
+        if ($statusResponse === false || $statusCode < 200 || $statusCode >= 300) return null;
+        $statusData = json_decode($statusResponse, true) ?? [];
+        $file = $statusData['file'] ?? $statusData;
+    }
+    return ($file['state'] ?? '') === 'ACTIVE' ? ['name' => $file['name'], 'uri' => $file['uri']] : null;
+}
+
+function deleteGeminiVideoFile($fileName, $apiKey) {
+    if (!preg_match('#^files/[A-Za-z0-9_-]+$#', (string)$fileName)) return;
+    $delete = curl_init('https://generativelanguage.googleapis.com/v1beta/' . $fileName . '?key=' . urlencode($apiKey));
+    curl_setopt_array($delete, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CUSTOMREQUEST => 'DELETE', CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => true]);
+    curl_exec($delete);
+    curl_close($delete);
 }
 
 /**
@@ -1748,7 +1825,8 @@ function handleStatus() {
         'status'    => 'online',
         'server'    => 'Mickey Studio AI Gateway',
         'system'    => 'Mickey Studio Nano Banana AI Gateway',
-        'version'   => '3.8.0',
+        'version'   => '4.1.0',
+        'features'  => ['raw_video_silence_upload' => true],
         'security'  => 'AES-256 Encryption Active',
         'endpoints' => ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'],
         'engines'   => [
