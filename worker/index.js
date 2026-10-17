@@ -9,10 +9,12 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     try {
       const url = new URL(request.url);
-      const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
-      const action = url.searchParams.get('action') || body.action || 'status';
+      const queryAction = url.searchParams.get('action') || '';
+      const isBinarySilenceRequest = request.method === 'POST' && queryAction === 'analyze_video_silence' && /^video\//i.test(request.headers.get('Content-Type') || '');
+      const body = request.method === 'POST' && !isBinarySilenceRequest ? await request.json().catch(() => ({})) : {};
+      const action = queryAction || body.action || 'status';
       const headers = { ...cors, 'Cache-Control': 'no-store', 'Pragma': 'no-cache' };
-      const context = { request, env, url, body, action, headers };
+      const context = { request, env, url, body, action, headers, rawVideoStream: isBinarySilenceRequest ? request.body : null };
 
       if (url.pathname === '/generate') return await generateFluxImage(context);
 
@@ -22,7 +24,7 @@ export default {
       if (['list_api_keys', 'revoke_api_key'].includes(action)) context.account = await authenticate(context, true);
 
       switch (action) {
-        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.0.0', endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'] }, 200, headers);
+        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.1.0', features: { raw_video_silence_upload: true }, endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'] }, 200, headers);
         case 'get_gemini_keys': case 'get_gemini_key': return json(await getGeminiKeys(env), 200, headers);
         case 'generate_tts': return await generateTts(context);
         case 'generate_text': return await generateText(context);
@@ -420,28 +422,45 @@ async function transcribeAudio(ctx) {
 }
 async function analyzeVideoSilence(ctx) {
   const video = String(ctx.body.video_base64 || '').replace(/^data:[^,]+,/, '');
-  const mimeType = String(ctx.body.mime_type || '').split(';')[0].trim().toLowerCase();
-  if (!video) return json({ success: false, error: 'ملف الفيديو غير موجود.' }, 400, ctx.headers);
-  if (video.length > 16_800_000) return json({ success: false, error: 'حجم الفيديو أكبر من حد الإرسال الآمن (12 ميجابايت).' }, 413, ctx.headers);
+  const mimeType = String(ctx.rawVideoStream ? ctx.request.headers.get('Content-Type') : ctx.body.mime_type || '').split(';')[0].trim().toLowerCase();
+  const videoSize = ctx.rawVideoStream ? Number(ctx.url.searchParams.get('size')) : Math.floor(video.length * 3 / 4);
+  if (!ctx.rawVideoStream && !video) return json({ success: false, error: 'ملف الفيديو غير موجود.' }, 400, ctx.headers);
+  if (ctx.rawVideoStream ? (!Number.isFinite(videoSize) || videoSize <= 0 || videoSize > 50 * 1024 * 1024) : video.length > 26_700_000) {
+    return json({ success: false, error: 'حجم الفيديو أكبر من حد الإرسال الآمن (50 ميجابايت).' }, 413, ctx.headers);
+  }
   if (!/^video\/(?:mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)$/.test(mimeType)) {
     return json({ success: false, error: 'صيغة الفيديو غير مدعومة لتحليل الصمت.' }, 415, ctx.headers);
   }
-  const start = Number(ctx.body.start_seconds);
-  const end = Number(ctx.body.end_seconds);
-  const threshold = Number(ctx.body.threshold_db);
-  const minimum = Number(ctx.body.minimum_seconds);
+  const start = Number(ctx.rawVideoStream ? ctx.url.searchParams.get('start_seconds') : ctx.body.start_seconds);
+  const end = Number(ctx.rawVideoStream ? ctx.url.searchParams.get('end_seconds') : ctx.body.end_seconds);
+  const threshold = Number(ctx.rawVideoStream ? ctx.url.searchParams.get('threshold_db') : ctx.body.threshold_db);
+  const minimum = Number(ctx.rawVideoStream ? ctx.url.searchParams.get('minimum_seconds') : ctx.body.minimum_seconds);
   if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end - start > 360) {
     return json({ success: false, error: 'نطاق الفيديو المحدد غير صالح أو أطول من 6 دقائق.' }, 400, ctx.headers);
   }
   const minDuration = Number.isFinite(minimum) ? Math.min(5, Math.max(0.2, minimum)) : 0.5;
   const thresholdDb = Number.isFinite(threshold) ? Math.min(-18, Math.max(-65, threshold)) : -38;
+  const directVideoBytes = ctx.rawVideoStream ? new Uint8Array(await ctx.request.arrayBuffer()) : null;
+  if (directVideoBytes && directVideoBytes.byteLength !== videoSize) return json({ success: false, error: 'حجم الفيديو المرسل لا يطابق الحجم المعلن.' }, 400, ctx.headers);
   const prompt = `حلل المسار الصوتي داخل الفيديو المرفق فقط، ولا تحلل الصورة أو المحتوى البصري. ابحث عن فترات الصمت أو الانخفاض الواضح جدًا في الصوت، بحد تقريبي ${thresholdDb} dB ولمدة لا تقل عن ${minDuration} ثانية. افحص فقط المجال من ${start.toFixed(3)} إلى ${end.toFixed(3)} ثانية من بداية الملف. أرجع الأوقات بالثواني نسبة إلى بداية المجال المحدد (أي يبدأ المجال عند 0). لا تعتبر الوقفات التعبيرية القصيرة صمتًا، ولا تقطع الكلام الهادئ. أخرج JSON فقط بالشكل {"silences":[{"start_seconds":1.25,"end_seconds":2.10}]}. إذا لم توجد فترات مناسبة أرجع {"silences":[]}. لا تضف أي شرح.`;
-  for (const key of await keysForRequest(ctx)) {
+  const apiKeys = await keysForRequest(ctx);
+  for (const key of (ctx.rawVideoStream ? apiKeys.slice(0, 1) : apiKeys)) {
+    let uploadedFile = null;
+    if (ctx.rawVideoStream || video.length > 16_800_000) {
+      try {
+        uploadedFile = ctx.rawVideoStream
+          ? await uploadGeminiVideoBytes(directVideoBytes, mimeType, key)
+          : await uploadGeminiVideo(video, mimeType, key);
+      } catch (error) {
+        console.warn('[analyze_video_silence] Gemini Files upload failed:', error?.message || error);
+        continue;
+      }
+    }
     for (const model of ['gemini-3.8-flash', 'gemini-3.6-flash']) {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: video } }, { text: prompt }] }],
+          contents: [{ role: 'user', parts: [uploadedFile ? { fileData: { mimeType, fileUri: uploadedFile.uri } } : { inlineData: { mimeType, data: video } }, { text: prompt }] }],
           generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 3000 }
         })
       });
@@ -457,10 +476,63 @@ async function analyzeVideoSilence(ctx) {
         end_seconds: Math.max(0, Math.min(duration, Number(item.end_seconds)))
       })).filter(item => Number.isFinite(item.start_seconds) && Number.isFinite(item.end_seconds)
         && item.end_seconds - item.start_seconds >= minDuration);
+      if (uploadedFile) await deleteGeminiFile(uploadedFile.name, key);
       return json({ success: true, data: { silences }, provider: model }, 200, ctx.headers);
     }
+    if (uploadedFile) await deleteGeminiFile(uploadedFile.name, key);
   }
   return json({ success: false, error: 'تعذر تحليل صوت الفيديو. تحقق من مفتاح Gemini أو جرّب مقطعًا أقصر.' }, 502, ctx.headers);
+}
+async function uploadGeminiVideo(base64, mimeType, apiKey) {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  const bytes = new Uint8Array(Math.floor(base64.length * 3 / 4) - padding);
+  let byteOffset = 0;
+  for (let offset = 0; offset < base64.length; offset += 65_536) {
+    const binary = atob(base64.slice(offset, Math.min(offset + 65_536, base64.length)));
+    for (let index = 0; index < binary.length; index++) bytes[byteOffset++] = binary.charCodeAt(index);
+  }
+  return uploadGeminiVideoBytes(bytes, mimeType, apiKey);
+}
+async function uploadGeminiVideoBytes(bytes, mimeType, apiKey) {
+  const start = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(bytes.byteLength),
+      'X-Goog-Upload-Header-Content-Type': mimeType
+    },
+    body: JSON.stringify({ file: { display_name: `mickey-quickcut-${Date.now()}` } })
+  });
+  const uploadUrl = start.headers.get('x-goog-upload-url');
+  if (!start.ok || !uploadUrl) throw new Error(`Gemini upload initialization failed (${start.status}).`);
+  const parsedUploadUrl = new URL(uploadUrl);
+  if (parsedUploadUrl.origin !== 'https://generativelanguage.googleapis.com' || !parsedUploadUrl.pathname.startsWith('/upload/v1beta/files/')) {
+    throw new Error('Gemini returned an unexpected video upload URL.');
+  }
+  const uploaded = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
+    body: bytes
+  });
+  const uploadedData = await readJson(uploaded);
+  let file = uploadedData.file || uploadedData;
+  if (!uploaded.ok || !file.name || !file.uri) throw new Error(`Gemini video upload failed (${uploaded.status}).`);
+  for (let attempt = 0; file.state === 'PROCESSING' && attempt < 20; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const status = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}?key=${encodeURIComponent(apiKey)}`);
+    const statusData = await readJson(status);
+    if (!status.ok) throw new Error(`Gemini video processing check failed (${status.status}).`);
+    file = statusData.file || statusData;
+  }
+  if (file.state !== 'ACTIVE') throw new Error(file.state === 'FAILED' ? 'Gemini could not process the uploaded video.' : 'Gemini video processing timed out.');
+  return { name: file.name, uri: file.uri };
+}
+async function deleteGeminiFile(name, apiKey) {
+  try {
+    await fetch(`https://generativelanguage.googleapis.com/v1beta/${name}?key=${encodeURIComponent(apiKey)}`, { method: 'DELETE' });
+  } catch (_) {}
 }
 async function proxyMedia(ctx) {
   const target = ctx.url.searchParams.get('url');

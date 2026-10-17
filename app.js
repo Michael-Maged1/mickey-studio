@@ -109,7 +109,7 @@ window.MickeyStudio = (function () {
     // Settings (API Vault)
     settings: {
       cloudflareWorkerUrl: localStorage.getItem('mickey_cloudflare_worker_url') || 'https://mickey-studio-api.kma279500.workers.dev',
-      gradioSpace: localStorage.getItem('mickey_gradio_space') || 'Lightricks/LTX-Video',
+      gradioSpace: localStorage.getItem('mickey_gradio_space') || 'Lightricks/ltx-video-distilled',
       sfxEnabled: localStorage.getItem('mickey_sfx_enabled') !== 'false'
     }
   };
@@ -971,10 +971,11 @@ window.MickeyStudio = (function () {
     STATE.video.engine = engine;
     document.getElementById('btn-engine-canvas').classList.toggle('active', engine === 'canvas');
     document.getElementById('btn-engine-gradio').classList.toggle('active', engine === 'gradio');
+    document.getElementById('video-prompt-wrap')?.classList.toggle('hidden', engine !== 'gradio');
 
     SFX.playClick();
     if (engine === 'gradio') {
-      showToast('وضع ZeroGPU السحابي نشط (يتصل بسبيس HuggingFace المحدد في الإعدادات)', 'info');
+      showToast('وضع LTX AI السحابي نشط. اكتب وصف الحركة قبل الإنتاج.', 'info');
     } else {
       showToast('محرك الحركة اللحظي نشط (مضمون 100% وبدون طوابير انتطار)', 'success');
     }
@@ -1046,6 +1047,11 @@ window.MickeyStudio = (function () {
   async function renderVideo() {
     if (!STATE.video.sourceImage) {
       showToast('يرجى اختيار صورة مصدر لإنتاج الفيديو أولاً!', 'warning');
+      return;
+    }
+    if (STATE.video.engine === 'gradio' && !document.getElementById('video-prompt-input')?.value.trim()) {
+      showToast('اكتب وصف الحركة المطلوبة أولاً.', 'warning');
+      document.getElementById('video-prompt-input')?.focus();
       return;
     }
     if (!await authorizeAndConsume('video')) return;
@@ -1298,28 +1304,78 @@ window.MickeyStudio = (function () {
 
   // HuggingFace Gradio Client Video Integration
   async function renderGradioVideo() {
-    showToast('جاري الاتصال بـ Hugging Face Space...', 'info');
-    const spaceId = STATE.settings.gradioSpace || 'Lightricks/LTX-Video';
-
+    if (STATE.video.isRendering) return;
+    const prompt = document.getElementById('video-prompt-input')?.value.trim() || '';
+    if (!prompt) {
+      showToast('اكتب وصف الحركة المطلوبة أولاً.', 'warning');
+      document.getElementById('video-prompt-input')?.focus();
+      return;
+    }
+    const scanner = document.getElementById('video-laser-scanner');
+    const emptyState = document.getElementById('video-empty-state');
+    const videoEl = document.getElementById('final-rendered-video');
+    const canvas = document.getElementById('motion-render-canvas');
+    const actionsBar = document.getElementById('video-actions-bar');
+    const progressPill = document.getElementById('video-render-progress');
+    STATE.video.isRendering = true;
+    scanner.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+    videoEl.classList.add('hidden');
+    canvas.classList.add('hidden');
+    actionsBar.classList.add('opacity-0', 'pointer-events-none');
+    progressPill.textContent = 'جاري توليد الفيديو بنموذج LTX…';
+    progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400';
     try {
-      const { Client } = await import('https://cdn.jsdelivr.net/npm/@gradio/client@latest/dist/index.min.js');
+      const savedSpace = String(STATE.settings.gradioSpace || '').trim();
+      const spaceId = !savedSpace || savedSpace.toLowerCase() === 'lightricks/ltx-video'
+        ? 'Lightricks/ltx-video-distilled' : savedSpace;
+      const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client@latest/dist/index.min.js');
       const client = await Client.connect(spaceId);
-      showToast('تم الاتصال بالسبيس! جاري إرسال الإطارات...', 'info');
-
-      // If Space requires inputs, call predict
-      // Fallback to Canvas engine if queue is too long
-    } catch (err) {
-      console.warn('Gradio space busy or unavailable, auto-switching to instant Canvas engine');
-      showToast('المساحة السحابية مشغولة، جاري التحويل التلقائي للمحرك اللحظي المضمون...', 'warning');
-      setVideoEngine('canvas');
-      renderVideo();
+      const sourceResponse = await fetch(STATE.video.sourceImageUrl);
+      if (!sourceResponse.ok) throw new Error('تعذر قراءة ملف الصورة لإرساله إلى LTX AI.');
+      const sourceBlob = await sourceResponse.blob();
+      const imageFile = new File([sourceBlob], 'mickey-source.png', { type: sourceBlob.type || 'image/png' });
+      progressPill.textContent = 'يرسل الصورة إلى LTX AI…';
+      const duration = Math.min(8.5, Math.max(0.3, Number(STATE.video.duration) || 3));
+      const result = await client.predict('/image_to_video', [
+        prompt, 'worst quality, inconsistent motion, blurry, jittery, distorted', await handle_file(imageFile), '',
+        512, 704, 'image-to-video', duration, 9, Math.floor(Math.random() * 2 ** 32), true, 1, true
+      ]);
+      const videoUrl = findGradioFile(result?.data?.[0]);
+      if (!videoUrl) throw new Error('لم يُرجع نموذج LTX ملف فيديو.');
+      const spaceHost = `https://${spaceId.toLowerCase().replace('/', '-')}.hf.space/`;
+      const response = await fetch(new URL(videoUrl, spaceHost).href);
+      if (!response.ok) throw new Error('تعذر تنزيل الفيديو الناتج من Hugging Face.');
+      const videoBlob = await response.blob();
+      if (!videoBlob.type.startsWith('video/') || videoBlob.size < 1000) throw new Error('أعاد نموذج LTX ملف فيديو غير صالح.');
+      if (STATE.video.renderedVideoUrl) URL.revokeObjectURL(STATE.video.renderedVideoUrl);
+      STATE.video.renderedVideoBlob = videoBlob;
+      STATE.video.renderedVideoUrl = URL.createObjectURL(videoBlob);
+      videoEl.src = STATE.video.renderedVideoUrl;
+      videoEl.classList.remove('hidden');
+      videoEl.load();
+      actionsBar.classList.remove('opacity-0', 'pointer-events-none');
+      progressPill.textContent = 'اكتمل توليد الفيديو عبر LTX AI';
+      progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-400';
+      SFX.playSuccess();
+      showToast('اكتمل توليد الفيديو بالذكاء الاصطناعي ويمكن تنزيله الآن.', 'success');
+    } catch (error) {
+      console.error('[LTX video generation]', error);
+      progressPill.textContent = 'تعذر توليد الفيديو عبر LTX AI';
+      progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-rose-500/30 text-rose-400';
+      emptyState.classList.remove('hidden');
+      showToast(error?.message || 'خدمة LTX AI مشغولة حالياً. حاول مجدداً بعد قليل.', 'error');
+    } finally {
+      scanner.classList.add('hidden');
+      STATE.video.isRendering = false;
     }
   }
 
   function downloadCurrentVideo() {
     if (!STATE.video.renderedVideoBlob) return;
     SFX.playClick();
-    downloadBlob(STATE.video.renderedVideoBlob, `mickey_cinema_${Date.now()}.webm`);
+    const extension = STATE.video.renderedVideoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+    downloadBlob(STATE.video.renderedVideoBlob, `mickey_cinema_${Date.now()}.${extension}`);
     showToast('جاري تحميل ملف الفيديو السينمائي...', 'info');
   }
 
