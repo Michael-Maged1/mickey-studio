@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 LTX_ROOT = Path(os.environ.get("LTX_ROOT", "")).expanduser()
-CONFIG = LTX_ROOT / "configs" / "ltxv-2b-0.9.8-distilled.yaml"
+CONFIG = Path(__file__).with_name("ltxv-2b-0.9.8-distilled-local.yaml")
 OUT_DIR = Path(os.environ.get("MICKEY_VIDEO_OUTPUT", Path.home() / "Videos" / "Mickey Studio"))
 MAX_UPLOAD = 12 * 1024 * 1024
 ALLOWED_ORIGINS = {

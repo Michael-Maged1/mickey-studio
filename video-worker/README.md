@@ -23,4 +23,4 @@ $env:LTX_ROOT = "$env:LOCALAPPDATA\MickeyStudio\LTX-Video"
 .venv\Scripts\python -m uvicorn app:app --host 127.0.0.1 --port 8765
 ```
 
-The first generation downloads the official model checkpoint, upscaler and text encoder from Hugging Face. Use the **LTX Video 2B distilled** weights under their [Lightricks Open Weights License](https://huggingface.co/Lightricks/LTX-Video/blob/main/LTX-Video-Open-Weights-License-0.X.txt). The service caps local generations at five seconds and 480p before the model's upscale pass to fit a 12GB GPU.
+The first generation downloads the official model checkpoint, upscaler and text encoder from Hugging Face. The worker's local config disables the additional prompt-rewriting models to conserve VRAM. Use the **LTX Video 2B distilled** weights under their [Lightricks Open Weights License](https://huggingface.co/Lightricks/LTX-Video/blob/main/LTX-Video-Open-Weights-License-0.X.txt). The service caps local generations at five seconds and 480p before the model's upscale pass to fit a 12GB GPU.
