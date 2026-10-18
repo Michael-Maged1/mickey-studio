@@ -10,7 +10,7 @@ export default {
     try {
       const url = new URL(request.url);
       const queryAction = url.searchParams.get('action') || '';
-      const isBinarySilenceRequest = request.method === 'POST' && queryAction === 'analyze_video_silence' && /^video\//i.test(request.headers.get('Content-Type') || '');
+      const isBinarySilenceRequest = request.method === 'POST' && queryAction === 'analyze_video_silence' && /^(?:video|audio)\//i.test(request.headers.get('Content-Type') || '');
       const body = request.method === 'POST' && !isBinarySilenceRequest ? await request.json().catch(() => ({})) : {};
       const action = queryAction || body.action || 'status';
       const headers = { ...cors, 'Cache-Control': 'no-store', 'Pragma': 'no-cache' };
@@ -18,13 +18,13 @@ export default {
 
       if (url.pathname === '/generate') return await generateFluxImage(context);
 
-      if (['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'analyze_video_silence', 'consume_generation'].includes(action)) {
+      if (['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'analyze_video_silence', 'detect_viral_clips', 'generate_chapters', 'detect_censor_words', 'consume_generation'].includes(action)) {
         context.access = await enforceGenerationAccess(context);
       }
       if (['list_api_keys', 'revoke_api_key'].includes(action)) context.account = await authenticate(context, true);
 
       switch (action) {
-        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.1.0', features: { raw_video_silence_upload: true }, endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'] }, 200, headers);
+        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.2.0', features: { raw_video_silence_upload: true }, endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'detect_viral_clips', 'generate_chapters', 'detect_censor_words', 'generate_image', 'refine_voiceover'] }, 200, headers);
         case 'get_gemini_keys': case 'get_gemini_key': return json(await getGeminiKeys(env), 200, headers);
         case 'generate_tts': return await generateTts(context);
         case 'generate_text': return await generateText(context);
@@ -34,6 +34,9 @@ export default {
         case 'refine_voiceover': return await refineVoiceover(context);
         case 'transcribe_audio': return await transcribeAudio(context);
         case 'analyze_video_silence': return await analyzeVideoSilence(context);
+        case 'detect_viral_clips': return await detectViralClips(context);
+        case 'generate_chapters': return await generateChapters(context);
+        case 'detect_censor_words': return await detectCensorWords(context);
         case 'proxy_media': return await proxyMedia(context);
         case 'consume_generation': return json({ success: true, remaining: context.access.remaining, plan: context.access.account ? 'free' : 'guest', permit: context.access.permit || undefined }, 200, headers);
         case 'account_status': {
@@ -394,6 +397,47 @@ async function generateText(ctx) {
   const text = await geminiText(ctx, prompt, 2000);
   return text ? json({ success: true, text, response: text }, 200, ctx.headers) : json({ success: false, error: 'تعذر إنشاء النص. تحقق من إعداد Gemini في Cloudflare.' }, 502, ctx.headers);
 }
+async function detectViralClips(ctx) {
+  const transcript = String(ctx.body.transcript || ctx.body.text || '').trim();
+  const durationPref = String(ctx.body.duration_pref || '60-90');
+  if (!transcript) return json({ success: false, error: 'نص الفيديو أو التفريغ فارغ' }, 400, ctx.headers);
+  const prompt = `أنت خبير مونتاج وتسويق فيديو محترف متخصص في استخراج المقاطع الأكثر انتشاراً وفيروسية (Viral Shorts & Reels). قم بتحليل نص الفيديو المرفق، وحدد أفضل المقاطع القصيرة الصالحة لتكون ريلز أو شورتس. أخرج كائن JSON فقط بدون markdown:\n{"clips":[{"title":"عنوان جذاب","hook":"الخطاف","startTime":12.0,"endTime":62.0,"duration":50.0,"viralityScore":95,"category":"تعليمي","reason":"سبب التقييم"}]}\n\nمدة المقطع المفضلة: ${durationPref} ثانية.\n\nنص وتفريغ الفيديو:\n${transcript}`;
+  const rawText = await geminiText(ctx, prompt, 2000);
+  let parsed;
+  try { parsed = JSON.parse(String(rawText || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim()); }
+  catch (_) { return json({ success: false, error: 'تعذر تحليل رد الذكاء الاصطناعي. أعد المحاولة.' }, 502, ctx.headers); }
+  const clips = Array.isArray(parsed?.clips) ? parsed.clips.filter(c => Number.isFinite(Number(c.startTime)) && Number(c.endTime) > Number(c.startTime)) : [];
+  if (!clips.length) return json({ success: false, error: 'لم يتمكن الذكاء الاصطناعي من استخراج مقاطع صالحة من هذا النص.' }, 502, ctx.headers);
+  return json({ success: true, clips, count: clips.length }, 200, ctx.headers);
+}
+async function generateChapters(ctx) {
+  const transcript = String(ctx.body.transcript || ctx.body.text || '').trim();
+  if (!transcript) return json({ success: false, error: 'نص وتفريغ الفيديو فارغ' }, 400, ctx.headers);
+  const prompt = `أنت خبير يوتيوب ومونتاج. قم بتقسيم نص الفيديو المرفق إلى فصول ومواضيع واضحة (YouTube Chapters). يجب أن يبدأ الفصل الأول عند 00:00 (المقدمة). أخرج كائن JSON فقط بدون markdown:\n{"chapters":[{"seconds":0,"timestamp":"00:00","title":"المقدمة"},{"seconds":45,"timestamp":"00:45","title":"عنوان الفصل"}],"formattedText":"00:00 المقدمة\\n00:45 عنوان الفصل"}\n\nنص وتفريغ الفيديو:\n${transcript}`;
+  const rawText = await geminiText(ctx, prompt, 2000);
+  let parsed;
+  try { parsed = JSON.parse(String(rawText || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim()); }
+  catch (_) { return json({ success: false, error: 'تعذر تحليل رد الذكاء الاصطناعي. أعد المحاولة.' }, 502, ctx.headers); }
+  const chapters = Array.isArray(parsed?.chapters) ? parsed.chapters.filter(c => Number.isFinite(Number(c.seconds)) && String(c.title || '').trim()) : [];
+  if (!chapters.length) return json({ success: false, error: 'لم يتمكن الذكاء الاصطناعي من استخراج فصول صالحة من هذا النص.' }, 502, ctx.headers);
+  let formattedText = String(parsed.formattedText || '');
+  if (!formattedText && chapters.length) {
+    formattedText = chapters.map(c => `${c.timestamp || '00:00'} ${c.title || 'فصل'}`).join('\n');
+  }
+  return json({ success: true, chapters, formattedText, count: chapters.length }, 200, ctx.headers);
+}
+async function detectCensorWords(ctx) {
+  const transcript = String(ctx.body.transcript || ctx.body.text || '').trim();
+  const customWords = String(ctx.body.custom_words || ctx.body.words || '').trim();
+  if (!transcript) return json({ success: false, error: 'نص وتفريغ الفيديو فارغ' }, 400, ctx.headers);
+  const prompt = `أنت خبير في مراجعة المحتوى والرقابة الصوتية (Content Moderation & Censor Bleep). قم بفحص النص المرفق واكتشاف أي كلمات مسيئة، شتائم، ألفاظ نابية، أو الكلمات المخصصة التالية: (${customWords}). أخرج كائن JSON فقط بدون markdown:\n{"matches":[{"word":"الكلمة المحظورة","start":14.5,"end":15.2,"reason":"لفظ غير لائق"}]}\n\nنص وتفريغ الفيديو:\n${transcript}`;
+  const rawText = await geminiText(ctx, prompt, 2000);
+  let parsed;
+  try { parsed = JSON.parse(String(rawText || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim()); }
+  catch (_) { return json({ success: false, error: 'تعذر تحليل رد الذكاء الاصطناعي. أعد المحاولة.' }, 502, ctx.headers); }
+  const matches = Array.isArray(parsed?.matches) ? parsed.matches.filter(m => Number.isFinite(Number(m.start)) && Number(m.end) > Number(m.start) && String(m.word || '').trim()) : [];
+  return json({ success: true, matches, count: matches.length }, 200, ctx.headers);
+}
 async function transcribeAudio(ctx) {
   const audio = String(ctx.body.audio_base64 || '').replace(/^data:[^,]+,/, '');
   if (!audio) return json({ success: false, error: 'ملف الصوت غير موجود.' }, 400, ctx.headers);
@@ -428,8 +472,8 @@ async function analyzeVideoSilence(ctx) {
   if (ctx.rawVideoStream ? (!Number.isFinite(videoSize) || videoSize <= 0 || videoSize > 50 * 1024 * 1024) : video.length > 26_700_000) {
     return json({ success: false, error: 'حجم الفيديو أكبر من حد الإرسال الآمن (50 ميجابايت).' }, 413, ctx.headers);
   }
-  if (!/^video\/(?:mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)$/.test(mimeType)) {
-    return json({ success: false, error: 'صيغة الفيديو غير مدعومة لتحليل الصمت.' }, 415, ctx.headers);
+  if (!/^(?:video\/(?:mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)|audio\/(?:wav|x-wav|wave|mpeg|mp3|mp4|m4a|aac|flac|ogg|webm))$/.test(mimeType)) {
+    return json({ success: false, error: 'صيغة الملف غير مدعومة لتحليل الصمت.' }, 415, ctx.headers);
   }
   const start = Number(ctx.rawVideoStream ? ctx.url.searchParams.get('start_seconds') : ctx.body.start_seconds);
   const end = Number(ctx.rawVideoStream ? ctx.url.searchParams.get('end_seconds') : ctx.body.end_seconds);
