@@ -111,6 +111,15 @@
           <span>تفريغ وتحليل الصوت</span>
         </button>
 
+        <button onclick="MickeyStudio.switchTab('autocut-suite')" id="tab-btn-autocut-suite" class="sidebar-nav-item justify-between group">
+          <span class="flex items-center gap-3">
+            <i class="fa-solid fa-scissors text-emerald-400 group-hover:text-emerald-300 transition-colors"></i>
+            <span>استوديو AutoCut</span>
+          </span>
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">جديد ✨</span>
+        </button>
+
+
         <button onclick="MickeyStudio.switchTab('vault-gallery')" id="tab-btn-vault-gallery" class="sidebar-nav-item justify-between">
           <span class="flex items-center gap-3">
             <i class="fa-regular fa-folder"></i>
@@ -1592,6 +1601,421 @@
     <!-- ===============================================================
          STUDIO 6: معرض أعمالي (VAULT GALLERY)
          =============================================================== -->
+    <section id="section-autocut-suite" class="studio-section h-full flex flex-row overflow-hidden hidden">
+      
+      <!-- Left Panel: Controls Column (420px) -->
+      <div class="w-[420px] h-full flex flex-col justify-between border-l border-white/5 bg-[#0E0E11]/70 p-5 overflow-y-auto space-y-5">
+        
+        <div class="space-y-4">
+          
+          <!-- Section Title & Badge -->
+          <div class="flex items-center justify-between pb-2 border-b border-white/5">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <h2 class="text-sm font-bold text-white tracking-wide">استوديو AutoCut المتكامل</h2>
+              </div>
+              <p class="text-[11px] text-zinc-400 mt-0.5">أدوات المونتاج الآلي والزووم والرقابة والريلز الفيروسي</p>
+            </div>
+            <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">PREMIERE PRO & WEB</span>
+          </div>
+
+          <!-- Sub-Studio Selector (6 Modes with PNG Icons) -->
+          <div class="grid grid-cols-3 gap-2 p-1.5 bg-zinc-900/90 rounded-2xl border border-white/5" id="autocut-subtabs-bar">
+            <button type="button" onclick="MickeyStudio.switchAutoCutSubTab('silence')" id="subtab-autocut-silence" class="pill-option active p-2 text-center flex-col text-[11px] transition-all hover:border-emerald-500/40">
+              <img src="assets/icons/autocut/silence.png" alt="قص السكتات" class="w-8 h-8 object-contain mb-1 drop-shadow">
+              <span class="font-bold text-white">قص السكتات</span>
+              <span class="text-[9px] text-emerald-400 font-mono">Silence</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.switchAutoCutSubTab('zoom')" id="subtab-autocut-zoom" class="pill-option p-2 text-center flex-col text-[11px] transition-all hover:border-cyan-500/40">
+              <img src="assets/icons/autocut/zoom.png" alt="الزووم والمؤثرات" class="w-8 h-8 object-contain mb-1 drop-shadow">
+              <span class="font-bold text-white">الزووم</span>
+              <span class="text-[9px] text-cyan-400 font-mono">Zoom SFX</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.switchAutoCutSubTab('censor')" id="subtab-autocut-censor" class="pill-option p-2 text-center flex-col text-[11px] transition-all hover:border-rose-500/40">
+              <img src="assets/icons/autocut/censor.png" alt="حجب الكلمات" class="w-8 h-8 object-contain mb-1 drop-shadow">
+              <span class="font-bold text-white">حجب الكلمات</span>
+              <span class="text-[9px] text-rose-400 font-mono">Censor</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.switchAutoCutSubTab('viral')" id="subtab-autocut-viral" class="pill-option p-2 text-center flex-col text-[11px] transition-all hover:border-amber-500/40">
+              <img src="assets/icons/autocut/viral.png" alt="مقاطع فيروسية" class="w-8 h-8 object-contain mb-1 drop-shadow">
+              <span class="font-bold text-white">ريلز وشورتس</span>
+              <span class="text-[9px] text-amber-400 font-mono">Viral Clips</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.switchAutoCutSubTab('chapters')" id="subtab-autocut-chapters" class="pill-option p-2 text-center flex-col text-[11px] transition-all hover:border-blue-500/40">
+              <img src="assets/icons/autocut/chapters.png" alt="فصول يوتيوب" class="w-8 h-8 object-contain mb-1 drop-shadow">
+              <span class="font-bold text-white">فصول يوتيوب</span>
+              <span class="text-[9px] text-blue-400 font-mono">Chapters</span>
+            </button>
+            <button type="button" onclick="MickeyStudio.switchAutoCutSubTab('multicam')" id="subtab-autocut-multicam" class="pill-option p-2 text-center flex-col text-[11px] transition-all hover:border-purple-500/40">
+              <img src="assets/icons/autocut/multicam.png" alt="بودكاست" class="w-8 h-8 object-contain mb-1 drop-shadow">
+              <span class="font-bold text-white">بودكاست</span>
+              <span class="text-[9px] text-purple-400 font-mono">MultiCam</span>
+            </button>
+          </div>
+
+          <!-- ==========================================
+               SUB-PANEL 1: SILENCE CUTTING
+               ========================================== -->
+          <div id="autocut-web-panel-silence" class="autocut-sub-panel space-y-4">
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-300 leading-relaxed">
+              <i class="fa-solid fa-circle-info ml-1"></i>
+              يحلل الصوت محليًا على جهازك دون رفع الملف. يعرض أوقات السكتات لتراجعها وتنسخها؛ ولتنفيذ القص المتتابع على التايملاين استخدم إضافة Premiere.
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-xs font-medium text-zinc-300 block">ملف الفيديو أو الصوت لتحليله</label>
+              <div onclick="document.getElementById('web-autocut-silence-file').click()" class="border-2 border-dashed border-white/10 hover:border-emerald-500/40 rounded-xl p-4 text-center cursor-pointer bg-zinc-900/40 transition-colors">
+                <i class="fa-solid fa-cloud-arrow-up text-lg text-emerald-400 mb-1"></i>
+                <p id="web-autocut-silence-filename" class="text-xs text-zinc-300 font-medium">اضغط لاختيار ملف أو اسحبه هنا (MP4, MP3, WAV)</p>
+                <p class="text-[10px] text-zinc-500 mt-1">تحليل محلي دون رفع الملف إلى خادم</p>
+                <input type="file" id="web-autocut-silence-file" accept="video/*,audio/*" class="hidden" onchange="MickeyStudio.handleAutoCutFileSelected(this, 'silence')">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="text-zinc-400 block mb-1">عتبة الصوت (Noise Threshold)</label>
+                <select id="web-silence-threshold" class="w-full p-2 text-xs">
+                  <option value="-30">صاخب · -30 dB</option>
+                  <option value="-35" selected>قياسي متوازن · -35 dB</option>
+                  <option value="-40">هادئ · -40 dB</option>
+                  <option value="-45">حساس جداً · -45 dB</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-zinc-400 block mb-1">أدنى مدة للصمت</label>
+                <select id="web-silence-min-duration" class="w-full p-2 text-xs">
+                  <option value="0.2">0.2s (سريع جداً)</option>
+                  <option value="0.3" selected>0.3s (موصى به)</option>
+                  <option value="0.5">0.5s (طبيعي)</option>
+                  <option value="0.8">0.8s (مطول)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="col-span-2">
+                <label class="text-zinc-400 block mb-1">هامش الأمان قبل/بعد الكلام</label>
+                <select id="web-silence-margin" class="w-full p-2 text-xs">
+                  <option value="0.12">0.12s (قطع حاد)</option>
+                  <option value="0.18" selected>0.18s (آمن ومتزن)</option>
+                  <option value="0.25">0.25s (ناعم)</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" onclick="MickeyStudio.runWebAutoCutSilence()" id="btn-run-web-silence" class="btn-primary w-full py-2.5 justify-center text-xs font-semibold gap-2">
+              <i class="fa-solid fa-scissors"></i>
+              <span>تحليل السكتات وتجهيز توقيتاتها</span>
+            </button>
+          </div>
+
+          <!-- ==========================================
+               SUB-PANEL 2: AUTO-ZOOM & SFX
+               ========================================== -->
+          <div id="autocut-web-panel-zoom" class="autocut-sub-panel space-y-4 hidden">
+            <div class="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20 text-[11px] text-cyan-300 leading-relaxed">
+              <i class="fa-solid fa-wand-magic-sparkles ml-1"></i>
+              يُنشئ تقريباً سينمائياً ذكياً مع تطبيق مؤثرات Whoosh وArcade الأصلية لزيادة تفاعل المشاهد وتجنب ملل اللقطات الثابتة.
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-xs font-medium text-zinc-300 block">نوع حركة الزووم السينمائي</label>
+              <select id="web-zoom-type" class="w-full p-2.5 text-xs" onchange="MickeyStudio.updateZoomPreviewType(this.value)">
+                <option value="punch" selected>Punch Zoom (قفزة سريعة وثبات مع Whoosh)</option>
+                <option value="progressive">Progressive (تقريب متدرج ناعم وسلس)</option>
+                <option value="instant">Instant Cut (قطع فوري للتقريب المونتاجي)</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="text-zinc-400 block mb-1">نسبة التكبير (Scale)</label>
+                <select id="web-zoom-scale" class="w-full p-2 text-xs" onchange="MickeyStudio.updateZoomScaleFactor(this.value)">
+                  <option value="115">115% (خفيف وناعم)</option>
+                  <option value="125" selected>125% (مثالي وموصى به)</option>
+                  <option value="135">135% (قوي وملحوظ)</option>
+                  <option value="150">150% (تقريب كبير)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-zinc-400 block mb-1">المؤثر الصوتي المرافق</label>
+                <select id="web-zoom-sfx" class="w-full p-2 text-xs">
+                  <option value="whoosh" selected>Whoosh سينمائي (AutoCut Original)</option>
+                  <option value="arcade">Arcade رقمي (AutoCut Original)</option>
+                  <option value="none">بدون صوت (حركة كاميرا فقط)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Original SFX Audio Preview Deck -->
+            <div class="p-3 bg-zinc-900/60 rounded-xl border border-white/5 space-y-2">
+              <div class="flex items-center justify-between text-[11px] text-zinc-300">
+                <span>🔊 معاينة مؤثرات AutoCut الأصلية:</span>
+                <span class="text-[9px] font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">6 الأصوات المضمنة</span>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="MickeyStudio.playAutoCutAudio('zoom/whoosh_in.wav')" class="btn-secondary py-1.5 px-2 text-[10px] justify-between">
+                  <span>💨 Whoosh In</span>
+                  <i class="fa-solid fa-play text-[9px] text-cyan-400"></i>
+                </button>
+                <button type="button" onclick="MickeyStudio.playAutoCutAudio('zoom/whoosh_out.wav')" class="btn-secondary py-1.5 px-2 text-[10px] justify-between">
+                  <span>💨 Whoosh Out</span>
+                  <i class="fa-solid fa-play text-[9px] text-cyan-400"></i>
+                </button>
+                <button type="button" onclick="MickeyStudio.playAutoCutAudio('zoom/arcade_in.wav')" class="btn-secondary py-1.5 px-2 text-[10px] justify-between">
+                  <span>🕹️ Arcade In</span>
+                  <i class="fa-solid fa-play text-[9px] text-amber-400"></i>
+                </button>
+                <button type="button" onclick="MickeyStudio.playAutoCutAudio('zoom/arcade_out.wav')" class="btn-secondary py-1.5 px-2 text-[10px] justify-between">
+                  <span>🕹️ Arcade Out</span>
+                  <i class="fa-solid fa-play text-[9px] text-amber-400"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="button" onclick="MickeyStudio.simulateWebZoomAnimation()" id="btn-run-web-zoom" class="btn-primary w-full py-2.5 justify-center text-xs font-semibold gap-2">
+              <i class="fa-solid fa-play"></i>
+              <span>معاينة حركة الزووم وتوليد الكي فريمز</span>
+            </button>
+          </div>
+
+          <!-- ==========================================
+               SUB-PANEL 3: BLEEP CENSOR
+               ========================================== -->
+          <div id="autocut-web-panel-censor" class="autocut-sub-panel space-y-4 hidden">
+            <div class="p-3 rounded-lg bg-rose-500/5 border border-rose-500/20 text-[11px] text-rose-300 leading-relaxed">
+              <i class="fa-solid fa-shield-halved ml-1"></i>
+              يكتشف الشتائم والألفاظ النابية والكلمات الحساسة بالذكاء الاصطناعي، ويضع صفارة الرقابة الرسمية في أماكنها بدقة لحماية قناتك من حظر الإعلانات.
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-medium text-zinc-300">نص أو تفريغ الفيديو للفحص</label>
+                <button type="button" onclick="MickeyStudio.importTranscriptToAutoCut('censor')" class="text-[10px] text-cyan-400 hover:text-cyan-300">
+                  <i class="fa-solid fa-arrow-down-long ml-0.5"></i> جلب من التفريغ
+                </button>
+              </div>
+              <textarea id="web-censor-transcript" rows="3" placeholder="اكتب أو الصق نص الفيديو هنا لفحصه واكتشاف الكلمات المحظورة..." class="w-full p-2.5 text-xs"></textarea>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-zinc-300 block">كلمات مخصصة للحجب (مفصولة بفواصل)</label>
+              <input type="text" id="web-censor-custom-words" placeholder="مثال: شتيمة، كلمة سرية، اسم منافس، سباب..." class="w-full p-2.5 text-xs">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="text-zinc-400 block mb-1">نوع الرقابة الصوتية</label>
+                <select id="web-censor-sound-type" class="w-full p-2 text-xs">
+                  <option value="bleep_1" selected>صفارة Bleep 1 (الكلاسيكية)</option>
+                  <option value="bleep_2">صفارة Bleep 2 (الحادة السريعة)</option>
+                  <option value="mute">كتم الصوت فقط (Mute)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-zinc-400 block mb-1">فحص Gemini الذكي</label>
+                <select id="web-censor-ai-toggle" class="w-full p-2 text-xs">
+                  <option value="enabled" selected>مفعل (كشف الألفاظ النابية)</option>
+                  <option value="manual_only">الكلمات المحددة يدوياً فقط</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Bleep Audio Preview Deck -->
+            <div class="p-3 bg-zinc-900/60 rounded-xl border border-white/5 space-y-2">
+              <span class="text-[11px] text-zinc-300 block">📢 معاينة صفارات الرقابة:</span>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="MickeyStudio.playAutoCutAudio('bleep/bleep_1.wav')" class="btn-secondary py-1.5 px-2 text-[10px] justify-between">
+                  <span>🚨 Bleep 1 (Classic)</span>
+                  <i class="fa-solid fa-play text-[9px] text-rose-400"></i>
+                </button>
+                <button type="button" onclick="MickeyStudio.playAutoCutAudio('bleep/bleep_2.wav')" class="btn-secondary py-1.5 px-2 text-[10px] justify-between">
+                  <span>🚨 Bleep 2 (Fast)</span>
+                  <i class="fa-solid fa-play text-[9px] text-rose-400"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="button" onclick="MickeyStudio.runWebAutoCutCensor()" id="btn-run-web-censor" class="btn-primary w-full py-2.5 justify-center text-xs font-semibold gap-2">
+              <i class="fa-solid fa-ban"></i>
+              <span>فحص النص وحجب الكلمات بصفارة الرقابة</span>
+            </button>
+          </div>
+
+          <!-- ==========================================
+               SUB-PANEL 4: VIRAL SHORTS / REELS
+               ========================================== -->
+          <div id="autocut-web-panel-viral" class="autocut-sub-panel space-y-4 hidden">
+            <div class="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-[11px] text-amber-300 leading-relaxed">
+              <i class="fa-solid fa-fire ml-1"></i>
+              يحلل سياق الفيديو ويكتشف اللحظات ذات قابلية الانتشار القصوى (Viral Score)، مع تحديد الخطاف Hook والمقطع المثالي للشورتس والتيك توك.
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-medium text-zinc-300">نص أو تفريغ الفيديو الكامل</label>
+                <button type="button" onclick="MickeyStudio.importTranscriptToAutoCut('viral')" class="text-[10px] text-cyan-400 hover:text-cyan-300">
+                  <i class="fa-solid fa-arrow-down-long ml-0.5"></i> جلب من التفريغ
+                </button>
+              </div>
+              <textarea id="web-viral-transcript" rows="4" placeholder="الصق نص أو تفريغ الفيديو هنا ليقوم الذكاء الاصطناعي باستخراج أفضل مقاطع الشورتس والريلز..." class="w-full p-2.5 text-xs"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="text-zinc-400 block mb-1">المدة المفضلة للمقطع</label>
+                <select id="web-viral-duration" class="w-full p-2 text-xs">
+                  <option value="30-60" selected>30 إلى 60 ثانية (شورتس سريع)</option>
+                  <option value="60-90">60 إلى 90 ثانية (ريلز تفصيلي)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-zinc-400 block mb-1">تركيز الفيروسية</label>
+                <select id="web-viral-focus" class="w-full p-2 text-xs">
+                  <option value="broad" selected>شامل (أعلى تفاعل)</option>
+                  <option value="humor">فكاهي وساخر</option>
+                  <option value="educational">تعليمي ومعلوماتي</option>
+                  <option value="emotional">عاطفي وتشويقي</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" onclick="MickeyStudio.runWebAutoCutViral()" id="btn-run-web-viral" class="btn-primary w-full py-2.5 justify-center text-xs font-semibold gap-2">
+              <i class="fa-solid fa-fire text-amber-400"></i>
+              <span>اكتشاف المقاطع الفيروسية للريلز</span>
+            </button>
+          </div>
+
+          <!-- ==========================================
+               SUB-PANEL 5: YOUTUBE CHAPTERS
+               ========================================== -->
+          <div id="autocut-web-panel-chapters" class="autocut-sub-panel space-y-4 hidden">
+            <div class="p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-blue-300 leading-relaxed">
+              <i class="fa-solid fa-bookmark ml-1"></i>
+              يحلل موضوعات الفيديو ويقسمها إلى فصول يوتيوب موقتة تبدأ من 00:00 جاهزة للنسخ في وصف الفيديو وماركرز Premiere Pro.
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-medium text-zinc-300">نص أو تفريغ الفيديو</label>
+                <button type="button" onclick="MickeyStudio.importTranscriptToAutoCut('chapters')" class="text-[10px] text-cyan-400 hover:text-cyan-300">
+                  <i class="fa-solid fa-arrow-down-long ml-0.5"></i> جلب من التفريغ
+                </button>
+              </div>
+              <textarea id="web-chapters-transcript" rows="5" placeholder="الصق نص أو تفريغ الفيديو لتقسيمه إلى فصول ومواضيع..." class="w-full p-2.5 text-xs"></textarea>
+            </div>
+
+            <button type="button" onclick="MickeyStudio.runWebAutoCutChapters()" id="btn-run-web-chapters" class="btn-primary w-full py-2.5 justify-center text-xs font-semibold gap-2">
+              <i class="fa-solid fa-list-ol"></i>
+              <span>توليد فصول اليوتيوب التلقائية</span>
+            </button>
+          </div>
+
+          <!-- ==========================================
+               SUB-PANEL 6: MULTI-CAM PODCAST
+               ========================================== -->
+          <div id="autocut-web-panel-multicam" class="autocut-sub-panel space-y-4 hidden">
+            <div class="p-3 rounded-lg bg-purple-500/5 border border-purple-500/20 text-[11px] text-purple-300 leading-relaxed">
+              <i class="fa-solid fa-podcast ml-1"></i>
+              مونتاج بودكاست ثنائي ذكي: يحلل من يتحدث بين المضيف والضيف ويبدل زاوية الكاميرا تلقائياً مع جدول زمني للتبديلات.
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="text-zinc-400 block mb-1">مسار المضيف (Host)</label>
+                <select id="web-multicam-host" class="w-full p-2 text-xs">
+                  <option value="0" selected>مسار الصوت 1 (A1)</option>
+                  <option value="1">مسار الصوت 2 (A2)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-zinc-400 block mb-1">مسار الضيف (Guest)</label>
+                <select id="web-multicam-guest" class="w-full p-2 text-xs">
+                  <option value="1" selected>مسار الصوت 2 (A2)</option>
+                  <option value="2">مسار الصوت 3 (A3)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="text-zinc-400 block mb-1">أدنى مدة للبقاء على الكاميرا</label>
+                <select id="web-multicam-min-time" class="w-full p-2 text-xs">
+                  <option value="2">ثانيتان (تبديل سريع)</option>
+                  <option value="3" selected>3 ثوانٍ (متوازن وطبيعي)</option>
+                  <option value="5">5 ثوانٍ (هادئ ووثائقي)</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-zinc-400 block mb-1">طريقة التبديل</label>
+                <select id="web-multicam-mode" class="w-full p-2 text-xs">
+                  <option value="marker" selected>ماركرز بالتبديلات</option>
+                  <option value="cut">قص وتفعيل التراك النشط</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" onclick="MickeyStudio.runWebAutoCutMultiCam()" id="btn-run-web-multicam" class="btn-primary w-full py-2.5 justify-center text-xs font-semibold gap-2">
+              <i class="fa-solid fa-sliders"></i>
+              <span>توليد جدول تبديل كاميرات البودكاست</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Premiere Pro Direct Bridge Hint -->
+        <div class="p-3 bg-zinc-900/50 rounded-xl border border-white/5 flex items-center justify-between text-[11px] text-zinc-400">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🎬</span>
+            <span>تعمل هذه الأدوات أيضاً مباشرة داخل <strong>إضافة بريمير</strong>!</span>
+          </div>
+          <button type="button" onclick="MickeyStudio.copyPremierePairToken()" class="text-emerald-400 hover:text-emerald-300 font-mono text-[10px]">ربط الإضافة ←</button>
+        </div>
+
+      </div>
+
+      <!-- Right Panel: Interactive Visual Results & Canvas -->
+      <div class="flex-1 h-full flex flex-col overflow-hidden bg-[#09090B]">
+        
+        <!-- Results Header -->
+        <div class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-[#0E0E11]/40">
+          <div class="flex items-center gap-2.5">
+            <span id="web-autocut-result-icon" class="text-base">✂️</span>
+            <div>
+              <h3 id="web-autocut-result-title" class="text-xs font-bold text-white">منصة نتائج ومعاينة AutoCut</h3>
+              <p id="web-autocut-result-subtitle" class="text-[10px] text-zinc-400">حدد الأداة وشغّل التحليل لمشاهدة المعاينة المباشرة وتصدير النتائج</p>
+            </div>
+          </div>
+          <div id="web-autocut-actions-toolbar" class="flex items-center gap-2">
+            <!-- Dynamic Actions (Copy, Export EDL, Download) -->
+          </div>
+        </div>
+
+        <!-- Dynamic Results Body -->
+        <div id="web-autocut-result-body" class="flex-1 overflow-y-auto p-6 space-y-4">
+          
+          <!-- Default Empty / Welcome State -->
+          <div id="web-autocut-empty-state" class="h-full flex flex-col items-center justify-center text-center p-8 text-zinc-500 space-y-3">
+            <div class="w-16 h-16 rounded-2xl bg-zinc-900 flex items-center justify-center border border-white/5 text-2xl text-emerald-400">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <div class="max-w-md">
+              <h4 class="text-sm font-semibold text-zinc-300 mb-1">مرحباً بك في استوديو المونتاج الذكي AutoCut</h4>
+              <p class="text-xs text-zinc-400 leading-relaxed">اختر إحدى الأدوات من القائمة الجانبية (قص السكتات، الزووم السينمائي، الرقابة الصوتية، استخراج الريلز الفيروسي، أو فصول اليوتيوب) للبدء في المعالجة الفورية.</p>
+            </div>
+          </div>
+
+          <!-- Dynamic Container for Active Tool Output -->
+          <div id="web-autocut-dynamic-output" class="hidden space-y-4"></div>
+
+        </div>
+
+      </div>
+
+    </section>
+
     <section id="section-vault-gallery" class="studio-section h-full flex flex-col overflow-hidden hidden">
       
       <!-- Top Filters & Search Toolbar -->

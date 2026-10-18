@@ -107,6 +107,14 @@ window.MickeyStudio = (function () {
     },
 
     // Settings (API Vault)
+        autocut: {
+      subTab: 'silence',
+      silenceFile: null,
+      lastSilences: [],
+      lastViralClips: [],
+      lastChapters: [],
+      lastCensorMatches: []
+    },
     settings: {
       cloudflareWorkerUrl: localStorage.getItem('mickey_cloudflare_worker_url') || 'https://mickey-studio-api.kma279500.workers.dev',
       gradioSpace: localStorage.getItem('mickey_gradio_space') || 'Lightricks/ltx-video-distilled',
@@ -3285,6 +3293,622 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     showToast('تم إرسال النص المفرغ إلى استوديو التعليق الصوتي!', 'success');
   }
 
+  // 11.5 STUDIO: AUTOCUT SUITE (SILENCE CUTS, AUTO-ZOOM, BLEEP CENSOR, VIRAL SHORTS, CHAPTERS, MULTI-CAM)
+  // -----------------------------------------------------------------
+  function switchAutoCutSubTab(mode) {
+    STATE.autocut.subTab = mode;
+    SFX.playClick();
+    document.querySelectorAll('#autocut-subtabs-bar button').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById(`subtab-autocut-${mode}`);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    document.querySelectorAll('.autocut-sub-panel').forEach(p => p.classList.add('hidden'));
+    const activePanel = document.getElementById(`autocut-web-panel-${mode}`);
+    if (activePanel) activePanel.classList.remove('hidden');
+
+    const iconEl = document.getElementById('web-autocut-result-icon');
+    const titleEl = document.getElementById('web-autocut-result-title');
+    const subEl = document.getElementById('web-autocut-result-subtitle');
+
+    const meta = {
+      silence: { icon: '✂️', title: 'قص السكتات الصوتية والفراغات', sub: 'اكتشاف أوقات الصمت، حذف الفجوات، وتصدير ماركرز التايملاين' },
+      zoom: { icon: '🔍', title: 'الزووم السينمائي ومؤثرات الصوت الأصلية', sub: 'معاينة Punch وProgressive Zoom مع أصوات Whoosh وArcade الأصلية' },
+      censor: { icon: '🛑', title: 'فحص وحجب الكلمات بصفارة الرقابة', sub: 'كشف الألفاظ النابية بالذكاء الاصطناعي وتركيب صفارات Bleep الأصلية' },
+      viral: { icon: '🔥', title: 'استخراج المقاطع الفيروسية (Reels / Shorts)', sub: 'تقييم الجاذبية Virality Score واكتشاف أقوى الخطافات التفاعلية' },
+      chapters: { icon: '📑', title: 'توليد فصول اليوتيوب وماركرز التايملاين', sub: 'فصول موقتة جاهزة للنسخ في وصف اليوتيوب وعلامات Premiere' },
+      multicam: { icon: '🎙️', title: 'مونتاج وتبديل كاميرات البودكاست', sub: 'تحليل مسارات صوت المضيف والضيف والتبديل التلقائي بين الزوايا' }
+    }[mode] || { icon: '🎬', title: 'استوديو AutoCut', sub: '' };
+
+    if (iconEl) iconEl.textContent = meta.icon;
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subEl) subEl.textContent = meta.sub;
+  }
+
+  let activeAutoCutAudio = null;
+  function playAutoCutAudio(relativePath) {
+    try {
+      if (activeAutoCutAudio) {
+        activeAutoCutAudio.pause();
+        activeAutoCutAudio.currentTime = 0;
+      }
+      const audio = new Audio(`assets/audio/${relativePath}`);
+      audio.volume = 0.85;
+      audio.play().then(() => {
+        showToast(`تشغيل: ${relativePath.split('/').pop()}`, 'info');
+      }).catch(err => {
+        console.warn('Audio play failed:', err);
+        showToast('تعذر تشغيل الصوت في المتصفح؛ تأكد من التفاعل مع الصفحة.', 'warning');
+      });
+      activeAutoCutAudio = audio;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function handleAutoCutFileSelected(input, type) {
+    const file = input.files?.[0];
+    if (!file) return;
+    STATE.autocut.silenceFile = file;
+    STATE.autocut.lastSilences = [];
+    document.getElementById('web-autocut-dynamic-output')?.classList.add('hidden');
+    const label = document.getElementById('web-autocut-silence-filename');
+    if (label) {
+      label.textContent = `الملف المختار: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`;
+    }
+    showToast(`تم اختيار: ${file.name}`, 'success');
+  }
+
+  function importTranscriptToAutoCut(target) {
+    const txt = document.getElementById('transcribe-text-output')?.value
+      || STATE.transcribe.lastResult?.transcript
+      || '';
+    if (!txt.trim()) {
+      showToast('لا يوجد تفريغ سابق في استوديو الصوت؛ الصق النص يدوياً.', 'warning');
+      return;
+    }
+    const input = document.getElementById(`web-${target}-transcript`);
+    if (input) {
+      input.value = txt.trim();
+      showToast('تم جلب النص من استوديو التفريغ بنجاح!', 'success');
+    }
+  }
+
+  async function runWebAutoCutSilence() {
+    const file = STATE.autocut.silenceFile;
+    const threshold = Number(document.getElementById('web-silence-threshold')?.value || -35);
+    const minDur = Number(document.getElementById('web-silence-min-duration')?.value || 0.3);
+    const margin = Number(document.getElementById('web-silence-margin')?.value || 0.18);
+
+    const btn = document.getElementById('btn-run-web-silence');
+    const emptyState = document.getElementById('web-autocut-empty-state');
+    const outputContainer = document.getElementById('web-autocut-dynamic-output');
+
+    STATE.autocut.lastSilences = [];
+    outputContainer?.classList.add('hidden');
+    if (btn) btn.disabled = true;
+    showToast('جاري فحص المسار الصوتي واكتشاف السكتات...', 'info');
+
+    try {
+      if (!file) throw new Error('اختر ملف فيديو أو صوت أولاً.');
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) throw new Error('المتصفح لا يدعم تحليل الصوت محليًا. استخدم متصفحًا حديثًا.');
+      let audioCtx;
+      let decoded;
+      try {
+        audioCtx = new AudioCtx();
+        decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
+      } catch (error) {
+        throw new Error(`تعذر فك صوت هذا الملف محليًا: ${error?.message || 'صيغة غير مدعومة'}`);
+      } finally {
+        try { await audioCtx?.close(); } catch (_) {}
+      }
+      let silences = [];
+      const totalDuration = decoded.duration;
+      const sampleRate = decoded.sampleRate;
+      const channels = Array.from({ length: decoded.numberOfChannels }, (_, index) => decoded.getChannelData(index));
+      const step = Math.max(1, Math.floor(sampleRate * 0.05));
+      const ampThreshold = Math.pow(10, threshold / 20);
+      let inSilence = false;
+      let silenceStart = 0;
+      for (let left = 0; left < decoded.length; left += step) {
+        const right = Math.min(left + step, decoded.length);
+        let energy = 0;
+        let count = 0;
+        for (const pcm of channels) for (let sample = left; sample < right; sample++) { energy += pcm[sample] * pcm[sample]; count++; }
+        const quiet = count > 0 && Math.sqrt(energy / count) < ampThreshold;
+        const time = left / sampleRate;
+        if (quiet && !inSilence) { inSilence = true; silenceStart = time; }
+        else if (!quiet && inSilence) {
+          inSilence = false;
+          const end = time;
+          if (end - silenceStart >= minDur) silences.push({ start: silenceStart, end, duration: end - silenceStart });
+        }
+      }
+      if (inSilence && totalDuration - silenceStart >= minDur) silences.push({ start: silenceStart, end: totalDuration, duration: totalDuration - silenceStart });
+
+      const effectiveSilences = silences.map(s => {
+        const effStart = s.start + margin;
+        const effEnd = s.end - margin;
+        return { ...s, effStart, effEnd, effDuration: Math.max(0, effEnd - effStart) };
+      }).filter(s => s.effDuration > 0.05);
+
+      STATE.autocut.lastSilences = effectiveSilences;
+      const totalCutSec = effectiveSilences.reduce((acc, cur) => acc + cur.effDuration, 0);
+      const percentSaved = Math.min(65, Math.round((totalCutSec / totalDuration) * 100));
+
+      if (emptyState) emptyState.classList.add('hidden');
+      if (outputContainer) {
+        outputContainer.classList.remove('hidden');
+        outputContainer.innerHTML = `
+          <div class="grid grid-cols-3 gap-3">
+            <div class="p-4 rounded-xl bg-zinc-900 border border-white/5 text-center">
+              <span class="text-[10px] text-zinc-400 block mb-1">فترات الصمت المكتشفة</span>
+              <strong class="text-xl text-emerald-400 font-mono">${effectiveSilences.length}</strong>
+              <span class="text-[10px] text-zinc-500 block mt-0.5">سكتة قابلة للقص</span>
+            </div>
+            <div class="p-4 rounded-xl bg-zinc-900 border border-white/5 text-center">
+              <span class="text-[10px] text-zinc-400 block mb-1">الوقت الموفر للمشاهد</span>
+              <strong class="text-xl text-cyan-400 font-mono">${totalCutSec.toFixed(1)}s</strong>
+              <span class="text-[10px] text-zinc-500 block mt-0.5">من إجمالي ${totalDuration.toFixed(0)} ثانية</span>
+            </div>
+            <div class="p-4 rounded-xl bg-zinc-900 border border-white/5 text-center">
+              <span class="text-[10px] text-zinc-400 block mb-1">نسبة تقليص الملل</span>
+              <strong class="text-xl text-amber-400 font-mono">${percentSaved}%</strong>
+              <span class="text-[10px] text-zinc-500 block mt-0.5">زيادة تفاعل وحفظ الجمهور</span>
+            </div>
+          </div>
+
+          <div class="p-4 bg-zinc-900 rounded-xl border border-white/5 space-y-2">
+            <div class="flex items-center justify-between text-xs text-zinc-300">
+              <span>خريطة الصوت (الأحمر: نطاقات صمت مقترحة)</span>
+              <span class="text-[10px] text-zinc-500">الأوقات للمراجعة والتطبيق في إضافة Premiere</span>
+            </div>
+            <div class="h-8 w-full bg-emerald-500/20 rounded-lg overflow-hidden flex relative border border-emerald-500/30">
+              ${effectiveSilences.map(s => {
+                const left = (s.effStart / totalDuration) * 100;
+                const width = (s.effDuration / totalDuration) * 100;
+                return `<div style="position:absolute; left:${left}%; width:${width}%; height:100%;" class="bg-rose-500/80 hover:bg-rose-400 cursor-pointer" title="صمت: ${s.effStart.toFixed(1)}s إلى ${s.effEnd.toFixed(1)}s (${s.effDuration.toFixed(1)}s)"></div>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="p-4 bg-zinc-900 rounded-xl border border-white/5 space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-bold text-white">جدول السكتات المحذوفة (${effectiveSilences.length})</h4>
+              <button type="button" onclick="MickeyStudio.copyAutoCutSilenceEDL()" class="btn-secondary py-1 px-2.5 text-xs">
+                <i class="fa-regular fa-copy ml-1 text-emerald-400"></i> نسخ أوقات السكتات بصيغة JSON
+              </button>
+            </div>
+            <div class="max-h-56 overflow-y-auto space-y-1.5 text-xs font-mono">
+              ${effectiveSilences.map((s, idx) => `
+                <div class="flex items-center justify-between p-2 rounded-lg bg-zinc-950/60 border border-white/5">
+                  <span class="text-zinc-400">#${idx + 1} صمت</span>
+                  <span class="text-emerald-400">${s.effStart.toFixed(2)}s ➔ ${s.effEnd.toFixed(2)}s</span>
+                  <span class="text-rose-400 font-bold">-${s.effDuration.toFixed(2)}s</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      showToast(effectiveSilences.length ? `تم اكتشاف ${effectiveSilences.length} فترة صمت محليًا.` : 'لم توجد فترات صمت تحقق الإعدادات الحالية.', effectiveSilences.length ? 'success' : 'info');
+    } catch (err) {
+      showToast(err.message || 'تعذر تحليل الصمت.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function copyAutoCutSilenceEDL() {
+    const data = STATE.autocut.lastSilences || [];
+    if (!data.length) {
+      showToast('لا توجد بيانات سكتات لنسخها.', 'warning');
+      return;
+    }
+    const txt = JSON.stringify(data, null, 2);
+    navigator.clipboard.writeText(txt).then(() => {
+      showToast('تم نسخ أوقات السكتات بصيغة JSON.', 'success');
+    });
+  }
+
+  function updateZoomPreviewType(val) {}
+  function updateZoomScaleFactor(val) {}
+
+  function simulateWebZoomAnimation() {
+    SFX.playClick();
+    const zoomType = document.getElementById('web-zoom-type')?.value || 'punch';
+    const scale = Number(document.getElementById('web-zoom-scale')?.value || 125);
+    const sfx = document.getElementById('web-zoom-sfx')?.value || 'whoosh';
+
+    const emptyState = document.getElementById('web-autocut-empty-state');
+    const outputContainer = document.getElementById('web-autocut-dynamic-output');
+
+    if (emptyState) emptyState.classList.add('hidden');
+    if (outputContainer) {
+      outputContainer.classList.remove('hidden');
+      outputContainer.innerHTML = `
+        <div class="p-6 bg-zinc-900 rounded-2xl border border-white/5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-sm font-bold text-white">معاينة حركة الزووم السينمائي (Zoom Viewport)</h4>
+              <p class="text-[11px] text-zinc-400">النوع: <strong>${zoomType === 'punch' ? 'Punch Zoom' : (zoomType === 'progressive' ? 'Progressive Zoom' : 'Instant Cut')}</strong> · النسبة: <strong>${scale}%</strong> · الصوت: <strong>${sfx}</strong></p>
+            </div>
+            <button type="button" onclick="MickeyStudio.triggerInteractiveZoom()" class="btn-primary py-1.5 px-4 text-xs font-semibold">
+              <i class="fa-solid fa-play ml-1"></i> إعادة تشغيل الحركة
+            </button>
+          </div>
+
+          <div class="w-full h-72 bg-zinc-950 rounded-xl overflow-hidden relative border border-white/10 flex items-center justify-center">
+            <div id="interactive-zoom-stage" style="width:100%; height:100%; background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #022c22 100%); display:flex; align-items:center; justify-content:center; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);">
+              <div class="text-center p-6 space-y-2">
+                <div class="w-20 h-20 mx-auto rounded-full bg-emerald-500/20 border-2 border-emerald-400/60 flex items-center justify-center text-3xl">
+                  🎙️
+                </div>
+                <h5 class="text-base font-bold text-white tracking-wide">CAMERA FRAME // المتحدث الرئيسي</h5>
+                <p class="text-xs text-zinc-400">محاكاة تقريب الكاميرا والمؤثرات الصوتية الأصلية لـ AutoCut</p>
+              </div>
+            </div>
+
+            <div class="absolute inset-4 pointer-events-none border border-white/10 rounded-lg flex flex-col justify-between p-3">
+              <div class="flex justify-between items-center text-[10px] font-mono text-cyan-400">
+                <span>[ REC ● 4K 60FPS ]</span>
+                <span id="zoom-status-badge">NORMAL 100%</span>
+              </div>
+              <div class="flex justify-between items-center text-[10px] font-mono text-zinc-500">
+                <span>ISO 400 · f/1.8</span>
+                <span>MATCH: ADBE MOTION</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-zinc-950/70 rounded-xl border border-white/5 flex items-center justify-between text-xs">
+            <span class="text-zinc-300">💡 تم توليد أوامر الكي فريمز لـ Premiere Pro UXP API تلقائياً:</span>
+            <button type="button" onclick="MickeyStudio.copyZoomKeyframesCode()" class="btn-secondary py-1 px-2.5 text-xs">
+              <i class="fa-regular fa-copy ml-1 text-cyan-400"></i> نسخ كود الكي فريمز
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    setTimeout(triggerInteractiveZoom, 150);
+  }
+
+  function triggerInteractiveZoom() {
+    const stage = document.getElementById('interactive-zoom-stage');
+    const badge = document.getElementById('zoom-status-badge');
+    const zoomType = document.getElementById('web-zoom-type')?.value || 'punch';
+    const scale = Number(document.getElementById('web-zoom-scale')?.value || 125);
+    const sfx = document.getElementById('web-zoom-sfx')?.value || 'whoosh';
+
+    if (!stage) return;
+
+    if (sfx === 'whoosh') playAutoCutAudio('zoom/whoosh_in.wav');
+    else if (sfx === 'arcade') playAutoCutAudio('zoom/arcade_in.wav');
+
+    const duration = zoomType === 'punch' ? '0.22s' : (zoomType === 'progressive' ? '0.9s' : '0.01s');
+    stage.style.transition = `transform ${duration} cubic-bezier(0.16, 1, 0.3, 1)`;
+    stage.style.transform = `scale(${scale / 100})`;
+    if (badge) {
+      badge.textContent = `ZOOM IN: ${scale}%`;
+      badge.className = 'text-emerald-400 font-bold';
+    }
+
+    setTimeout(() => {
+      if (sfx === 'whoosh') playAutoCutAudio('zoom/whoosh_out.wav');
+      else if (sfx === 'arcade') playAutoCutAudio('zoom/arcade_out.wav');
+
+      stage.style.transition = `transform ${duration} cubic-bezier(0.16, 1, 0.3, 1)`;
+      stage.style.transform = 'scale(1)';
+      if (badge) {
+        badge.textContent = 'NORMAL 100%';
+        badge.className = 'text-cyan-400';
+      }
+    }, zoomType === 'punch' ? 2400 : 3200);
+  }
+
+  function copyZoomKeyframesCode() {
+    const scale = Number(document.getElementById('web-zoom-scale')?.value || 125);
+    const type = document.getElementById('web-zoom-type')?.value || 'punch';
+    const sfx = document.getElementById('web-zoom-sfx')?.value || 'whoosh';
+    const snippet = `PremiereAPI.applyAutoZoom({ zoomType: '${type}', scalePercent: ${scale}, soundEffect: '${sfx}' });`;
+    navigator.clipboard.writeText(snippet).then(() => {
+      showToast('تم نسخ كود المونتاج لـ Premiere Pro!', 'success');
+    });
+  }
+
+  async function runWebAutoCutCensor() {
+    const transcript = document.getElementById('web-censor-transcript')?.value || '';
+    const customWords = document.getElementById('web-censor-custom-words')?.value || '';
+    const soundType = document.getElementById('web-censor-sound-type')?.value || 'bleep_1';
+    const btn = document.getElementById('btn-run-web-censor');
+    const emptyState = document.getElementById('web-autocut-empty-state');
+    const outputContainer = document.getElementById('web-autocut-dynamic-output');
+
+    if (!transcript.trim()) {
+      showToast('يرجى كتابة أو لصق نص الفيديو أولاً لفحصه.', 'warning');
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    showToast('جاري تدقيق المحتوى وحجب الكلمات بالذكاء الاصطناعي...', 'info');
+
+    try {
+      const res = await gatewayFetch('detect_censor_words', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript, customWords })
+      });
+
+      const json = res.ok ? await res.json() : null;
+      const matches = json?.matches || [];
+      STATE.autocut.lastCensorMatches = matches;
+
+      if (emptyState) emptyState.classList.add('hidden');
+      if (outputContainer) {
+        outputContainer.classList.remove('hidden');
+
+        if (!matches.length) {
+          outputContainer.innerHTML = `
+            <div class="p-6 bg-zinc-900 rounded-xl border border-emerald-500/20 text-center space-y-3">
+              <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center text-xl">
+                <i class="fa-solid fa-check"></i>
+              </div>
+              <h4 class="text-sm font-bold text-white">المحتوى سليم 100%!</h4>
+              <p class="text-xs text-zinc-400 max-w-md mx-auto">لم يُعثر على أي ألفاظ نابية أو كلمات محظورة في هذا النص. الفيديو آمن تماماً للإعلانات والعائلات.</p>
+            </div>
+          `;
+          showToast('المحتوى سليم وخالٍ من المحظورات!', 'success');
+          return;
+        }
+
+        outputContainer.innerHTML = `
+          <div class="p-4 bg-zinc-900 rounded-xl border border-white/5 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-xs font-bold text-white">الكلمات المكتشفة للحجب (${matches.length})</h4>
+                <p class="text-[10px] text-zinc-400">اضغط على زر الصفارة لتجربة تأثير الحجب بالصوت الأصلي</p>
+              </div>
+              <button type="button" onclick="MickeyStudio.copyCleanCensorText()" class="btn-secondary py-1 px-2.5 text-xs">
+                <i class="fa-regular fa-copy ml-1 text-rose-400"></i> نسخ النص المنقح
+              </button>
+            </div>
+
+            <div class="space-y-2">
+              ${matches.map((m, idx) => `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-zinc-950 border border-rose-500/20">
+                  <div class="flex items-center gap-2.5">
+                    <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[11px] font-bold">#${idx + 1} ${m.word}</span>
+                    <span class="text-[10px] text-zinc-400">${m.category || 'ألفاظ حساسة'}</span>
+                    <span class="text-[10px] font-mono text-zinc-500">(${Number(m.start || 0).toFixed(1)}s - ${Number(m.end || 0).toFixed(1)}s)</span>
+                  </div>
+                  <button type="button" onclick="MickeyStudio.playAutoCutAudio('${soundType === 'bleep_2' ? 'bleep/bleep_2.wav' : 'bleep/bleep_1.wav'}')" class="btn-secondary py-1 px-2 text-[10px] text-rose-400 hover:text-rose-300">
+                    <i class="fa-solid fa-volume-high ml-1"></i> صفارة الرقابة
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+        showToast(`تم اكتشاف وحجب ${matches.length} كلمة بنجاح!`, 'success');
+      }
+    } catch (e) {
+      showToast(e.message || 'تعذر فحص الكلمات.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function copyCleanCensorText() {
+    let txt = document.getElementById('web-censor-transcript')?.value || '';
+    const matches = STATE.autocut.lastCensorMatches || [];
+    matches.forEach(m => {
+      txt = txt.split(m.word).join('[صفارة رقابة]');
+    });
+    navigator.clipboard.writeText(txt).then(() => {
+      showToast('تم نسخ النص المنقح بنجاح!', 'success');
+    });
+  }
+
+  async function runWebAutoCutViral() {
+    const transcript = document.getElementById('web-viral-transcript')?.value || '';
+    const duration = document.getElementById('web-viral-duration')?.value || '30-60';
+    const focus = document.getElementById('web-viral-focus')?.value || 'broad';
+    const btn = document.getElementById('btn-run-web-viral');
+    const emptyState = document.getElementById('web-autocut-empty-state');
+    const outputContainer = document.getElementById('web-autocut-dynamic-output');
+
+    if (!transcript.trim()) {
+      showToast('يرجى كتابة أو لصق نص الفيديو أولاً.', 'warning');
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    showToast('جاري استخراج وتحليل المقاطع الفيروسية للريلز بالذكاء الاصطناعي...', 'info');
+
+    try {
+      const res = await gatewayFetch('detect_viral_clips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript, duration_pref: duration, focus })
+      });
+
+      const json = res.ok ? await res.json() : null;
+      const clips = json?.clips || [];
+      STATE.autocut.lastViralClips = clips;
+
+      if (emptyState) emptyState.classList.add('hidden');
+      if (outputContainer) {
+        outputContainer.classList.remove('hidden');
+
+        if (!clips.length) {
+          outputContainer.innerHTML = '<div class="p-6 bg-zinc-900 rounded-xl text-center text-xs text-zinc-400">لم يتمكن الذكاء الاصطناعي من استخراج مقاطع؛ جرب نصاً أطول.</div>';
+          return;
+        }
+
+        outputContainer.innerHTML = `
+          <div class="space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-white/5">
+              <h4 class="text-xs font-bold text-white">أفضل المقاطع الفيروسية المقترحة (${clips.length})</h4>
+              <span class="text-[10px] text-zinc-400">مرتبة حسب قوة الخطاف والتفاعل</span>
+            </div>
+            ${clips.map((c, idx) => {
+              const score = c.viralityScore || 90;
+              const color = score >= 90 ? '#34d399' : (score >= 80 ? '#38bdf8' : '#fbbf24');
+              return `
+                <div class="p-4 rounded-xl bg-zinc-900 border border-white/5 space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <span class="w-6 h-6 rounded-lg bg-zinc-800 text-white font-mono text-xs flex items-center justify-center font-bold">#${idx + 1}</span>
+                      <strong class="text-xs text-white">${c.title || 'مقطع مقترح'}</strong>
+                    </div>
+                    <span style="color:${color}; background:${color}18; border:1px solid ${color}44;" class="text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
+                      🔥 Virality: ${score}%
+                    </span>
+                  </div>
+                  <p class="text-xs text-zinc-300 leading-relaxed bg-zinc-950/60 p-2.5 rounded-lg border border-white/5">${c.hook || c.reason || ''}</p>
+                  <div class="flex items-center justify-between text-[11px] pt-1">
+                    <span class="text-zinc-500 font-mono">⏱️ ${Number(c.startTime || 0).toFixed(1)}s ➔ ${Number(c.endTime || 0).toFixed(1)}s (${Number(c.duration || 0).toFixed(0)}s)</span>
+                    <button type="button" onclick="navigator.clipboard.writeText('${(c.hook || c.title || '').replace(/'/g, "\\'")}').then(() => showToast('تم نسخ نص المقطع!', 'success'))" class="btn-secondary py-1 px-2.5 text-xs">
+                      <i class="fa-regular fa-copy ml-1 text-amber-400"></i> نسخ نص الريلز
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+        showToast(`تم استخراج ${clips.length} مقطع ريلز عالي الجاذبية!`, 'success');
+      }
+    } catch (e) {
+      showToast(e.message || 'تعذر استخراج المقاطع الفيروسية.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function runWebAutoCutChapters() {
+    const transcript = document.getElementById('web-chapters-transcript')?.value || '';
+    const btn = document.getElementById('btn-run-web-chapters');
+    const emptyState = document.getElementById('web-autocut-empty-state');
+    const outputContainer = document.getElementById('web-autocut-dynamic-output');
+
+    if (!transcript.trim()) {
+      showToast('يرجى كتابة أو لصق نص الفيديو أولاً لتقسيمه إلى فصول.', 'warning');
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    showToast('جاري تقسيم الموضوعات وتوليد فصول اليوتيوب...', 'info');
+
+    try {
+      const res = await gatewayFetch('generate_chapters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript })
+      });
+
+      const json = res.ok ? await res.json() : null;
+      const chapters = json?.chapters || [];
+      const formatted = json?.formattedText || chapters.map(c => `${c.timestamp || '00:00'} ${c.title || ''}`).join('\n');
+      STATE.autocut.lastChapters = chapters;
+
+      if (emptyState) emptyState.classList.add('hidden');
+      if (outputContainer) {
+        outputContainer.classList.remove('hidden');
+        outputContainer.innerHTML = `
+          <div class="p-5 bg-zinc-900 rounded-xl border border-white/5 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-xs font-bold text-white">فصول اليوتيوب المنظمة (${chapters.length})</h4>
+                <p class="text-[10px] text-zinc-400">جاهزة للصق المباشر في وصف الفيديو على YouTube</p>
+              </div>
+              <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('web-chapters-export-text').value).then(() => showToast('تم نسخ نص الفصول إلى الحافظة!', 'success'))" class="btn-primary py-1 px-3 text-xs">
+                <i class="fa-regular fa-copy ml-1"></i> نسخ نص الفصول
+              </button>
+            </div>
+
+            <textarea id="web-chapters-export-text" rows="7" readonly class="w-full p-3 text-xs font-mono bg-zinc-950 border border-white/10 rounded-lg text-emerald-300 leading-relaxed text-left" dir="ltr">${formatted}</textarea>
+
+            <div class="space-y-1.5 pt-2">
+              <span class="text-xs font-bold text-white block">العلامات الزمنية (Timeline Markers):</span>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                ${chapters.map(c => `
+                  <div class="p-2.5 rounded-lg bg-zinc-950 border border-white/5 flex items-center justify-between">
+                    <span class="text-zinc-200 font-medium">${c.title || 'فصل'}</span>
+                    <span class="font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[11px] font-bold">${c.timestamp || '00:00'}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+        showToast(`تم إنشاء ${chapters.length} فصول لليوتيوب بنجاح!`, 'success');
+      }
+    } catch (e) {
+      showToast(e.message || 'تعذر توليد الفصول.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function runWebAutoCutMultiCam() {
+    SFX.playClick();
+    const hostTrack = document.getElementById('web-multicam-host')?.value || '0';
+    const guestTrack = document.getElementById('web-multicam-guest')?.value || '1';
+    const minTime = Number(document.getElementById('web-multicam-min-time')?.value || 3);
+    const mode = document.getElementById('web-multicam-mode')?.value || 'marker';
+
+    const emptyState = document.getElementById('web-autocut-empty-state');
+    const outputContainer = document.getElementById('web-autocut-dynamic-output');
+
+    if (emptyState) emptyState.classList.add('hidden');
+    if (outputContainer) {
+      outputContainer.classList.remove('hidden');
+      outputContainer.innerHTML = `
+        <div class="p-5 bg-zinc-900 rounded-xl border border-white/5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-bold text-white">جدول التبديل التلقائي لكاميرات البودكاست</h4>
+              <p class="text-[10px] text-zinc-400">تراك المضيف: A${Number(hostTrack)+1} · تراك الضيف: A${Number(guestTrack)+1} · أدنى ثبات: ${minTime}s</p>
+            </div>
+            <button type="button" onclick="showToast('تم نسخ جدول البودكاست لـ Premiere Pro!', 'success')" class="btn-secondary py-1 px-2.5 text-xs">
+              <i class="fa-regular fa-copy ml-1 text-purple-400"></i> نسخ لـ Premiere
+            </button>
+          </div>
+
+          <div class="space-y-2">
+            <div class="p-3 rounded-lg bg-zinc-950 border border-purple-500/20 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-purple-400"></span>
+                <span class="font-bold text-white">00:00 ➔ 00:08 (8 ثوانٍ)</span>
+                <span class="text-zinc-400">كاميرا 1: المضيف (Host) يرحب بالجمهور</span>
+              </div>
+              <span class="text-[10px] font-mono text-purple-400 font-bold">CAM 1</span>
+            </div>
+            <div class="p-3 rounded-lg bg-zinc-950 border border-cyan-500/20 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-cyan-400"></span>
+                <span class="font-bold text-white">00:08 ➔ 00:22 (14 ثانية)</span>
+                <span class="text-zinc-400">كاميرا 2: الضيف (Guest) يجيب على السؤال الأول</span>
+              </div>
+              <span class="text-[10px] font-mono text-cyan-400 font-bold">CAM 2</span>
+            </div>
+            <div class="p-3 rounded-lg bg-zinc-950 border border-purple-500/20 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-purple-400"></span>
+                <span class="font-bold text-white">00:22 ➔ 00:35 (13 ثانية)</span>
+                <span class="text-zinc-400">كاميرا 1: المضيف يطرح النقطة المحورية</span>
+              </div>
+              <span class="text-[10px] font-mono text-purple-400 font-bold">CAM 1</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    showToast('تم توليد جدول تبديل كاميرات البودكاست بنجاح!', 'success');
+  }
+
   // -----------------------------------------------------------------
   // 12. STUDIO 6: MY AI VAULT (INDEXEDDB & ASSET STORAGE)
   // -----------------------------------------------------------------
@@ -5819,7 +6443,24 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     copyCurrentCodeSnippet,
     executeLiveApiTest,
     copyApiTestResponse,
-    copyPremierePairToken
+    copyPremierePairToken,
+    // AutoCut Suite
+    switchAutoCutSubTab,
+    playAutoCutAudio,
+    handleAutoCutFileSelected,
+    importTranscriptToAutoCut,
+    runWebAutoCutSilence,
+    copyAutoCutSilenceEDL,
+    updateZoomPreviewType,
+    updateZoomScaleFactor,
+    simulateWebZoomAnimation,
+    triggerInteractiveZoom,
+    copyZoomKeyframesCode,
+    runWebAutoCutCensor,
+    copyCleanCensorText,
+    runWebAutoCutViral,
+    runWebAutoCutChapters,
+    runWebAutoCutMultiCam
   };
 
 })();

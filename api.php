@@ -27,7 +27,7 @@ $FIREBASE_WEB_API_KEY = 'AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg';
 
 // Parse incoming request parameters (GET or JSON POST)
 $rawInput = file_get_contents('php://input');
-$isBinaryQuickCutRequest = ($_GET['action'] ?? '') === 'analyze_video_silence' && preg_match('/^video\//i', $_SERVER['CONTENT_TYPE'] ?? '');
+$isBinaryQuickCutRequest = ($_GET['action'] ?? '') === 'analyze_video_silence' && preg_match('/^(?:video|audio)\//i', $_SERVER['CONTENT_TYPE'] ?? '');
 $postData = $isBinaryQuickCutRequest ? [
     'action' => 'analyze_video_silence',
     '_video_binary' => $rawInput,
@@ -1265,8 +1265,8 @@ function handleAnalyzeVideoSilence($data) {
     if ($rawVideoBytes === null && $videoBase64 === '') sendJsonResponse(400, ['success' => false, 'error' => 'ملف الفيديو غير موجود.']);
     if ($rawVideoBytes !== null && strlen($rawVideoBytes) > 50 * 1024 * 1024) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (50 ميجابايت).']);
     if ($rawVideoBytes === null && strlen($videoBase64) > 26700000) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (20 ميجابايت).']);
-    if (!preg_match('/^video\/(mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)$/', $mimeType)) {
-        sendJsonResponse(415, ['success' => false, 'error' => 'صيغة الفيديو غير مدعومة لتحليل الصمت.']);
+    if (!preg_match('/^(?:video\/(mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)|audio\/(wav|x-wav|wave|mpeg|mp3|mp4|m4a|aac|flac|ogg))$/i', $mimeType)) {
+        sendJsonResponse(415, ['success' => false, 'error' => 'صيغة الملف غير مدعومة لتحليل الصمت.']);
     }
     $start = filter_var($data['start_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
     $end = filter_var($data['end_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
