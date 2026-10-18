@@ -1661,7 +1661,7 @@
           <div id="autocut-web-panel-silence" class="autocut-sub-panel space-y-4">
             <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-300 leading-relaxed">
               <i class="fa-solid fa-circle-info ml-1"></i>
-              يحلل الصوت محليًا على جهازك دون رفع الملف. يعرض أوقات السكتات لتراجعها وتنسخها؛ ولتنفيذ القص المتتابع على التايملاين استخدم إضافة Premiere.
+              يرسل الملف إلى خادم Mickey Studio لتحليل الصوت سحابيًا عبر Gemini. يعرض أوقات السكتات لتراجعها وتنسخها؛ ولتنفيذ القص المتتابع على التايملاين استخدم إضافة Premiere. الحد الأقصى 50 MB و6 دقائق.
             </div>
 
             <div class="space-y-2">
@@ -1669,7 +1669,7 @@
               <div onclick="document.getElementById('web-autocut-silence-file').click()" class="border-2 border-dashed border-white/10 hover:border-emerald-500/40 rounded-xl p-4 text-center cursor-pointer bg-zinc-900/40 transition-colors">
                 <i class="fa-solid fa-cloud-arrow-up text-lg text-emerald-400 mb-1"></i>
                 <p id="web-autocut-silence-filename" class="text-xs text-zinc-300 font-medium">اضغط لاختيار ملف أو اسحبه هنا (MP4, MP3, WAV)</p>
-                <p class="text-[10px] text-zinc-500 mt-1">تحليل محلي دون رفع الملف إلى خادم</p>
+                <p class="text-[10px] text-zinc-500 mt-1">يرتفع الملف عبر اتصال مشفّر لتحليله سحابيًا</p>
                 <input type="file" id="web-autocut-silence-file" accept="video/*,audio/*" class="hidden" onchange="MickeyStudio.handleAutoCutFileSelected(this, 'silence')">
               </div>
             </div>

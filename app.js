@@ -3389,41 +3389,35 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
     try {
       if (!file) throw new Error('اختر ملف فيديو أو صوت أولاً.');
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) throw new Error('المتصفح لا يدعم تحليل الصوت محليًا. استخدم متصفحًا حديثًا.');
-      let audioCtx;
-      let decoded;
-      try {
-        audioCtx = new AudioCtx();
-        decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
-      } catch (error) {
-        throw new Error(`تعذر فك صوت هذا الملف محليًا: ${error?.message || 'صيغة غير مدعومة'}`);
-      } finally {
-        try { await audioCtx?.close(); } catch (_) {}
+      if (file.size > 50 * 1024 * 1024) throw new Error('الحد الأقصى للرفع السحابي 50 MB. اختر ملفًا أخف أو قصّر مدته.');
+      const totalDuration = await readMediaDuration(file);
+      if (!Number.isFinite(totalDuration) || totalDuration <= 0) throw new Error('تعذر قراءة مدة الملف. استخدم MP4 أو MOV أو WAV أو MP3.');
+      if (totalDuration > 360) throw new Error('التحليل السحابي يدعم حتى 6 دقائق في كل مرة. قصّر الملف ثم أعد المحاولة.');
+      const mimeType = file.type || mimeTypeForMediaFile(file.name);
+      if (!/^(?:video\/(?:mp4|quicktime|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)|audio\/(?:wav|x-wav|wave|mpeg|mp3|mp4|m4a|aac|flac|ogg|webm))$/i.test(mimeType)) {
+        throw new Error('صيغة الملف غير مدعومة للتحليل السحابي. استخدم MP4 أو MOV أو WAV أو MP3.');
       }
-      let silences = [];
-      const totalDuration = decoded.duration;
-      const sampleRate = decoded.sampleRate;
-      const channels = Array.from({ length: decoded.numberOfChannels }, (_, index) => decoded.getChannelData(index));
-      const step = Math.max(1, Math.floor(sampleRate * 0.05));
-      const ampThreshold = Math.pow(10, threshold / 20);
-      let inSilence = false;
-      let silenceStart = 0;
-      for (let left = 0; left < decoded.length; left += step) {
-        const right = Math.min(left + step, decoded.length);
-        let energy = 0;
-        let count = 0;
-        for (const pcm of channels) for (let sample = left; sample < right; sample++) { energy += pcm[sample] * pcm[sample]; count++; }
-        const quiet = count > 0 && Math.sqrt(energy / count) < ampThreshold;
-        const time = left / sampleRate;
-        if (quiet && !inSilence) { inSilence = true; silenceStart = time; }
-        else if (!quiet && inSilence) {
-          inSilence = false;
-          const end = time;
-          if (end - silenceStart >= minDur) silences.push({ start: silenceStart, end, duration: end - silenceStart });
-        }
-      }
-      if (inSilence && totalDuration - silenceStart >= minDur) silences.push({ start: silenceStart, end: totalDuration, duration: totalDuration - silenceStart });
+      const query = new URLSearchParams({
+        action: 'analyze_video_silence', mime_type: mimeType, size: String(file.size),
+        start_seconds: '0', end_seconds: String(totalDuration), threshold_db: String(threshold), minimum_seconds: String(minDur)
+      });
+      const headers = await accountHeaders();
+      headers['Content-Type'] = mimeType;
+      headers.Accept = 'application/json';
+      const tool = 'transcription';
+      let permits = {};
+      try { permits = JSON.parse(sessionStorage.getItem('mickey_generation_permits') || '{}'); } catch (_) {}
+      const permit = permits[tool];
+      if (permit) headers['X-Generation-Permit'] = permit;
+      const response = await fetch(`${API_BASE_URL}?${query}`, { method: 'POST', headers, body: file });
+      if (permit) { delete permits[tool]; sessionStorage.setItem('mickey_generation_permits', JSON.stringify(permits)); }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.success === false) throw new Error(result.error || result.message || `تعذر التحليل السحابي (HTTP ${response.status}).`);
+      const silences = (result.data?.silences || result.silences || []).map(s => {
+        const start = Math.max(0, Number(s.start_seconds ?? s.start));
+        const end = Math.min(totalDuration, Number(s.end_seconds ?? s.end));
+        return { start, end, duration: end - start };
+      }).filter(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start && s.duration >= minDur);
 
       const effectiveSilences = silences.map(s => {
         const effStart = s.start + margin;
@@ -3490,12 +3484,33 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
           </div>
         `;
       }
-      showToast(effectiveSilences.length ? `تم اكتشاف ${effectiveSilences.length} فترة صمت محليًا.` : 'لم توجد فترات صمت تحقق الإعدادات الحالية.', effectiveSilences.length ? 'success' : 'info');
+      showToast(effectiveSilences.length ? `اكتمل التحليل السحابي: ${effectiveSilences.length} فترة صمت.` : 'اكتمل التحليل السحابي ولم توجد فترات تحقق الإعدادات الحالية.', effectiveSilences.length ? 'success' : 'info');
     } catch (err) {
       showToast(err.message || 'تعذر تحليل الصمت.', 'error');
     } finally {
       if (btn) btn.disabled = false;
     }
+  }
+
+  function readMediaDuration(file) {
+    return new Promise((resolve, reject) => {
+      const mimeType = file.type || mimeTypeForMediaFile(file.name);
+      const media = document.createElement(mimeType.startsWith('audio/') ? 'audio' : 'video');
+      const url = URL.createObjectURL(file);
+      const cleanup = () => { media.removeAttribute('src'); media.load(); URL.revokeObjectURL(url); };
+      const timeout = setTimeout(() => { cleanup(); reject(new Error('انتهت مهلة قراءة مدة الملف.')); }, 15000);
+      media.preload = 'metadata';
+      media.onloadedmetadata = () => { clearTimeout(timeout); const duration = Number(media.duration); cleanup(); resolve(duration); };
+      media.onerror = () => { clearTimeout(timeout); cleanup(); reject(new Error('تعذر قراءة معلومات الملف الصوتي أو المرئي.')); };
+      media.src = url;
+    });
+  }
+
+  function mimeTypeForMediaFile(name) {
+    const extension = String(name || '').split('.').pop().toLowerCase();
+    return ({ mp4:'video/mp4', mov:'video/quicktime', m4v:'video/mp4', webm:'video/webm', avi:'video/avi', mkv:'video/x-matroska',
+      mpeg:'video/mpeg', mpg:'video/mpg', wmv:'video/x-ms-wmv', '3gp':'video/3gpp', wav:'audio/wav', mp3:'audio/mpeg',
+      m4a:'audio/mp4', aac:'audio/aac', flac:'audio/flac', ogg:'audio/ogg' })[extension] || '';
   }
 
   function copyAutoCutSilenceEDL() {

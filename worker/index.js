@@ -24,7 +24,7 @@ export default {
       if (['list_api_keys', 'revoke_api_key'].includes(action)) context.account = await authenticate(context, true);
 
       switch (action) {
-        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.2.0', features: { raw_video_silence_upload: true }, endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'detect_viral_clips', 'generate_chapters', 'detect_censor_words', 'generate_image', 'refine_voiceover'] }, 200, headers);
+        case 'status': return json({ success: true, status: 'online', server: 'Mickey Studio AI Gateway', version: '4.3.0', features: { raw_video_silence_upload: true, pcm_wav_silence_analysis: true }, endpoints: ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'detect_viral_clips', 'generate_chapters', 'detect_censor_words', 'generate_image', 'refine_voiceover'] }, 200, headers);
         case 'get_gemini_keys': case 'get_gemini_key': return json(await getGeminiKeys(env), 200, headers);
         case 'generate_tts': return await generateTts(context);
         case 'generate_text': return await generateText(context);
@@ -486,9 +486,13 @@ async function analyzeVideoSilence(ctx) {
   const thresholdDb = Number.isFinite(threshold) ? Math.min(-18, Math.max(-65, threshold)) : -38;
   const directVideoBytes = ctx.rawVideoStream ? new Uint8Array(await ctx.request.arrayBuffer()) : null;
   if (directVideoBytes && directVideoBytes.byteLength !== videoSize) return json({ success: false, error: 'حجم الفيديو المرسل لا يطابق الحجم المعلن.' }, 400, ctx.headers);
+  if (directVideoBytes && /^audio\/(?:wav|x-wav|wave)$/i.test(mimeType)) {
+    const measured = analyzePcmWavSilence(directVideoBytes, start, end, thresholdDb, minDuration);
+    if (measured) return json({ success: true, data: measured, provider: 'Mickey Studio Cloud PCM Analyzer' }, 200, ctx.headers);
+  }
   const prompt = `حلل المسار الصوتي داخل الفيديو المرفق فقط، ولا تحلل الصورة أو المحتوى البصري. ابحث عن فترات الصمت أو الانخفاض الواضح جدًا في الصوت، بحد تقريبي ${thresholdDb} dB ولمدة لا تقل عن ${minDuration} ثانية. افحص فقط المجال من ${start.toFixed(3)} إلى ${end.toFixed(3)} ثانية من بداية الملف. أرجع الأوقات بالثواني نسبة إلى بداية المجال المحدد (أي يبدأ المجال عند 0). لا تعتبر الوقفات التعبيرية القصيرة صمتًا، ولا تقطع الكلام الهادئ. أخرج JSON فقط بالشكل {"silences":[{"start_seconds":1.25,"end_seconds":2.10}]}. إذا لم توجد فترات مناسبة أرجع {"silences":[]}. لا تضف أي شرح.`;
   const apiKeys = await keysForRequest(ctx);
-  for (const key of (ctx.rawVideoStream ? apiKeys.slice(0, 1) : apiKeys)) {
+  for (const key of apiKeys) {
     let uploadedFile = null;
     if (ctx.rawVideoStream || video.length > 16_800_000) {
       try {
@@ -526,6 +530,84 @@ async function analyzeVideoSilence(ctx) {
     if (uploadedFile) await deleteGeminiFile(uploadedFile.name, key);
   }
   return json({ success: false, error: 'تعذر تحليل صوت الفيديو. تحقق من مفتاح Gemini أو جرّب مقطعًا أقصر.' }, 502, ctx.headers);
+}
+function analyzePcmWavSilence(bytes, startSeconds, endSeconds, thresholdDb, minimumSeconds) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const readTag = offset => String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+  if (bytes.byteLength < 44 || readTag(0) !== 'RIFF' || readTag(8) !== 'WAVE') return null;
+  let format = 0, channels = 0, sampleRate = 0, blockAlign = 0, bitsPerSample = 0, dataOffset = -1, dataLength = 0;
+  for (let offset = 12; offset + 8 <= bytes.byteLength;) {
+    const tag = readTag(offset);
+    const length = view.getUint32(offset + 4, true);
+    const content = offset + 8;
+    if (content + length > bytes.byteLength) return null;
+    if (tag === 'fmt ' && length >= 16) {
+      format = view.getUint16(content, true);
+      channels = view.getUint16(content + 2, true);
+      sampleRate = view.getUint32(content + 4, true);
+      blockAlign = view.getUint16(content + 12, true);
+      bitsPerSample = view.getUint16(content + 14, true);
+    } else if (tag === 'data') {
+      dataOffset = content;
+      dataLength = length;
+    }
+    offset = content + length + (length & 1);
+  }
+  if (![1, 3].includes(format) || channels < 1 || channels > 8 || !sampleRate || !blockAlign || dataOffset < 0) return null;
+  const bytesPerSample = bitsPerSample / 8;
+  if ((format === 1 && ![8, 16, 24, 32].includes(bitsPerSample))
+    || (format === 3 && ![32, 64].includes(bitsPerSample))
+    || blockAlign < channels * bytesPerSample) return null;
+  const totalFrames = Math.floor(dataLength / blockAlign);
+  const firstFrame = Math.max(0, Math.min(totalFrames, Math.floor(startSeconds * sampleRate)));
+  const lastFrame = Math.max(firstFrame, Math.min(totalFrames, Math.ceil(endSeconds * sampleRate)));
+  if (lastFrame <= firstFrame) return { silences: [], waveform_db: [], waveform_rate: 50 };
+  const rate = 50;
+  const framesPerBin = Math.max(1, Math.round(sampleRate / rate));
+  const bins = Math.ceil((lastFrame - firstFrame) / framesPerBin);
+  const waveformDb = new Array(bins);
+  const readSample = (offset) => {
+    if (format === 3 && bitsPerSample === 32) return view.getFloat32(offset, true);
+    if (format === 3 && bitsPerSample === 64) return view.getFloat64(offset, true);
+    if (bitsPerSample === 8) return (view.getUint8(offset) - 128) / 128;
+    if (bitsPerSample === 16) return view.getInt16(offset, true) / 32768;
+    if (bitsPerSample === 24) {
+      let value = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+      if (value & 0x800000) value |= 0xff000000;
+      return value / 8388608;
+    }
+    if (bitsPerSample === 32) return view.getInt32(offset, true) / 2147483648;
+    return 0;
+  };
+  for (let bin = 0; bin < bins; bin++) {
+    const from = firstFrame + bin * framesPerBin;
+    const to = Math.min(lastFrame, from + framesPerBin);
+    let energy = 0, count = 0;
+    for (let frame = from; frame < to; frame++) {
+      const base = dataOffset + frame * blockAlign;
+      for (let channel = 0; channel < channels; channel++) {
+        const sample = readSample(base + channel * bytesPerSample);
+        const value = Number.isFinite(sample) ? Math.max(-1, Math.min(1, sample)) : 0;
+        energy += value * value;
+        count++;
+      }
+    }
+    const rms = count ? Math.sqrt(energy / count) : 0;
+    waveformDb[bin] = Math.max(-90, Math.round(20 * Math.log10(Math.max(rms, 1e-5)) * 10) / 10);
+  }
+  const silences = [];
+  let quietStart = -1;
+  for (let bin = 0; bin <= bins; bin++) {
+    const quiet = bin < bins && waveformDb[bin] <= thresholdDb;
+    if (quiet && quietStart < 0) quietStart = bin;
+    else if (!quiet && quietStart >= 0) {
+      const start = quietStart * framesPerBin / sampleRate;
+      const end = Math.min(lastFrame - firstFrame, bin * framesPerBin) / sampleRate;
+      if (end - start >= minimumSeconds) silences.push({ start_seconds: start, end_seconds: end });
+      quietStart = -1;
+    }
+  }
+  return { silences, waveform_db: waveformDb, waveform_rate: rate };
 }
 async function uploadGeminiVideo(base64, mimeType, apiKey) {
   const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
