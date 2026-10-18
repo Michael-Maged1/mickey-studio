@@ -979,13 +979,30 @@ window.MickeyStudio = (function () {
     STATE.video.engine = engine;
     document.getElementById('btn-engine-canvas').classList.toggle('active', engine === 'canvas');
     document.getElementById('btn-engine-gradio').classList.toggle('active', engine === 'gradio');
-    document.getElementById('video-prompt-wrap')?.classList.toggle('hidden', engine !== 'gradio');
+    document.getElementById('btn-engine-local')?.classList.toggle('active', engine === 'local');
+    document.getElementById('video-prompt-wrap')?.classList.toggle('hidden', engine === 'canvas');
 
     SFX.playClick();
     if (engine === 'gradio') {
       showToast('وضع LTX AI السحابي نشط. اكتب وصف الحركة قبل الإنتاج.', 'info');
+    } else if (engine === 'local') {
+      checkLocalVideoWorker();
     } else {
       showToast('محرك الحركة اللحظي نشط (مضمون 100% وبدون طوابير انتطار)', 'success');
+    }
+  }
+
+  async function checkLocalVideoWorker() {
+    const status = document.getElementById('local-video-worker-status');
+    try {
+      const response = await fetch('http://127.0.0.1:8765/health', { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data.ready) throw new Error('المحرك المحلي غير جاهز. شغّل خدمة LTX على جهازك أولاً.');
+      if (status) status.textContent = `متصل: ${data.worker} · ${data.device} · الصور والفيديو على هذا الجهاز.`;
+      showToast('عامل LTX المحلي جاهز على هذا الجهاز.', 'success');
+    } catch (_) {
+      if (status) status.textContent = 'العامل المحلي غير متصل. شغّل خدمة LTX على جهازك أولاً.';
+      showToast('لم أجد عامل LTX المحلي على 127.0.0.1:8765.', 'warning');
     }
   }
 
@@ -1057,7 +1074,7 @@ window.MickeyStudio = (function () {
       showToast('يرجى اختيار صورة مصدر لإنتاج الفيديو أولاً!', 'warning');
       return;
     }
-    if (STATE.video.engine === 'gradio' && !document.getElementById('video-prompt-input')?.value.trim()) {
+    if (STATE.video.engine !== 'canvas' && !document.getElementById('video-prompt-input')?.value.trim()) {
       showToast('اكتب وصف الحركة المطلوبة أولاً.', 'warning');
       document.getElementById('video-prompt-input')?.focus();
       return;
@@ -1066,6 +1083,10 @@ window.MickeyStudio = (function () {
 
     if (STATE.video.engine === 'gradio') {
       renderGradioVideo();
+      return;
+    }
+    if (STATE.video.engine === 'local') {
+      renderLocalVideo();
       return;
     }
 
@@ -1377,6 +1398,53 @@ window.MickeyStudio = (function () {
       scanner.classList.add('hidden');
       STATE.video.isRendering = false;
     }
+  }
+
+  async function renderLocalVideo() {
+    if (STATE.video.isRendering) return;
+    const prompt = document.getElementById('video-prompt-input')?.value.trim() || '';
+    const scanner = document.getElementById('video-laser-scanner');
+    const emptyState = document.getElementById('video-empty-state');
+    const videoEl = document.getElementById('final-rendered-video');
+    const canvas = document.getElementById('motion-render-canvas');
+    const actionsBar = document.getElementById('video-actions-bar');
+    const progressPill = document.getElementById('video-render-progress');
+    STATE.video.isRendering = true;
+    scanner.classList.remove('hidden'); emptyState.classList.add('hidden'); videoEl.classList.add('hidden');
+    canvas.classList.add('hidden'); actionsBar.classList.add('opacity-0', 'pointer-events-none');
+    progressPill.textContent = 'جاري توليد الفيديو محليًا على بطاقة RTX…';
+    progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400';
+    try {
+      const sourceResponse = await fetch(STATE.video.sourceImageUrl);
+      if (!sourceResponse.ok) throw new Error('تعذر قراءة صورة المصدر. أعد اختيارها.');
+      const form = new FormData();
+      form.append('prompt', prompt);
+      form.append('duration', String(STATE.video.duration || 3));
+      form.append('image', await sourceResponse.blob(), 'mickey-source.png');
+      progressPill.textContent = 'LTX يعالج الصورة على جهازك…';
+      const response = await fetch('http://127.0.0.1:8765/generate', { method: 'POST', body: form });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || `تعذر توليد الفيديو (${response.status}).`);
+      }
+      const videoBlob = await response.blob();
+      if (videoBlob.size < 1000 || !videoBlob.type.startsWith('video/')) throw new Error('أعاد العامل ملف فيديو غير صالح.');
+      if (STATE.video.renderedVideoUrl) URL.revokeObjectURL(STATE.video.renderedVideoUrl);
+      STATE.video.renderedVideoBlob = videoBlob;
+      STATE.video.renderedVideoUrl = URL.createObjectURL(videoBlob);
+      videoEl.src = STATE.video.renderedVideoUrl; videoEl.classList.remove('hidden'); videoEl.load();
+      actionsBar.classList.remove('opacity-0', 'pointer-events-none');
+      const actualDuration = response.headers.get('X-Generated-Duration') || STATE.video.duration;
+      progressPill.textContent = `اكتمل LTX المحلي · ${actualDuration} ثوانٍ`;
+      progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-400';
+      SFX.playSuccess(); showToast('اكتمل إنشاء الفيديو محليًا. لم تُرسل الصورة إلى السحابة.', 'success');
+    } catch (error) {
+      console.error('[Local LTX video generation]', error);
+      progressPill.textContent = 'تعذر تشغيل LTX المحلي';
+      progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-rose-500/30 text-rose-400';
+      emptyState.classList.remove('hidden');
+      showToast(error?.message || 'تعذر الاتصال بعامل LTX المحلي.', 'error');
+    } finally { scanner.classList.add('hidden'); STATE.video.isRendering = false; }
   }
 
   function downloadCurrentVideo() {
