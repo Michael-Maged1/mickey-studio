@@ -512,8 +512,11 @@
           <!-- Engine Switcher (Minimal) -->
           <div class="flex items-center gap-1.5 pt-2 border-t border-white/5">
             <button type="button" onclick="MickeyStudio.setVideoEngine('canvas')" id="btn-engine-canvas" class="pill-option active flex-1 text-center justify-center text-[11px]">محرك فوري</button>
-            <button type="button" onclick="MickeyStudio.setVideoEngine('gradio')" id="btn-engine-gradio" class="pill-option flex-1 text-center justify-center text-[11px]">LTX AI سحابي</button>
+            <button type="button" onclick="MickeyStudio.setVideoEngine('local')" id="btn-engine-local" class="pill-option flex-1 text-center justify-center text-[11px]">LTX محلي</button>
+            <button type="button" onclick="MickeyStudio.setVideoEngine('gradio')" id="btn-engine-gradio" class="pill-option flex-1 text-center justify-center text-[11px]">LTX سحابي</button>
           </div>
+          <p id="local-video-worker-status" class="text-[10px] text-zinc-500">النموذج المحلي: LTX-Video 2B distilled على جهازك، دون إرسال الصورة لخادم خارجي.</p>
+          <a href="https://github.com/Michael-Maged1/mickey-studio/tree/main/video-worker" target="_blank" rel="noopener" class="text-[10px] text-cyan-400 hover:text-cyan-300">طريقة تثبيت وتشغيل العامل المحلي</a>
 
         </div>
 

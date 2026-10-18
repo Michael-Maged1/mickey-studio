@@ -7,4 +7,7 @@ gemini_keys.json
 api_keys.json
 .mickey-provider-keys.php
 dist/
+.venv/
+video-worker/.venv/
+video-worker/__pycache__/
 *.log
