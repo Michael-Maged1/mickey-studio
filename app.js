@@ -3748,7 +3748,7 @@ window.MickeyStudio = (function () {
     if (!pendingPairCode || !user) return;
     const currentCode = pendingPairCode;
     try {
-      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
@@ -3778,28 +3778,14 @@ window.MickeyStudio = (function () {
     } catch (error) {
       try {
         const begin = await accountRequest('pair_begin');
-        await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+        await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro' });
         const tokenStr = `MKP_${begin.code}`;
         try { await navigator.clipboard.writeText(tokenStr); }
         catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
         showToast('✓ تم نسخ كود ربط لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
         refreshConnectedDevices();
       } catch (err2) {
-        try {
-          const tokenPayload = {
-            mickey_pair: true,
-            refreshToken: user.refreshToken,
-            email: user.email || user.phoneNumber || '',
-            uid: user.uid,
-            ts: Date.now()
-          };
-          const tokenStr = 'MKP_' + btoa(unescape(encodeURIComponent(JSON.stringify(tokenPayload))));
-          try { await navigator.clipboard.writeText(tokenStr); }
-          catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
-          showToast('✓ تم نسخ كود الربط المباشر! الصقه في إضافة Premiere Pro.', 'success', 6000);
-        } catch (err3) {
-          showToast(error.message || err2.message || err3.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
-        }
+        showToast(error.message || err2.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
       }
     }
   }

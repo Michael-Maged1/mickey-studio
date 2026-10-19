@@ -157,6 +157,11 @@ export default {
         case 'pair_begin': return await pairBegin(context);
         case 'pair_complete': return await pairComplete(context);
         case 'pair_poll': return await pairPoll(context);
+        case 'pair2_start': return await pairBegin(context);
+        case 'pair2_complete': return await pairComplete(context);
+        case 'pair2_poll': return await pairPoll(context);
+        case 'device_list': return await listPairedDevices(context);
+        case 'device_revoke': return await revokePairedDevice(context);
         case 'motion_scene_submit': return await submitMotionScene(context);
         case 'motion_scene_poll': return await pollMotionScene(context);
         case 'motion_scene_ack': return await acknowledgeMotionScene(context);
@@ -393,9 +398,36 @@ async function listFirebaseAuthUsers(env, accessToken) {
   return users;
 }
 
+async function coordinatorRequest(env, action, payload = {}) {
+  const namespace = env.MICKEY_COORDINATOR;
+  if (!namespace) fail(503, 'خدمة ربط الأجهزة غير متاحة حالياً.');
+  const id = namespace.idFromName('mickey-studio-pairing');
+  const stub = namespace.get(id);
+  const response = await stub.fetch(`https://coordinator.internal/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await readJson(response);
+  if (!response.ok || data.success === false) {
+    console.error('[MickeyCoordinator]', action, response.status, data.error || '');
+    fail(503, 'تعذر التواصل مع خدمة ربط الأجهزة. حاول مرة أخرى.');
+  }
+  return data;
+}
+
 async function authenticate(ctx, adminOnly = false) {
   const token = bearer(ctx.request) || String(ctx.body.idToken || '');
-  const user = await firebaseLookup(token, ctx.env);
+  const isDeviceToken = /^msd_[a-f0-9]{64}$/i.test(token);
+  let user;
+  if (isDeviceToken) {
+    const tokenHash = await sha256(token);
+    const check = await coordinatorRequest(ctx.env, 'device_check', { tokenHash });
+    if (!check.active || !check.device?.uid) fail(401, 'تم إلغاء ربط هذا الجهاز. أعد ربط الإضافة من حسابك.');
+    user = { localId: check.device.uid, email: check.device.email || '', customAttributes: '{}', disabled: false };
+  } else {
+    user = await firebaseLookup(token, ctx.env);
+  }
 
   // Extract server-verified custom claims from Google's lookup & JWT payload
   let customAttributes = {};
@@ -404,14 +436,14 @@ async function authenticate(ctx, adminOnly = false) {
   } catch {}
   const jwtPayload = parseJwtPayload(token) || {};
 
-  const hasAdminClaim = Boolean(
+  const hasAdminClaim = !isDeviceToken && Boolean(
     customAttributes.admin === true ||
     customAttributes.role === 'admin' ||
     jwtPayload.admin === true ||
     jwtPayload.role === 'admin'
   );
 
-  const isDesignatedAdminEmail = String(user.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
+  const isDesignatedAdminEmail = !isDeviceToken && String(user.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
   const isAdmin = hasAdminClaim || (isDesignatedAdminEmail && customAttributes.admin !== false);
 
   // Strict enforcement: adminOnly actions are rejected at the server level
@@ -420,8 +452,9 @@ async function authenticate(ctx, adminOnly = false) {
   }
 
   // Fetch user profile from Firestore
+  const profileToken = isDeviceToken ? await firebaseAdminAccessToken(ctx.env) : token;
   const doc = await fetch(`https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(user.localId)}`, {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${profileToken}` }
   });
   const profile = await readJson(doc);
 
@@ -453,6 +486,7 @@ async function authenticate(ctx, adminOnly = false) {
     extraCredits,
     limitOverrides,
     token,
+    isDeviceToken,
     geminiApiKey: profile.fields?.geminiApiKey?.stringValue || '',
     geminiProviderKeysJson: profile.fields?.geminiProviderKeysJson?.stringValue || ''
   };
@@ -1855,40 +1889,74 @@ function apiDocs(ctx) {
 // EXTENSION PAIRING & MOTION SCENE SYNC
 // ======================================================================
 async function pairBegin(ctx) {
-  const sessionToken = crypto.randomUUID().replaceAll('-', '');
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const record = { code, sessionToken, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 10 * 60 * 1000 };
-  await ctx.env.MICKEY_STATE.put(`pair_code:${code}`, JSON.stringify(record), { expirationTtl: 600 });
-  await ctx.env.MICKEY_STATE.put(`pair_session:${sessionToken}`, JSON.stringify(record), { expirationTtl: 600 });
-  return json({ success: true, code, sessionToken, expiresIn: 600 }, 200, ctx.headers);
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const code = base64Url(bytes);
+  const createdAt = Date.now();
+  const expiresAt = createdAt + 2 * 60 * 1000;
+  const result = await coordinatorRequest(ctx.env, 'pair_start', {
+    codeHash: await sha256(code), createdAt, expiresAt
+  });
+  if (!result.started) fail(503, 'تعذر بدء طلب الربط. حاول مرة أخرى.');
+  return json({ success: true, code, expiresIn: 120 }, 200, ctx.headers);
 }
 
 async function pairComplete(ctx) {
   const account = await authenticate(ctx);
+  if (account.isDeviceToken) fail(401, 'سجّل الدخول إلى الموقع لإكمال ربط جهاز جديد.');
   const code = String(ctx.body.code || '').trim();
-  const record = await ctx.env.MICKEY_STATE.get(`pair_code:${code}`, 'json');
-  if (!record || record.expiresAt < Date.now()) {
-    fail(400, 'رمز الاقتران غير صالح أو منتهي الصلاحية.');
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(code)) fail(400, 'رمز الربط غير صالح أو منتهي الصلاحية.');
+  const randomBytes = crypto.getRandomValues(new Uint8Array(32));
+  const deviceToken = 'msd_' + [...randomBytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  const device = {
+    deviceId: crypto.randomUUID(),
+    uid: account.uid,
+    email: account.email || '',
+    name: String(ctx.body.deviceName || 'Mickey Studio · Premiere Pro').slice(0, 100),
+    createdAt: nowIso(),
+    tokenHash: await sha256(deviceToken)
+  };
+  const result = await coordinatorRequest(ctx.env, 'pair_complete', {
+    codeHash: await sha256(code), device, deviceToken, completedAt: Date.now()
+  });
+  if (!result.completed) {
+    fail(result.reason === 'used' ? 409 : 410, result.reason === 'used'
+      ? 'تم استخدام رمز الربط بالفعل.'
+      : 'رمز الربط غير صالح أو انتهت صلاحيته. ابدأ الربط من الإضافة مجدداً.');
   }
-  record.status = 'confirmed';
-  record.uid = account.uid;
-  record.email = account.email;
-  record.token = account.token;
-  await ctx.env.MICKEY_STATE.put(`pair_session:${record.sessionToken}`, JSON.stringify(record), { expirationTtl: 300 });
-  await ctx.env.MICKEY_STATE.delete(`pair_code:${code}`);
-  return json({ success: true, message: 'تم ربط الإضافة بالحساب بنجاح.' }, 200, ctx.headers);
+  return json({ success: true, message: 'تم اعتماد الربط. أكمل العودة إلى الإضافة.' }, 200, ctx.headers);
 }
 
 async function pairPoll(ctx) {
-  const sessionToken = String(ctx.body.sessionToken || ctx.url.searchParams.get('sessionToken') || '');
-  if (!sessionToken) fail(400, 'معرف الجلسة مطلوب.');
-  const record = await ctx.env.MICKEY_STATE.get(`pair_session:${sessionToken}`, 'json');
-  if (!record) return json({ success: true, status: 'expired' }, 200, ctx.headers);
-  if (record.status === 'confirmed') {
-    await ctx.env.MICKEY_STATE.delete(`pair_session:${sessionToken}`);
-    return json({ success: true, status: 'confirmed', uid: record.uid, email: record.email, idToken: record.token }, 200, ctx.headers);
+  const code = String(ctx.body.code || ctx.body.sessionToken || ctx.url.searchParams.get('code') || '').trim();
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(code)) fail(400, 'رمز الربط غير صالح.');
+  const result = await coordinatorRequest(ctx.env, 'pair_poll', { codeHash: await sha256(code), now: Date.now() });
+  if (result.status === 'complete') {
+    return json({
+      success: true,
+      status: 'complete',
+      deviceToken: result.deviceToken,
+      deviceId: result.device?.deviceId,
+      email: result.device?.email || ''
+    }, 200, ctx.headers);
   }
-  return json({ success: true, status: 'pending' }, 200, ctx.headers);
+  return json({ success: true, status: result.status || 'expired' }, 200, ctx.headers);
+}
+
+async function listPairedDevices(ctx) {
+  const account = await authenticate(ctx);
+  if (account.isDeviceToken) fail(403, 'استخدم الموقع لإدارة الأجهزة المرتبطة.');
+  const result = await coordinatorRequest(ctx.env, 'device_list', { uid: account.uid });
+  return json({ success: true, devices: result.devices || [] }, 200, ctx.headers);
+}
+
+async function revokePairedDevice(ctx) {
+  const account = await authenticate(ctx);
+  if (account.isDeviceToken) fail(403, 'استخدم الموقع لإلغاء ربط الأجهزة.');
+  const deviceId = String(ctx.body.deviceId || ctx.body.device_id || '').trim();
+  if (!deviceId) fail(400, 'حدد الجهاز الذي تريد إلغاء ربطه.');
+  const result = await coordinatorRequest(ctx.env, 'device_revoke', { uid: account.uid, deviceId });
+  if (!result.revoked) fail(404, 'لم يتم العثور على الجهاز المرتبط.');
+  return json({ success: true, message: 'تم إلغاء ربط الجهاز.' }, 200, ctx.headers);
 }
 
 function validateMotionScene(scene) {
@@ -2021,6 +2089,59 @@ export class MickeyCoordinatorDO {
           await txn.delete('pairResult');
           return { consumed: true, ...value };
         });
+      } else if (action === 'pair_start') {
+        result = await this.state.storage.transaction(async txn => {
+          const pairings = await txn.get('pairings') || {};
+          const now = Number(body.createdAt) || Date.now();
+          for (const [codeHash, pairing] of Object.entries(pairings)) {
+            if (!pairing || Number(pairing.expiresAt) <= now) delete pairings[codeHash];
+          }
+          if (pairings[body.codeHash]) return { started: false };
+          pairings[body.codeHash] = {
+            status: 'pending',
+            createdAt: now,
+            expiresAt: Math.min(Number(body.expiresAt) || now + 120000, now + 120000)
+          };
+          await txn.put('pairings', pairings);
+          return { started: true };
+        });
+      } else if (action === 'pair_complete') {
+        result = await this.state.storage.transaction(async txn => {
+          const pairings = await txn.get('pairings') || {};
+          const pairing = pairings[body.codeHash];
+          const now = Number(body.completedAt) || Date.now();
+          if (!pairing || Number(pairing.expiresAt) <= now) {
+            if (pairing) { delete pairings[body.codeHash]; await txn.put('pairings', pairings); }
+            return { completed: false, reason: 'expired' };
+          }
+          if (pairing.status !== 'pending') return { completed: false, reason: 'used' };
+          if (!body.device?.uid || !body.device?.deviceId || !body.device?.tokenHash || !body.deviceToken) {
+            return { completed: false, reason: 'invalid' };
+          }
+          const devices = await txn.get('devices') || [];
+          devices.push(body.device);
+          pairing.status = 'complete';
+          pairing.deviceToken = body.deviceToken;
+          pairing.device = body.device;
+          pairing.completedAt = now;
+          await txn.put('devices', devices);
+          await txn.put('pairings', pairings);
+          return { completed: true };
+        });
+      } else if (action === 'pair_poll') {
+        result = await this.state.storage.transaction(async txn => {
+          const pairings = await txn.get('pairings') || {};
+          const pairing = pairings[body.codeHash];
+          const now = Number(body.now) || Date.now();
+          if (!pairing || Number(pairing.expiresAt) <= now) {
+            if (pairing) { delete pairings[body.codeHash]; await txn.put('pairings', pairings); }
+            return { status: 'expired' };
+          }
+          if (pairing.status !== 'complete') return { status: 'pending' };
+          delete pairings[body.codeHash];
+          await txn.put('pairings', pairings);
+          return { status: 'complete', deviceToken: pairing.deviceToken, device: pairing.device };
+        });
       } else if (action === 'rate' || action === 'rate2') {
         const now = Date.now();
         const minuteLimit = Number(body.minuteLimit || 60);
@@ -2109,17 +2230,18 @@ export class MickeyCoordinatorDO {
         });
       } else if (action === 'device_list') {
         const devices = await this.state.storage.get('devices') || [];
-        result = { devices: devices.map(({ tokenHash, ...device }) => ({ ...device, tokenHash: undefined })) };
+        result = { devices: devices.filter(item => item.uid === body.uid).map(({ tokenHash, ...device }) => device) };
       } else if (action === 'device_check') {
         const devices = await this.state.storage.get('devices') || [];
-        result = { active: devices.some(item => item.deviceId === body.deviceId && item.tokenHash === body.tokenHash) };
+        const device = devices.find(item => item.tokenHash === body.tokenHash);
+        result = { active: Boolean(device), device: device ? { uid: device.uid, email: device.email, deviceId: device.deviceId } : null };
       } else if (action === 'device_revoke') {
         result = await this.state.storage.transaction(async txn => {
           const devices = await txn.get('devices') || [];
-          const target = devices.find(item => item.deviceId === body.deviceId);
+          const target = devices.find(item => item.deviceId === body.deviceId && item.uid === body.uid);
           if (!target) return { revoked: false };
-          await txn.put('devices', devices.filter(item => item.deviceId !== body.deviceId));
-          return { revoked: true, tokenHash: target.tokenHash };
+          await txn.put('devices', devices.filter(item => item.deviceId !== body.deviceId || item.uid !== body.uid));
+          return { revoked: true };
         });
       } else {
         return json({ success: false, error: 'Unknown coordinator operation.' }, 404);
