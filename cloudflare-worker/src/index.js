@@ -2,6 +2,7 @@ const FIREBASE_PROJECT = 'mickey-gemini-studio';
 const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg';
 const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
 const GEMINI_TTS_MODEL = 'gemini-3.8-flash-tts';
+let firebaseAdminTokenCache = null;
 
 // Default plans schema (designed for manual assignment & future payment webhook integrations)
 const DEFAULT_PLANS = {
@@ -317,6 +318,91 @@ async function firebaseLookup(token, env) {
   return user;
 }
 
+function base64Url(value) {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+async function firebaseAdminAccessToken(env) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    fail(503, 'لا يمكن سرد حسابات Firebase Authentication بعد. أضف اعتماد Firebase Admin كسر Worker باسم FIREBASE_SERVICE_ACCOUNT_JSON.');
+  }
+  if (firebaseAdminTokenCache && firebaseAdminTokenCache.expiresAt > Date.now() + 60000) {
+    return firebaseAdminTokenCache.token;
+  }
+
+  let serviceAccount;
+  try { serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON); }
+  catch { fail(503, 'إعداد Firebase Admin في Worker غير صالح.'); }
+  if (!serviceAccount.client_email || !serviceAccount.private_key) {
+    fail(503, 'إعداد Firebase Admin في Worker لا يحتوي بيانات اعتماد صالحة.');
+  }
+
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const unsigned = `${base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${base64Url(JSON.stringify({
+    iss: serviceAccount.client_email,
+    scope: 'https://www.googleapis.com/auth/identitytoolkit https://www.googleapis.com/auth/datastore',
+    aud: serviceAccount.token_uri || 'https://oauth2.googleapis.com/token',
+    iat: issuedAt,
+    exp: issuedAt + 3600
+  }))}`;
+  let privateKeyBytes;
+  try {
+    const pem = serviceAccount.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '');
+    const raw = atob(pem);
+    privateKeyBytes = Uint8Array.from(raw, ch => ch.charCodeAt(0));
+  } catch { fail(503, 'مفتاح Firebase Admin غير صالح.'); }
+
+  let signingKey;
+  try {
+    signingKey = await crypto.subtle.importKey('pkcs8', privateKeyBytes, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  } catch { fail(503, 'تعذر قراءة مفتاح Firebase Admin.'); }
+  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', signingKey, new TextEncoder().encode(unsigned));
+  const assertion = `${unsigned}.${base64Url(signature)}`;
+  const response = await fetch(serviceAccount.token_uri || 'https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion
+    })
+  });
+  const data = await readJson(response);
+  if (!response.ok || !data.access_token) {
+    console.error('[Firebase Admin OAuth error]', response.status, data.error || '');
+    fail(503, 'تعذر مصادقة Firebase Admin. تحقق من صلاحية اعتماد الخدمة وأدواره في Google Cloud.');
+  }
+  firebaseAdminTokenCache = { token: data.access_token, expiresAt: Date.now() + Number(data.expires_in || 3600) * 1000 };
+  return data.access_token;
+}
+
+async function listFirebaseAuthUsers(env, accessToken) {
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT;
+  const users = [];
+  let nextPageToken = '';
+  let pages = 0;
+  do {
+    const params = new URLSearchParams({ maxResults: '1000' });
+    if (nextPageToken) params.set('nextPageToken', nextPageToken);
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/accounts:batchGet?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const data = await readJson(response);
+    if (!response.ok) {
+      console.error('[Firebase Auth list error]', response.status, data.error?.message || '');
+      fail(502, 'تعذر جلب الحسابات من Firebase Authentication. تحقق من صلاحية firebaseauth.users.get لحساب الخدمة.');
+    }
+    users.push(...(data.users || []));
+    nextPageToken = data.nextPageToken || '';
+    pages++;
+  } while (nextPageToken && pages < 100);
+  return users;
+}
+
 async function authenticate(ctx, adminOnly = false) {
   const token = bearer(ctx.request) || String(ctx.body.idToken || '');
   const user = await firebaseLookup(token, ctx.env);
@@ -349,10 +435,11 @@ async function authenticate(ctx, adminOnly = false) {
   });
   const profile = await readJson(doc);
 
-  // Check ban / suspension status (Applies to BOTH website and extension)
-  const status = profile.fields?.status?.stringValue || 'active';
+  // The designated owner account is a protected system account. Its access must
+  // not depend on a mutable profile status or Firebase's disabled flag.
+  const status = isDesignatedAdminEmail ? 'active' : (profile.fields?.status?.stringValue || 'active');
   const banReason = profile.fields?.banReason?.stringValue || '';
-  if (user.disabled || status === 'banned' || status === 'suspended') {
+  if (!isDesignatedAdminEmail && (user.disabled || status === 'banned' || status === 'suspended')) {
     fail(403, banReason
       ? `تم إيقاف حسابك من قبل إدارة Mickey Studio: ${banReason}`
       : 'تم إيقاف حسابك من قبل إدارة Mickey Studio. يرجى التواصل مع الدعم الفني.');
@@ -469,6 +556,11 @@ async function recordToolUsageMetric(env, tool, dayKey) {
 
 async function enforcePlanLimits(account, action, ctx) {
   const tool = toolCategoryForAction(action);
+  // The owner account is exempt from subscription checks, quotas, credits and
+  // user-generation counters. This check runs after Firebase token verification.
+  if (String(account.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase()) {
+    return { enforced: false, subscription_mode: false, tool, remaining: null, unlimited: true };
+  }
   const now = new Date();
   const dayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
@@ -1056,25 +1148,50 @@ async function adminListUsers(ctx) {
   const account = await authenticate(ctx, true);
   await logAdminAudit(ctx, 'admin_list_users', 'users_table');
 
-  // Query users from Firestore
-  const url = `https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users?pageSize=100`;
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${account.token}` } });
-  const data = await readJson(resp);
-  
-  const rawDocs = data.documents || [];
+  // Authentication accounts and Firestore profiles are separate data sets.
+  // A private Admin credential is required to list the full Auth directory.
+  const adminToken = await firebaseAdminAccessToken(ctx.env);
+  const authUsers = await listFirebaseAuthUsers(ctx.env, adminToken);
+  const profileByUid = new Map();
+  let pageToken = '';
+  let profilePages = 0;
+  do {
+    const params = new URLSearchParams({ pageSize: '1000' });
+    if (pageToken) params.set('pageToken', pageToken);
+    const url = 'https://firestore.googleapis.com/v1/projects/' +
+      encodeURIComponent(ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT) +
+      '/databases/(default)/documents/users?' + params.toString();
+    const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + adminToken } });
+    const data = await readJson(resp);
+    if (!resp.ok) {
+      console.error('[Admin list users Firestore error]', resp.status, data.error?.status || '', data.error?.message || '');
+      return json({ success: false, error: 'تم جلب الحسابات من Firebase Authentication، لكن تعذر تحميل ملفات المستخدمين من Firestore.', firestore_status: resp.status }, 502, ctx.headers);
+    }
+    for (const doc of (data.documents || [])) {
+      profileByUid.set(doc.name.split('/').pop(), doc.fields || {});
+    }
+    pageToken = data.nextPageToken || '';
+    profilePages++;
+  } while (pageToken && profilePages < 100);
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
 
-  const users = await Promise.all(rawDocs.map(async (doc) => {
-    const fields = doc.fields || {};
-    const uid = doc.name.split('/').pop();
-    const email = fields.email?.stringValue || '';
+  const users = await Promise.all(authUsers.map(async (authUser) => {
+    const uid = authUser.localId;
+    const fields = profileByUid.get(uid) || {};
+    const email = fields.email?.stringValue || authUser.email || '';
     const displayName = fields.displayName?.stringValue || (email ? email.split('@')[0] : 'مستخدم');
-    const status = fields.status?.stringValue || 'active';
+    const isProtectedAdmin = email.toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
+    const status = isProtectedAdmin ? 'active' : (fields.status?.stringValue || (authUser.disabled ? 'banned' : 'active'));
     const plan = fields.plan?.stringValue || 'free';
     const banReason = fields.banReason?.stringValue || '';
-    const createdAt = fields.createdAt?.timestampValue || fields.createdAt?.stringValue || null;
-    const lastLoginAt = fields.lastLoginAt?.timestampValue || fields.lastLoginAt?.stringValue || null;
+    const authDate = value => {
+      if (value == null || value === '') return null;
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? new Date(numeric).toISOString() : String(value);
+    };
+    const createdAt = fields.createdAt?.timestampValue || fields.createdAt?.stringValue || authDate(authUser.createdAt);
+    const lastLoginAt = fields.lastLoginAt?.timestampValue || fields.lastLoginAt?.stringValue || authDate(authUser.lastLoginAt);
     const extraCredits = Number(fields.extraCredits?.integerValue || 0);
 
     let limitOverrides = {};
@@ -1108,12 +1225,35 @@ async function adminListUsers(ctx) {
       extraCredits,
       limitOverrides,
       todayUsage,
+      authDisabled: Boolean(authUser.disabled),
+      protected: isProtectedAdmin,
       devicesCount: pairedDevices.length,
       pairedDevices
     };
   }));
 
-  return json({ success: true, count: users.length, users }, 200, ctx.headers);
+  return json({
+    success: true,
+    count: users.length,
+    users,
+    source: 'firebase_auth_and_firestore'
+  }, 200, ctx.headers);
+}
+
+async function protectAdminAccountTarget(ctx, account, targetUid) {
+  const adminEmail = (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
+  if (targetUid === account.uid && String(account.email || '').toLowerCase() === adminEmail) {
+    fail(403, 'حساب المسؤول الأساسي محمي ولا يمكن تعديل حالته أو باقته أو رصيده أو أجهزته.');
+  }
+  const url = `https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${account.token}` } });
+  if (response.status === 404) return;
+  if (!response.ok) fail(502, 'تعذر التحقق من الحساب المستهدف قبل التعديل. لم يتم تنفيذ أي تغيير.');
+  const profile = await readJson(response);
+  const targetEmail = String(profile.fields?.email?.stringValue || '').toLowerCase();
+  if (targetEmail && targetEmail === adminEmail) {
+    fail(403, 'حساب المسؤول الأساسي محمي ولا يمكن تعديل حالته أو باقته أو رصيده أو أجهزته.');
+  }
 }
 
 async function adminUpdateUserStatus(ctx) {
@@ -1126,6 +1266,7 @@ async function adminUpdateUserStatus(ctx) {
   if (!['active', 'banned', 'suspended'].includes(newStatus)) {
     return json({ success: false, error: 'حالة غير صالحة' }, 400, ctx.headers);
   }
+  await protectAdminAccountTarget(ctx, account, targetUid);
 
   // Update Firestore user document
   const fields = {
@@ -1162,6 +1303,7 @@ async function adminUpdateUserPlan(ctx) {
   if (!['free', 'pro', 'custom'].includes(newPlan)) {
     return json({ success: false, error: 'الباقة المحددة غير معروفة' }, 400, ctx.headers);
   }
+  await protectAdminAccountTarget(ctx, account, targetUid);
 
   // Extensible subscription object for future payment integrations
   const subscriptionPayload = JSON.stringify({
@@ -1197,6 +1339,7 @@ async function adminSetUserLimits(ctx) {
   const overrides = ctx.body.overrides || {}; // { images: 50, voice: 100 }
 
   if (!targetUid) return json({ success: false, error: 'معرف المستخدم غير محدد' }, 400, ctx.headers);
+  await protectAdminAccountTarget(ctx, account, targetUid);
 
   const fields = {
     limitOverridesJson: { stringValue: JSON.stringify(overrides) },
@@ -1221,6 +1364,7 @@ async function adminAddUserCredits(ctx) {
   if (!targetUid || creditsToAdd <= 0) {
     return json({ success: false, error: 'يرجى تحديد عدد رصيد موجب للإضافة' }, 400, ctx.headers);
   }
+  await protectAdminAccountTarget(ctx, account, targetUid);
 
   // Get current doc to increment
   const getUrl = `https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}`;
@@ -1244,6 +1388,7 @@ async function adminRevokeUserDevices(ctx) {
   const account = await authenticate(ctx, true);
   const targetUid = String(ctx.body.target_uid || ctx.body.uid || '').trim();
   if (!targetUid) return json({ success: false, error: 'معرف المستخدم غير محدد' }, 400, ctx.headers);
+  await protectAdminAccountTarget(ctx, account, targetUid);
 
   // Clear paired devices list in Firestore
   const patchUrl = `https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}?updateMask.fieldPaths=pairedDevicesJson`;
@@ -1264,6 +1409,7 @@ async function adminDeleteUser(ctx) {
   const account = await authenticate(ctx, true);
   const targetUid = String(ctx.body.target_uid || ctx.body.uid || '').trim();
   if (!targetUid) return json({ success: false, error: 'معرف المستخدم غير محدد' }, 400, ctx.headers);
+  await protectAdminAccountTarget(ctx, account, targetUid);
 
   const url = `https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}`;
   await fetch(url, {

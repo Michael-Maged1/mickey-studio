@@ -921,6 +921,7 @@
     let apiUrl = resolveApiUrl();
 
     let allUsers = [];
+    let usersListWarning = '';
     let currentPlans = {};
     let currentGeminiPool = [];
     let currentSubscriptionMode = false;
@@ -1361,6 +1362,7 @@
       try {
         const data = await apiAdminRequest('admin_list_users');
         allUsers = data.users || [];
+        usersListWarning = data.warning || '';
         updateUserStats();
         renderUsers(allUsers);
       } catch (err) {
@@ -1398,7 +1400,10 @@
     function renderUsers(users) {
       const tbody = document.getElementById('users-table-body');
       if (!users.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="py-10 text-center text-zinc-500">لا توجد حسابات مطابقة لمعايير البحث.</td></tr>`;
+        const emptyMessage = allUsers.length === 0 && usersListWarning
+          ? escapeHtml(usersListWarning)
+          : 'لا توجد حسابات مطابقة لمعايير البحث.';
+        tbody.innerHTML = `<tr><td colspan="8" class="py-10 px-6 text-center text-zinc-400">${emptyMessage}</td></tr>`;
         return;
       }
 
