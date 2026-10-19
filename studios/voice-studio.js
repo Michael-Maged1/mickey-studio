@@ -17,18 +17,24 @@
 
   // 10. STUDIO 4: AI VOICEOVER & AUDIO LAB
   // -----------------------------------------------------------------
-  function generateAiScript() {
+  async function generateAiScript() {
     SFX.playClick();
-    const scripts = [
-      'مرحباً بكم في ميكي ستوديو، الأفق الجديد للذكاء الاصطناعي. هنا حيث تتحول الأفكار إلى واقع سينمائي مبهر بلا حدود.',
-      'في عالم يتسارع فيه الابتكار، تصنع الريادة بالقرارات الجريئة. استمتع بأقوى أدوات الإبداع الرقمي بين يديك الآن.',
-      'هل تساءلت يوماً كيف تبدو مدن المستقبل؟ استكشف آفاق الخيال العلمي وحوّل رؤيتك الفنية إلى لوحات سينمائية فائقة الدقة.',
-      'سواء كنت صانع محتوى، مصمماً، أو فناناً رقمياً، هذه المنصة هي محطتك المتكاملة للإنتاج الاحترافي مجاناً وبلا قيود.'
-    ];
-    const picked = scripts[Math.floor(Math.random() * scripts.length)];
     const textInput = document.getElementById('voice-text-input');
-    if (textInput) textInput.value = picked;
-    showToast('تم توليد سكريبت احترافي بالذكاء الاصطناعي!', 'success');
+    const button = document.getElementById('btn-generate-voice-script');
+    if (button) button.disabled = true;
+    try {
+      const dialect = document.getElementById('voice-dialect-select')?.selectedOptions?.[0]?.textContent || 'العربية';
+      const prompt = `اكتب نص تعليق صوتي أصلياً ومناسباً للإلقاء باللهجة ${dialect}. اجعله واضحاً وطبيعياً من 3 إلى 5 جمل. أخرج النص فقط بلا عنوان أو تعليمات. الموضوع: تقديم محتوى جذاب لصانع فيديو.`;
+      const response = await gatewayFetch('generate_text', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, stream: false })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success || !(data.text || data.response)) throw new Error(data.error || 'تعذر توليد النص حالياً.');
+      if (textInput) textInput.value = String(data.text || data.response).trim();
+      showToast('تم توليد النص عبر خدمة الذكاء الاصطناعي. راجعه قبل إنشاء الصوت.', 'success');
+    } catch (error) {
+      showToast(error.message || 'تعذر توليد النص.', 'error');
+    } finally { if (button) button.disabled = false; }
   }
 
   async function requestVoiceScriptRefinement(text, dialect) {
@@ -589,24 +595,13 @@
         body: JSON.stringify({ prompt, stream: false })
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const script = data.text || data.response || data.content;
-        if (script) {
-          document.getElementById('podcast-dialog-input').value = script.trim();
-          showToast('تم تأليف سيناريو البودكاست بنجاح!', 'success');
-          return;
-        }
-      }
-      throw new Error('Fallback needed');
+      const data = await res.json().catch(() => ({}));
+      const script = data.text || data.response || data.content;
+      if (!res.ok || !data.success || !script) throw new Error(data.error || `تعذر تأليف السيناريو (${res.status}).`);
+      document.getElementById('podcast-dialog-input').value = script.trim();
+      showToast('تم تأليف سيناريو البودكاست عبر خدمة النصوص.', 'success');
     } catch (e) {
-      document.getElementById('podcast-dialog-input').value = 
-`${s1Name}: مرحباً بكم في حلقة جديدة من البودكاست، وحديثنا اليوم عن ${topic}.
-${s2Name}: أهلاً بك يا ${s1Name}، سعيد جداً بتواجدي معكم لمناقشة هذا التطور المذهل.
-${s1Name}: ما هي أبرز التقنيات التي تراها الأكثر تأثيراً على صناع المحتوى الآن؟
-${s2Name}: بلا شك، نماذج الصوت والذكاء الاصطناعي التي تختصر ساعات العمل في ثوانٍ معدودة.
-${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى لقاء قريب في الحلقة القادمة.`;
-      showToast('تم إدراج نموذج حوار بودكاست جاهز!', 'success');
+      showToast(e.message || 'تعذر تأليف الحوار. تحقق من إعداد خدمة النصوص ثم أعد المحاولة.', 'error');
     } finally {
       if (btn) btn.disabled = false;
     }

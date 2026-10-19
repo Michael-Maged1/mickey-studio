@@ -61,7 +61,7 @@
 
   // Editor Internal State
   const STATE = {
-    mode: 'captions', // 'captions' | 'audio-clean' | 'silence-cut' | 'auto-zoom'
+    mode: 'captions',
     mediaFile: null,
     mediaUrl: '',
     mediaType: 'video', // 'video' | 'audio'
@@ -117,7 +117,11 @@
     zoom: {
       level: 1.25,
       interval: 4
-    }
+    },
+    muteRanges: [],
+    viralClips: [],
+    selectedViralClip: null,
+    exportRange: null
   };
 
   /**
@@ -134,6 +138,8 @@
    */
   function setMode(newMode) {
     if (!newMode) return;
+    const validModes = ['captions', 'audio-clean', 'silence-cut', 'auto-zoom', 'word-mute', 'viral-clips', 'yt-chapters'];
+    if (!validModes.includes(newMode)) return;
     STATE.mode = newMode;
     SFX.playClick();
 
@@ -156,9 +162,12 @@
     if (badgeEl) {
       const modeData = {
         'captions': { title: '💬 الكابشنز المتحركة', class: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },
-        'audio-clean': { title: '✨ تنقية وهندسة الصوت', class: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
+        'audio-clean': { title: '✨ تحسين نبرة الصوت', class: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
         'silence-cut': { title: '✂️ قص السكتات والوقفات', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-        'auto-zoom': { title: '🔍 الزووم السينمائي التلقائي', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' }
+        'auto-zoom': { title: '🔍 الزووم السينمائي', class: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+        'word-mute': { title: '🔇 حجب الكلمات', class: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+        'viral-clips': { title: '🔥 اقتراح المقاطع', class: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
+        'yt-chapters': { title: '🔖 فصول يوتيوب', class: 'bg-red-500/10 text-red-400 border-red-500/20' }
       };
       const info = modeData[newMode] || modeData['captions'];
       badgeEl.textContent = info.title;
@@ -754,6 +763,192 @@
     SFX.playClick();
   }
 
+  async function generateCaptionsFromMedia() {
+    if (!STATE.mediaFile) {
+      showToast('ارفع فيديو أو ملفاً صوتياً أولاً لتوليد الكابشنز.', 'warning');
+      return false;
+    }
+    if (window.MickeyStudio?.authorizeAndConsume && !await window.MickeyStudio.authorizeAndConsume('transcription')) return false;
+    const button = document.getElementById('btn-generate-media-captions');
+    if (button) { button.disabled = true; button.textContent = 'جارٍ تفريغ الكلام…'; }
+    try {
+      const audioBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split('base64,')[1] || '');
+        reader.onerror = () => reject(new Error('تعذر قراءة الملف.'));
+        reader.readAsDataURL(STATE.mediaFile);
+      });
+      const response = await window.MickeyStudio.gatewayFetch('transcribe_audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audio_base64: audioBase64,
+          mime_type: STATE.mediaFile.type || 'application/octet-stream',
+          file_name: STATE.mediaFile.name || 'media'
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (result?.quota?.tool) window.MickeyStudio.updateQuotaBadge?.(result.quota.tool, result.quota.remaining, result.quota.limit);
+      if (!response.ok || !result.success) throw new Error(result.error || 'تعذر تفريغ الكلام من الملف.');
+      const segments = Array.isArray(result.segments) ? result.segments : [];
+      if (!segments.length) throw new Error('لم يُرجع التفريغ توقيتات للكلام؛ لا يمكن إنشاء كابشنز متزامنة.');
+      STATE.captions.items = segments.filter(segment => segment.text && Number.isFinite(Number(segment.start)) && Number.isFinite(Number(segment.end)))
+        .map((segment, index) => {
+          const words = String(segment.text).trim().split(/\s+/).filter(Boolean);
+          const start = Math.max(0, Number(segment.start));
+          const end = Math.max(start + 0.1, Number(segment.end));
+          return {
+            id: Date.now() + index,
+            start,
+            end,
+            text: String(segment.text).trim(),
+            words: words.map((word, wordIndex) => ({
+              text: word,
+              start: start + (end - start) * wordIndex / words.length,
+              end: start + (end - start) * (wordIndex + 1) / words.length
+            }))
+          };
+        });
+      if (!STATE.captions.items.length) throw new Error('لم يُعثر على كلام قابل للتحويل إلى كابشنز.');
+      renderSubtitlesList();
+      drawCaptionsFrame(STATE.currentTime);
+      showToast(`تم إنشاء ${STATE.captions.items.length} مقطع كابشن بتوقيتات التفريغ.`, 'success');
+      return true;
+    } catch (error) {
+      console.error('[MickeyMediaStudio] caption generation failed:', error);
+      showToast(error.message || 'تعذر توليد الكابشنز.', 'error');
+      return false;
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i><span>توليد الكابشنز</span>';
+      }
+    }
+  }
+
+  async function ensureCaptionTranscript() {
+    if (STATE.captions.items.length) return true;
+    return await generateCaptionsFromMedia();
+  }
+
+  async function detectAndMuteWords() {
+    if (!await ensureCaptionTranscript()) return;
+    const text = STATE.captions.items.map(item => item.text).join('\n');
+    const button = document.getElementById('btn-detect-censor-words');
+    if (button) { button.disabled = true; button.textContent = 'جارٍ كشف الكلمات…'; }
+    try {
+      const response = await window.MickeyStudio.gatewayFetch('detect_censor_words', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcription: text })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || 'تعذر فحص الكلمات.');
+      const forbidden = new Set((data.words || []).map(word => String(word).toLocaleLowerCase().replace(/[.,!?،؛:()[\]{}"']/g, '').trim()).filter(Boolean));
+      const ranges = [];
+      for (const item of STATE.captions.items) {
+        const words = item.words?.length ? item.words : String(item.text).split(/\s+/).map((word, index, list) => ({
+          text: word,
+          start: item.start + (item.end - item.start) * index / list.length,
+          end: item.start + (item.end - item.start) * (index + 1) / list.length
+        }));
+        for (const word of words) {
+          const normalized = String(word.text).toLocaleLowerCase().replace(/[.,!?،؛:()[\]{}"']/g, '').trim();
+          if (forbidden.has(normalized)) ranges.push({ start: Math.max(0, word.start - 0.04), end: Math.min(STATE.duration, word.end + 0.06), word: word.text });
+        }
+      }
+      STATE.muteRanges = ranges;
+      const result = document.getElementById('word-mute-results');
+      if (result) result.textContent = ranges.length
+        ? `الكلمات المكتشفة: ${ranges.map(range => range.word).join('، ')}. سيستبدلها التصدير بصفارة رقابة.`
+        : 'لم يعثر الفحص على كلمات محظورة في التفريغ.';
+      showToast(ranges.length ? `تم العثور على ${ranges.length} كلمة، وستُحجب في الملف المصدر.` : 'اكتمل الفحص ولم تُكتشف كلمات محظورة.', 'success');
+    } catch (error) {
+      showToast(error.message || 'تعذر كشف الكلمات المحظورة.', 'error');
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i><span>كشف الكلمات وتجهيز صفارة الرقابة</span>'; }
+    }
+  }
+
+  async function generateViralClips() {
+    if (!await ensureCaptionTranscript()) return;
+    const button = document.getElementById('btn-generate-viral-clips');
+    const results = document.getElementById('viral-clips-results');
+    if (button) { button.disabled = true; button.textContent = 'جارٍ تحليل اللحظات…'; }
+    try {
+      const response = await window.MickeyStudio.gatewayFetch('detect_viral_clips', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcription: STATE.captions.items.map(item => item.text).join('\n') })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success || !Array.isArray(data.clips) || !data.clips.length) throw new Error(data.error || 'لم ينتج التحليل مقاطع قابلة للاستخدام.');
+      STATE.viralClips = data.clips.map(clip => ({
+        ...clip,
+        start: Math.max(0, Number(clip.start) || 0),
+        end: Math.min(STATE.duration, Number(clip.end) || 0)
+      })).filter(clip => clip.end > clip.start);
+      if (!STATE.viralClips.length) throw new Error('لم تُرجع الخدمة توقيتات صالحة للمقاطع.');
+      STATE.selectedViralClip = 0;
+      if (results) results.innerHTML = STATE.viralClips.map((clip, index) => `
+        <button type="button" class="w-full text-right p-3 rounded-xl bg-white/5 border border-white/10 hover:border-orange-400/50" onclick="MickeyMediaStudio.selectViralClip(${index})">
+          <span class="block font-bold text-orange-300">${escapeHtml(clip.title || `المقطع ${index + 1}`)}</span>
+          <span class="block text-[10px] text-zinc-400 mt-1">${formatTime(clip.start)} – ${formatTime(clip.end)} · ${escapeHtml(clip.reason || '')}</span>
+        </button>`).join('');
+      showToast(`تم اقتراح ${STATE.viralClips.length} مقاطع للمراجعة.`, 'success');
+    } catch (error) {
+      if (results) results.textContent = error.message || 'تعذر تحليل المقاطع.';
+      showToast(error.message || 'تعذر تحليل المقاطع الفيروسية.', 'error');
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-fire"></i><span>تحليل واقتراح المقاطع</span>'; }
+    }
+  }
+
+  function selectViralClip(index) {
+    const clip = STATE.viralClips[index];
+    if (!clip) return;
+    STATE.selectedViralClip = index;
+    STATE.exportRange = { start: clip.start, end: clip.end };
+    seekToTime(clip.start);
+    document.getElementById('media-timeline-scrubber')?.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('btn-export-viral-clip')?.removeAttribute('disabled');
+  }
+
+  async function generateYouTubeChapters() {
+    if (!await ensureCaptionTranscript()) return;
+    const button = document.getElementById('btn-generate-yt-chapters');
+    const output = document.getElementById('yt-chapters-output');
+    if (button) { button.disabled = true; button.textContent = 'جارٍ إعداد الفصول…'; }
+    try {
+      const response = await window.MickeyStudio.gatewayFetch('generate_chapters', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcription: STATE.captions.items.map(item => item.text).join('\n') })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success || !data.chapters) throw new Error(data.error || 'تعذر توليد فصول يوتيوب.');
+      if (output) output.value = data.chapters;
+      showToast('تم إنشاء فصول الفيديو من التفريغ. راجع توقيتاتها قبل النشر.', 'success');
+    } catch (error) {
+      showToast(error.message || 'تعذر إنشاء الفصول.', 'error');
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-list-ol"></i><span>توليد فصول يوتيوب</span>'; }
+    }
+  }
+
+  async function copyYouTubeChapters() {
+    const output = document.getElementById('yt-chapters-output');
+    if (!output?.value.trim()) { showToast('أنشئ الفصول أولاً.', 'warning'); return; }
+    await navigator.clipboard.writeText(output.value);
+    showToast('تم نسخ الفصول إلى الحافظة.', 'success');
+  }
+
+  function setZoomScale(button, level) {
+    STATE.zoom.level = Number(level) === 1.3 ? 1.3 : 1.15;
+    document.querySelectorAll('.zoom-scale-btn').forEach(item => {
+      item.classList.toggle('bg-teal-500/10', item === button);
+      item.classList.toggle('border-teal-500/30', item === button);
+      item.classList.toggle('text-teal-400', item === button);
+      item.classList.toggle('bg-white/5', item !== button);
+      item.classList.toggle('border-white/5', item !== button);
+      item.classList.toggle('text-zinc-400', item !== button);
+    });
+  }
+
   function seekToTime(time) {
     const video = document.getElementById('media-editor-video');
     if (video) {
@@ -855,6 +1050,11 @@
       // More clarity = boost vocal presence up to +7dB
       STATE.audio.presenceFilter.gain.value = clarityRatio * 7;
     }
+    if (STATE.audio.compressor) {
+      const compression = Math.max(0, Math.min(1, STATE.audio.dereverb / 100));
+      STATE.audio.compressor.ratio.value = 1 + compression * 7;
+      STATE.audio.compressor.threshold.value = -8 - compression * 18;
+    }
 
     // Set A/B Wet vs Dry gains
     if (STATE.audio.previewMode === 'clean') {
@@ -884,7 +1084,7 @@
         btn.classList.add('bg-teal-500/20', 'border-teal-400', 'text-teal-300');
         btn.classList.remove('bg-zinc-800', 'border-zinc-700', 'text-zinc-400');
         if (statusLabel) statusLabel.textContent = 'الآن تستمع إلى: ✨ الصوت المنقى (Studio Enhanced)';
-        showToast('وضع الاستماع: الصوت المنقى بنظام الذكاء الاصطناعي ✨', 'success');
+        showToast('وضع الاستماع: تطبيق المرشحات الصوتية الأساسية.', 'info');
       } else {
         btn.classList.remove('bg-teal-500/20', 'border-teal-400', 'text-teal-300');
         btn.classList.add('bg-zinc-800', 'border-zinc-700', 'text-zinc-400');
@@ -1105,18 +1305,204 @@ ${clipItems}
 
   function exportTransparentVideo() {
     SFX.playClick();
-    showToast('جاري تجهيز وتصدير طبقة الكابشنز الشفافة (ProRes / Alpha WebM)…', 'info');
-    setTimeout(() => {
-      showToast('تم إعداد تصدير الفيديو الشفاف بنجاح!', 'success');
-    }, 1200);
+    showToast('تصدير فيديو شفاف غير متاح حالياً في محرر الموقع. يمكنك تنزيل ملف SRT أو فيديو عادي بالكابشنز.', 'warning');
   }
 
-  function exportRenderedMp4() {
+  async function exportRenderedMp4() {
     SFX.playClick();
-    showToast('جاري حرق وتطبيق التأثيرات والكابشنز وتجهيز فيديو MP4…', 'info');
-    setTimeout(() => {
-      showToast('اكتملت معالجة الفيديو! جاري التنزيل…', 'success');
-    }, 1500);
+    const video = document.getElementById('media-editor-video');
+    if (!STATE.mediaFile || !video || !Number.isFinite(video.duration) || video.duration <= 0) {
+      showToast('ارفع فيديو وانتظر اكتمال تحميله قبل التصدير.', 'warning');
+      return;
+    }
+    if (STATE.mode === 'silence-cut' && !STATE.silence.analyzed) {
+      showToast('حلّل الصوت أولاً قبل تصدير الفيديو بعد قص السكتات.', 'warning');
+      return;
+    }
+    if (STATE.mode === 'word-mute' && !STATE.muteRanges.length) {
+      showToast('اكشف الكلمات المحظورة أولاً قبل تصدير نسخة الرقابة.', 'warning');
+      return;
+    }
+    if (STATE.mode === 'viral-clips' && !STATE.exportRange) {
+      showToast('حلل المقاطع واختر مقطعاً قبل التصدير.', 'warning');
+      return;
+    }
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+      showToast('تصدير الفيديو غير مدعوم في هذا المتصفح. جرّب أحدث إصدار من Edge أو Chrome.', 'error');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = STATE.aspectRatio === '9:16' ? 720 : 1280;
+    canvas.height = STATE.aspectRatio === '9:16' ? 1280 : 720;
+    const ctx = canvas.getContext('2d');
+    const canvasStream = canvas.captureStream(30);
+    let audioDestination = null;
+    let exportAudioGain = null;
+    let beepGain = null;
+    let beepOscillator = null;
+    let audioTracks = [];
+    if (STATE.audio.audioCtx && STATE.audio.wetGain && STATE.audio.dryGain) {
+      audioDestination = STATE.audio.audioCtx.createMediaStreamDestination();
+      exportAudioGain = STATE.audio.audioCtx.createGain();
+      STATE.audio.wetGain.connect(exportAudioGain);
+      STATE.audio.dryGain.connect(exportAudioGain);
+      exportAudioGain.connect(audioDestination);
+      if (STATE.mode === 'word-mute' && STATE.muteRanges.length) {
+        beepGain = STATE.audio.audioCtx.createGain();
+        beepGain.gain.value = 0;
+        beepOscillator = STATE.audio.audioCtx.createOscillator();
+        beepOscillator.type = 'sine';
+        beepOscillator.frequency.value = 880;
+        beepOscillator.connect(beepGain);
+        beepGain.connect(audioDestination);
+        beepOscillator.start();
+      }
+      audioTracks = audioDestination.stream.getAudioTracks();
+    } else if (video.captureStream || video.mozCaptureStream) {
+      audioTracks = (video.captureStream || video.mozCaptureStream).call(video).getAudioTracks();
+    }
+    const stream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+    const mimeType = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4',
+      'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'
+    ].find(type => MediaRecorder.isTypeSupported(type));
+    if (!mimeType) {
+      stream.getTracks().forEach(track => track.stop());
+      showToast('هذا المتصفح لا يوفر ترميز MP4 أو WebM.', 'error');
+      return;
+    }
+
+    const initialTime = video.currentTime || 0;
+    const wasPlaying = !video.paused;
+    const segments = [];
+    let cursor = 0;
+    if (STATE.mode === 'silence-cut') {
+      for (const cut of STATE.silence.cuts) {
+        if (cut.start > cursor) segments.push({ start: cursor, end: cut.start });
+        cursor = Math.max(cursor, cut.end);
+      }
+    }
+    if (cursor < video.duration) segments.push({ start: cursor, end: video.duration });
+    const parts = STATE.mode === 'silence-cut' ? segments
+      : STATE.mode === 'viral-clips' && STATE.exportRange ? [STATE.exportRange]
+        : [{ start: 0, end: video.duration }];
+    if (!parts.length) {
+      stream.getTracks().forEach(track => track.stop());
+      showToast('لم يتبق أي مقطع بعد القص. خفف الحساسية وأعد التحليل.', 'error');
+      return;
+    }
+
+    let recorder;
+    try { recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6000000, audioBitsPerSecond: 192000 }); }
+    catch (error) {
+      stream.getTracks().forEach(track => track.stop());
+      audioDestination?.stream.getTracks().forEach(track => track.stop());
+      showToast(error.message || 'تعذر بدء ترميز الفيديو في هذا المتصفح.', 'error');
+      return;
+    }
+    const chunks = [];
+    recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+    const stopped = new Promise((resolve, reject) => {
+      recorder.onstop = resolve;
+      recorder.onerror = event => reject(event.error || new Error('فشل ترميز الفيديو.'));
+    });
+    const exportButtons = Array.from(document.querySelectorAll('[onclick="MickeyMediaStudio.exportRenderedMp4()"]'));
+    exportButtons.forEach(button => { button.disabled = true; button.dataset.originalText = button.innerHTML; button.textContent = 'جارٍ إنشاء الفيديو…'; });
+    const playbackButton = document.getElementById('btn-media-play');
+    const scrubber = document.getElementById('media-timeline-scrubber');
+    if (playbackButton) playbackButton.disabled = true;
+    if (scrubber) scrubber.disabled = true;
+    const seek = time => new Promise((resolve, reject) => {
+      if (Math.abs(video.currentTime - time) < 0.03) return resolve();
+      const timeout = setTimeout(() => reject(new Error('تعذر الانتقال إلى مقطع الفيديو.')), 10000);
+      video.addEventListener('seeked', () => { clearTimeout(timeout); resolve(); }, { once: true });
+      video.currentTime = time;
+    });
+    const drawCaption = time => {
+      const item = STATE.captions.items.find(caption => time >= caption.start && time <= caption.end);
+      if (!item) return;
+      const size = STATE.captions.fontSize || 32;
+      const y = STATE.captions.position === 'top' ? canvas.height * 0.18 : STATE.captions.position === 'center' ? canvas.height * 0.5 : canvas.height * 0.82;
+      ctx.save();
+      ctx.font = `bold ${size}px ${STATE.captions.font || 'Cairo'}, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
+      const width = ctx.measureText(item.text).width;
+      if (STATE.captions.bgPill) {
+        ctx.fillStyle = STATE.captions.pillColor || 'rgba(15,23,42,.75)';
+        ctx.beginPath(); ctx.roundRect((canvas.width - width - 48) / 2, y - size, width + 48, size * 2, 14); ctx.fill();
+      }
+      ctx.lineWidth = STATE.captions.strokeWidth || 0;
+      ctx.strokeStyle = STATE.captions.strokeColor || '#000';
+      ctx.fillStyle = STATE.captions.textColor || '#fff';
+      if (ctx.lineWidth) ctx.strokeText(item.text, canvas.width / 2, y);
+      ctx.fillText(item.text, canvas.width / 2, y);
+      ctx.restore();
+    };
+
+    try {
+      if (STATE.audio.audioCtx?.state === 'suspended') await STATE.audio.audioCtx.resume();
+      recorder.start(250);
+      for (let index = 0; index < parts.length; index++) {
+        const part = parts[index];
+        await seek(part.start);
+        await video.play();
+        await new Promise((resolve, reject) => {
+          const drawFrame = () => {
+            const censored = STATE.mode === 'word-mute' && STATE.muteRanges.some(range => video.currentTime >= range.start && video.currentTime <= range.end);
+            if (exportAudioGain && STATE.audio.audioCtx) exportAudioGain.gain.setTargetAtTime(censored ? 0 : 1, STATE.audio.audioCtx.currentTime, 0.005);
+            if (beepGain && STATE.audio.audioCtx) beepGain.gain.setTargetAtTime(censored ? 0.32 : 0, STATE.audio.audioCtx.currentTime, 0.005);
+            if (video.currentTime >= part.end || video.ended) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height); drawCaption(video.currentTime); video.pause(); resolve(); return;
+            }
+            if (video.videoWidth && video.videoHeight) {
+              const zoom = STATE.mode === 'auto-zoom' ? Math.max(1, Number(STATE.zoom.level) || 1) : 1;
+              const cropWidth = video.videoWidth / zoom;
+              const cropHeight = video.videoHeight / zoom;
+              const fit = Math.min(canvas.width / cropWidth, canvas.height / cropHeight);
+              const drawWidth = cropWidth * fit;
+              const drawHeight = cropHeight * fit;
+              ctx.drawImage(video,
+                (video.videoWidth - cropWidth) / 2, (video.videoHeight - cropHeight) / 2, cropWidth, cropHeight,
+                (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight);
+            } else {
+              ctx.fillStyle = '#090b10'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            drawCaption(video.currentTime);
+            const progress = Math.round((index + (video.currentTime - part.start) / Math.max(part.end - part.start, 0.1)) / parts.length * 100);
+            exportButtons.forEach(button => { button.textContent = `جارٍ إنشاء الفيديو… ${progress}٪`; });
+            requestAnimationFrame(drawFrame);
+          };
+          video.addEventListener('error', () => reject(new Error('تعذرت قراءة إطارات الفيديو.')), { once: true });
+          requestAnimationFrame(drawFrame);
+        });
+      }
+      recorder.stop();
+      await stopped;
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType });
+      if (!blob.size) throw new Error('لم يتم إنشاء ملف فيديو صالح.');
+      const extension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      downloadBlob(blob, `mickey-edited-${Date.now()}.${extension}`);
+      showToast(extension === 'mp4'
+        ? 'اكتمل إنشاء MP4 مع تطبيق الكابشنز والقص.'
+        : 'تم إنشاء WebM فعلياً؛ هذا المتصفح لا يتيح ترميز MP4 مباشرة.', extension === 'mp4' ? 'success' : 'warning');
+    } catch (error) {
+      if (recorder.state !== 'inactive') recorder.stop();
+      console.error('[MickeyMediaStudio] video export failed:', error);
+      showToast(error.message || 'تعذر إنشاء ملف الفيديو.', 'error');
+    } finally {
+      video.pause();
+      await seek(Math.min(initialTime, video.duration)).catch(() => {});
+      if (wasPlaying) video.play().catch(() => {});
+      stream.getTracks().forEach(track => track.stop());
+      audioDestination?.stream.getTracks().forEach(track => track.stop());
+      try { beepOscillator?.stop(); } catch (_) {}
+      exportAudioGain?.disconnect();
+      beepGain?.disconnect();
+      exportButtons.forEach(button => { button.disabled = false; if (button.dataset.originalText) button.innerHTML = button.dataset.originalText; });
+      if (playbackButton) playbackButton.disabled = false;
+      if (scrubber) scrubber.disabled = false;
+    }
   }
 
   // Utilities
@@ -1164,8 +1550,15 @@ ${clipItems}
     togglePlayback,
     setAspectRatio,
     updateSubtitleText,
+    generateCaptionsFromMedia,
     addSubtitleAtPlayhead,
     deleteSubtitle,
+    detectAndMuteWords,
+    generateViralClips,
+    selectViralClip,
+    generateYouTubeChapters,
+    copyYouTubeChapters,
+    setZoomScale,
     seekToTime,
     toggleAudioABComparison,
     exportSubtitlesSrt,

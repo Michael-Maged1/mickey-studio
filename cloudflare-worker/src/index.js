@@ -1076,7 +1076,8 @@ async function detectViralClips(ctx) {
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) clips = JSON.parse(jsonMatch[0]);
   } catch (_) {}
-  return json({ success: true, clips: clips.length ? clips : [{ title: 'المقطع الأبرز', start: 0, end: 30, reason: 'مقدمة حماسية وجاذبة' }] }, 200, ctx.headers);
+  if (!clips.length) return json({ success: false, error: 'تعذر استخراج توقيتات موثوقة للمقاطع من نتيجة التحليل. أعد المحاولة.' }, 502, ctx.headers);
+  return json({ success: true, clips }, 200, ctx.headers);
 }
 
 async function generateChapters(ctx) {
@@ -1084,6 +1085,7 @@ async function generateChapters(ctx) {
   if (!transcription) return json({ success: false, error: 'نص الفيديو فارغ.' }, 400, ctx.headers);
   const prompt = `Divide this transcript into YouTube video chapters with timestamps (mm:ss) and Arabic titles. Output one chapter per line: 00:00 - Title\nTranscript:\n${transcription.slice(0, 4000)}`;
   const text = await geminiText(ctx, prompt, 1000);
+  if (!text) return json({ success: false, error: 'تعذر توليد الفصول من النص.' }, 502, ctx.headers);
   return json({ success: true, chapters: text }, 200, ctx.headers);
 }
 
@@ -1092,11 +1094,12 @@ async function detectCensorWords(ctx) {
   if (!transcription) return json({ success: false, error: 'نص الفيديو فارغ.' }, 400, ctx.headers);
   const prompt = `Detect any offensive, blasphemous, or forbidden words in this transcript for YouTube monetization safety. Return as JSON array of bad words found.\nTranscript:\n${transcription.slice(0, 3000)}`;
   const text = await geminiText(ctx, prompt, 500);
-  let words = [];
+  let words = [], parsed = false;
   try {
     const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (jsonMatch) words = JSON.parse(jsonMatch[0]);
+    if (jsonMatch) { words = JSON.parse(jsonMatch[0]); parsed = Array.isArray(words); }
   } catch (_) {}
+  if (!parsed) return json({ success: false, error: 'تعذر قراءة نتيجة كشف الكلمات. أعد المحاولة.' }, 502, ctx.headers);
   return json({ success: true, words }, 200, ctx.headers);
 }
 
@@ -1109,8 +1112,18 @@ async function transcribeAudio(ctx) {
   if (!audioBase64) return json({ success: false, error: 'لم يتم إرسال ملف الصوت للتفريغ.' }, 400, ctx.headers);
 
   const raw = Uint8Array.from(atob(audioBase64.replace(/^data:[^,]+,/, '')), c => c.charCodeAt(0));
+  const allowedMediaTypes = new Set([
+    'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/aac',
+    'audio/ogg', 'audio/webm', 'audio/flac', 'video/mp4', 'video/webm', 'video/quicktime',
+    'video/x-matroska', 'video/mpeg'
+  ]);
+  const requestedMime = String(ctx.body.mime_type || '').split(';')[0].toLowerCase();
+  const mimeType = allowedMediaTypes.has(requestedMime) ? requestedMime : 'audio/mpeg';
+  const rawFileName = String(ctx.body.file_name || 'media');
+  const extensionMatch = rawFileName.match(/\.(wav|mp3|m4a|mp4|aac|ogg|webm|flac|mov|mkv|mpeg)$/i);
+  const mediaFileName = `upload.${(extensionMatch?.[1] || (mimeType.startsWith('video/') ? 'mp4' : 'mp3')).toLowerCase()}`;
   const form = new FormData();
-  form.append('file', new Blob([raw], { type: 'audio/wav' }), 'audio.wav');
+  form.append('file', new Blob([raw], { type: mimeType }), mediaFileName);
   form.append('model', 'whisper-large-v3');
   form.append('response_format', 'verbose_json');
 
@@ -1134,11 +1147,7 @@ async function transcribeAudio(ctx) {
 }
 
 async function analyzeVideoSilence(ctx) {
-  return json({
-    success: true,
-    message: 'تم فحص الصمت بنجاح.',
-    silence_ranges: []
-  }, 200, ctx.headers);
+  return json({ success: false, error: 'تحليل الصمت يحتاج ملف الفيديو نفسه؛ استخدم محلل الميديا في الموقع.' }, 501, ctx.headers);
 }
 
 async function proxyMedia(ctx) {

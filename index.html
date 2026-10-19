@@ -1711,7 +1711,7 @@
                 <label for="voice-text-input" class="text-xs font-bold text-white">النص والسيناريو</label>
               </div>
               <div class="flex items-center gap-1.5">
-                <button type="button" onclick="MickeyStudio.generateAiScript()" class="text-[11px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors bg-white/5 hover:bg-white/10 px-2 py-1 rounded-lg border border-white/10">
+                <button type="button" id="btn-generate-voice-script" onclick="MickeyStudio.generateAiScript()" class="text-[11px] text-zinc-400 hover:text-white flex items-center gap-1 transition-colors bg-white/5 hover:bg-white/10 px-2 py-1 rounded-lg border border-white/10">
                   <i class="fa-solid fa-pen-nib text-[10px]"></i>
                   <span>نص مقترح</span>
                 </button>
@@ -2810,7 +2810,7 @@
             <span>💬 الكابشنز</span>
           </button>
           <button type="button" class="media-mode-btn px-3 py-1.5 rounded-lg transition-all" data-mode="audio-clean">
-            <span>✨ تنقية الصوت</span>
+            <span>✨ تحسين نبرة الصوت</span>
           </button>
           <button type="button" class="media-mode-btn px-3 py-1.5 rounded-lg transition-all" data-mode="silence-cut">
             <span>✂️ قص السكتات</span>
@@ -2923,10 +2923,16 @@
                 <h4 class="text-sm font-bold text-white">إعدادات الكابشنز المتحركة</h4>
                 <p class="text-[10px] text-zinc-400">تخصيص الخط، الألوان، ونمط التوهج الحركي</p>
               </div>
+              <div class="flex items-center gap-2">
+              <button type="button" id="btn-generate-media-captions" onclick="MickeyMediaStudio.generateCaptionsFromMedia()" class="px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs flex items-center gap-1" title="تفريغ الكلام من الفيديو وإنشاء كابشنز متزامنة">
+                <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                <span>توليد الكابشنز</span>
+              </button>
               <button type="button" onclick="MickeyMediaStudio.addSubtitleAtPlayhead()" class="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-400 text-xs flex items-center gap-1" title="إضافة سطر عند المؤشر الحالي">
                 <i class="fa-solid fa-plus text-[10px]"></i>
                 <span>سطر جديد</span>
               </button>
+              </div>
             </div>
 
             <!-- Animation Style Selector -->
@@ -3003,8 +3009,8 @@
           <!-- Mode 2: Audio Cleanup & Enhancement Panel -->
           <div id="media-panel-audio-clean" class="media-tool-panel space-y-4 hidden">
             <div class="border-b border-white/5 pb-3">
-              <h4 class="text-sm font-bold text-white">هندسة وتنقية الصوت بالذكاء الاصطناعي</h4>
-              <p class="text-[10px] text-zinc-400">عزل الضجيج وصدى الغرفة وموازنة النبرة حياً</p>
+              <h4 class="text-sm font-bold text-white">تحسين نبرة الصوت (معاينة)</h4>
+              <p class="text-[10px] text-zinc-400">مرشحات صوتية أساسية للمعاينة والتصدير. لا تعزل ضوضاء الغرفة أو تزيل الصدى.</p>
             </div>
 
             <!-- Instant A/B Audio Switch -->
@@ -3022,7 +3028,7 @@
             <!-- Denoise Slider -->
             <div class="space-y-1.5">
               <div class="flex items-center justify-between text-xs">
-                <span class="text-zinc-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-fan text-teal-400"></i> نسبة عزل الضوضاء (Denoise):</span>
+                <span class="text-zinc-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-fan text-teal-400"></i> خفض الرنين والترددات غير المرغوبة:</span>
                 <span id="audio-denoise-val" class="font-mono text-teal-400 font-bold">75%</span>
               </div>
               <input type="range" id="audio-denoise-slider" min="0" max="100" value="75" class="w-full accent-teal-400 h-1.5 bg-zinc-800 rounded-lg cursor-pointer" />
@@ -3033,16 +3039,16 @@
               </div>
             </div>
 
-            <!-- De-reverb Slider -->
+            <!-- Dynamic compression control -->
             <div class="space-y-1.5">
               <div class="flex items-center justify-between text-xs">
-                <span class="text-zinc-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-microphone-slash text-sky-400"></i> إزالة الصدى وارتداد الغرفة (De-Reverb):</span>
+                <span class="text-zinc-300 font-bold flex items-center gap-1.5"><i class="fa-solid fa-microphone-slash text-sky-400"></i> موازنة تفاوت مستوى الصوت:</span>
                 <span id="audio-dereverb-val" class="font-mono text-sky-400 font-bold">50%</span>
               </div>
               <input type="range" id="audio-dereverb-slider" min="0" max="100" value="50" class="w-full accent-sky-400 h-1.5 bg-zinc-800 rounded-lg cursor-pointer" />
               <div class="flex justify-between text-[9px] text-zinc-500">
-                <span>0% طبيعي</span>
-                <span>100% استوديو معزول</span>
+                <span>خفيف</span>
+                <span>ضغط ديناميكي أعلى</span>
               </div>
             </div>
 
@@ -3090,31 +3096,67 @@
               </div>
             </div>
 
-            <button type="button" id="btn-export-silence-cuts" disabled onclick="MickeyMediaStudio.exportPremiereXml()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+            <button type="button" id="btn-export-silence-cuts" disabled onclick="MickeyMediaStudio.exportRenderedMp4()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
               <i class="fa-solid fa-scissors"></i>
-              <span>تصدير القطع لبريمير برو (XML)</span>
+              <span>قص السكتات وتصدير MP4</span>
             </button>
           </div>
 
           <!-- Mode 4: Auto-Zoom Mode Panel -->
           <div id="media-panel-auto-zoom" class="media-tool-panel space-y-4 hidden">
             <div class="border-b border-white/5 pb-3">
-              <h4 class="text-sm font-bold text-white">الزووم التلقائي الديناميكي</h4>
-              <p class="text-[10px] text-zinc-400">تقريب تلقائي ذكي لكسر رتابة الحوارات</p>
+              <h4 class="text-sm font-bold text-white">الزووم المركزي للفيديو</h4>
+              <p class="text-[10px] text-zinc-400">اختر مستوى التقريب ليُطبّق أثناء التصدير. لا يتتبع الوجوه أو المتحدث تلقائياً.</p>
             </div>
 
             <div class="space-y-2">
               <label class="block text-xs font-bold text-zinc-300">نسبة التقريب (Zoom Scale):</label>
               <div class="grid grid-cols-2 gap-2 text-xs">
-                <button type="button" class="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400 font-bold">1.15x (خفيف وسينمائي)</button>
-                <button type="button" class="p-2.5 rounded-xl bg-white/5 border border-white/5 text-zinc-400">1.30x (حركي ديناميكي)</button>
+                <button type="button" onclick="MickeyMediaStudio.setZoomScale(this, 1.15)" class="zoom-scale-btn p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400 font-bold">1.15x (خفيف وسينمائي)</button>
+                <button type="button" onclick="MickeyMediaStudio.setZoomScale(this, 1.3)" class="zoom-scale-btn p-2.5 rounded-xl bg-white/5 border border-white/5 text-zinc-400">1.30x (حركي ديناميكي)</button>
               </div>
             </div>
 
-            <button type="button" onclick="MickeyMediaStudio.exportPremiereXml()" class="w-full py-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+            <button type="button" onclick="MickeyMediaStudio.exportRenderedMp4()" class="w-full py-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
               <i class="fa-solid fa-magnifying-glass-plus"></i>
-              <span>تطبيق التكبير وتصدير التايملاين</span>
+              <span>تطبيق التقريب وتصدير الفيديو</span>
             </button>
+          </div>
+
+          <div id="media-panel-word-mute" class="media-tool-panel space-y-4 hidden">
+            <div class="border-b border-white/5 pb-3">
+              <h4 class="text-sm font-bold text-white">كشف الكلمات وحجبها</h4>
+              <p class="text-[10px] text-zinc-400">يفرّغ الصوت، يكشف الكلمات المحظورة، ويستبدلها بصفارة في ملف التصدير.</p>
+            </div>
+            <button type="button" id="btn-detect-censor-words" onclick="MickeyMediaStudio.detectAndMuteWords()" class="w-full py-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs flex items-center justify-center gap-2">
+              <i class="fa-solid fa-magnifying-glass"></i><span>كشف الكلمات وتجهيز صفارة الرقابة</span>
+            </button>
+            <div id="word-mute-results" class="min-h-16 p-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-zinc-300">ارفع الملف ثم ابدأ الكشف.</div>
+            <button type="button" onclick="MickeyMediaStudio.exportRenderedMp4()" class="w-full py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs">تصدير الفيديو بعد الحجب</button>
+          </div>
+
+          <div id="media-panel-viral-clips" class="media-tool-panel space-y-4 hidden">
+            <div class="border-b border-white/5 pb-3">
+              <h4 class="text-sm font-bold text-white">اقتراح المقاطع القصيرة</h4>
+              <p class="text-[10px] text-zinc-400">يحلل التفريغ ويقترح لحظات للمراجعة والقص. التوقيتات المقترحة تحتاج مراجعتك.</p>
+            </div>
+            <button type="button" id="btn-generate-viral-clips" onclick="MickeyMediaStudio.generateViralClips()" class="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2">
+              <i class="fa-solid fa-fire"></i><span>تحليل واقتراح المقاطع</span>
+            </button>
+            <div id="viral-clips-results" class="space-y-2 text-xs text-zinc-400">ارفع فيديو مع صوت لبدء التحليل.</div>
+            <button type="button" id="btn-export-viral-clip" disabled onclick="MickeyMediaStudio.exportRenderedMp4()" class="w-full py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-slate-950 font-bold text-xs">تصدير المقطع المحدد</button>
+          </div>
+
+          <div id="media-panel-yt-chapters" class="media-tool-panel space-y-4 hidden">
+            <div class="border-b border-white/5 pb-3">
+              <h4 class="text-sm font-bold text-white">فصول يوتيوب</h4>
+              <p class="text-[10px] text-zinc-400">أنشئ فصولاً من تفريغ الفيديو، ثم راجع التوقيتات وانسخها لوصف يوتيوب.</p>
+            </div>
+            <button type="button" id="btn-generate-yt-chapters" onclick="MickeyMediaStudio.generateYouTubeChapters()" class="w-full py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-bold text-xs flex items-center justify-center gap-2">
+              <i class="fa-solid fa-list-ol"></i><span>توليد فصول يوتيوب</span>
+            </button>
+            <textarea id="yt-chapters-output" rows="12" class="w-full p-3 rounded-xl bg-[#090b10] border border-white/10 text-xs text-white" placeholder="ستظهر الفصول هنا بعد التحليل"></textarea>
+            <button type="button" onclick="MickeyMediaStudio.copyYouTubeChapters()" class="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs">نسخ الفصول</button>
           </div>
 
         </aside>
@@ -3688,16 +3730,16 @@
   <script src="shared/motion-prompt.js?v=2.0"></script>
   <script src="shared/motion-parser.js?v=2.0"></script>
   <!-- Unified Tools Registry Script (CORS-free for file:// and web) -->
-  <script src="shared/tools-registry.js?v=1.1"></script>
+  <script src="shared/tools-registry.js?v=1.2"></script>
   <script src="app.js?v=2.7"></script>
   <!-- Studios Modules -->
   <script src="studios/image-studio.js?v=2.6"></script>
   <script src="studios/video-studio.js?v=2.6"></script>
   <script src="studios/photo-lab.js?v=2.6"></script>
-  <script src="studios/voice-studio.js?v=2.6"></script>
-  <script src="studios/transcribe-studio.js?v=2.6"></script>
+  <script src="studios/voice-studio.js?v=2.7"></script>
+  <script src="studios/transcribe-studio.js?v=2.7"></script>
   <script src="studios/vault-gallery.js?v=2.6"></script>
-  <script src="studios/media-editor.js?v=2.7"></script>
+  <script src="studios/media-editor.js?v=2.8"></script>
   <script src="mickey-tooltip.js?v=3.0"></script>
 </body>
 </html>
