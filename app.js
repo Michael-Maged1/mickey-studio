@@ -1383,7 +1383,18 @@ window.MickeyStudio = (function () {
       if (response.status === 429 && data.code === 'QUOTA_EXCEEDED' && data.tool) {
         updateQuotaBadge(data.tool, 0, data.limit);
       }
-      throw new Error(data.error || data.message || `تعذر تنفيذ الطلب (${response.status}).`);
+      const errorMessage = (value) => {
+        if (typeof value === 'string' && value.trim()) return value.trim();
+        if (Array.isArray(value)) return value.map(errorMessage).filter(Boolean).join('، ');
+        if (value && typeof value === 'object') {
+          for (const key of ['message', 'publicMessage', 'detail', 'error', 'description']) {
+            const nested = errorMessage(value[key]);
+            if (nested) return nested;
+          }
+        }
+        return '';
+      };
+      throw new Error(errorMessage(data.error) || errorMessage(data.message) || `تعذر تنفيذ الطلب (${response.status}).`);
     }
     if (action === 'consume_generation' && data.permit) {
       let permits = {};
