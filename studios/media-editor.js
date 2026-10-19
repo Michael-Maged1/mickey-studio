@@ -621,11 +621,22 @@
     const w = canvas.width / scale;
     const h = canvas.height / scale;
 
-    const fontSize = STATE.captions.fontSize || 32;
+    let fontSize = Math.min(Number(STATE.captions.fontSize || 32), h * 0.16);
     ctx.font = `bold ${fontSize}px ${STATE.captions.font}, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.direction = 'rtl';
+
+    // Fit the complete caption inside the preview/video safe area instead of
+    // letting long Arabic lines get clipped at the canvas edges.
+    const maxTextWidth = w * 0.88;
+    const measuredTextWidth = ctx.measureText(activeSub.text).width;
+    if (measuredTextWidth > maxTextWidth) {
+      fontSize = Math.max(12, fontSize * (maxTextWidth / measuredTextWidth));
+      ctx.font = `bold ${fontSize}px ${STATE.captions.font}, sans-serif`;
+    }
+    const fitTextWidth = Math.min(maxTextWidth, ctx.measureText(activeSub.text).width);
+    const drawCaptionText = method => ctx[method](activeSub.text, w / 2, posY, fitTextWidth);
 
     // Calculate Y position
     let posY = h * 0.82; // Bottom default
@@ -635,7 +646,7 @@
     // Background Pill Box
     if (STATE.captions.bgPill) {
       const textMetrics = ctx.measureText(activeSub.text);
-      const boxW = textMetrics.width + 36;
+      const boxW = Math.min(w * 0.94, textMetrics.width + 36);
       const boxH = fontSize * 1.5;
       const boxX = (w / 2) - (boxW / 2);
       const boxY = posY - (boxH / 2);
@@ -651,7 +662,7 @@
       ctx.lineWidth = STATE.captions.strokeWidth;
       ctx.strokeStyle = STATE.captions.strokeColor || '#000000';
       ctx.lineJoin = 'round';
-      ctx.strokeText(activeSub.text, w / 2, posY);
+      drawCaptionText('strokeText');
     }
 
     // Animation: Karaoke Word Glow / Pop / Clean
@@ -661,18 +672,18 @@
       
       // Default text fill
       ctx.fillStyle = STATE.captions.textColor || '#ffffff';
-      ctx.fillText(activeSub.text, w / 2, posY);
+      drawCaptionText('fillText');
 
       // If a word is actively being spoken, draw glowing highlight
       if (currentWord) {
         ctx.shadowColor = STATE.captions.glowColor || '#38bdf8';
         ctx.shadowBlur = 18;
         ctx.fillStyle = STATE.captions.glowColor || '#38bdf8';
-        ctx.fillText(activeSub.text, w / 2, posY);
+        drawCaptionText('fillText');
       }
     } else {
       ctx.fillStyle = STATE.captions.textColor || '#ffffff';
-      ctx.fillText(activeSub.text, w / 2, posY);
+      drawCaptionText('fillText');
     }
 
     ctx.restore();
