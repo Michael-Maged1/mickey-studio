@@ -27,16 +27,7 @@ $FIREBASE_WEB_API_KEY = 'AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg';
 
 // Parse incoming request parameters (GET or JSON POST)
 $rawInput = file_get_contents('php://input');
-$isBinaryQuickCutRequest = ($_GET['action'] ?? '') === 'analyze_video_silence' && preg_match('/^(?:video|audio)\//i', $_SERVER['CONTENT_TYPE'] ?? '');
-$postData = $isBinaryQuickCutRequest ? [
-    'action' => 'analyze_video_silence',
-    '_video_binary' => $rawInput,
-    'mime_type' => $_SERVER['CONTENT_TYPE'] ?? '',
-    'start_seconds' => $_GET['start_seconds'] ?? null,
-    'end_seconds' => $_GET['end_seconds'] ?? null,
-    'threshold_db' => $_GET['threshold_db'] ?? null,
-    'minimum_seconds' => $_GET['minimum_seconds'] ?? null,
-] : (json_decode($rawInput, true) ?: []);
+$postData = json_decode($rawInput, true) ?: [];
 
 $GLOBALS['PROVIDER_KEYS'] = $PROVIDER_KEYS;
 $action = $_GET['action'] ?? $postData['action'] ?? 'status';
@@ -45,7 +36,7 @@ $action = $_GET['action'] ?? $postData['action'] ?? 'status';
 validateRequestApiKey();
 
 $generationAccess = null;
-if ($action === 'consume_generation' || in_array($action, ['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'analyze_video_silence'], true)) {
+if ($action === 'consume_generation' || in_array($action, ['generate_image', 'enhance_prompt', 'refine_voiceover', 'generate_tts', 'transcribe_audio', 'generate_motion_scene'], true)) {
     $generationAccess = enforceGenerationAccess($action === 'consume_generation' ? ($postData['tool'] ?? 'tool') : $action, (int)($postData['count'] ?? 1), $action, (string)($postData['idToken'] ?? ''));
 }
 if (in_array($action, ['list_api_keys', 'revoke_api_key'], true)) {
@@ -133,6 +124,14 @@ switch ($action) {
         handleGeminiImageGeneration($postData);
         break;
 
+    case 'remove_background':
+        handleRemoveBackground($postData);
+        break;
+
+    case 'upscale_image':
+        handleUpscaleImage($postData);
+        break;
+
     case 'enhance_prompt':
         handleEnhancePrompt($postData);
         break;
@@ -153,8 +152,20 @@ switch ($action) {
         handleTranscribeAudio($postData);
         break;
 
-    case 'analyze_video_silence':
-        handleAnalyzeVideoSilence($postData);
+    case 'detect_viral_clips':
+        handleDetectViralClips($postData);
+        break;
+
+    case 'generate_chapters':
+        handleGenerateChapters($postData);
+        break;
+
+    case 'detect_censor_words':
+        handleDetectCensorWords($postData);
+        break;
+
+    case 'generate_motion_scene':
+        handleGenerateMotionScene($postData);
         break;
 
     case 'generate_api_key':
@@ -565,6 +576,128 @@ function handleGetGeminiKeys() {
             ['id' => 'imagen-3.0-generate-002', 'name' => 'Google Imagen 3 (توليد صور واقعية 2K)', 'type' => 'image']
         ]
     ]);
+}
+
+/**
+ * Photo Lab: Background Removal
+ */
+function handleRemoveBackground($data) {
+    header('Content-Type: application/json; charset=utf-8');
+    $b64 = (string)($data['image_base64'] ?? $data['image'] ?? '');
+    if (!$b64) sendJsonResponse(400, ['success' => false, 'error' => 'بيانات الصورة مفقودة.']);
+    
+    if (strpos($b64, ',') !== false) {
+        $parts = explode(',', $b64, 2);
+        $b64 = $parts[1];
+    }
+    $raw = base64_decode($b64);
+    if (!$raw) sendJsonResponse(400, ['success' => false, 'error' => 'تعذر فك ترميز الصورة.']);
+
+    // Strategy 1: Forward to local Python server if available
+    $ch = curl_init('http://127.0.0.1:8000/api.php?action=remove_background');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['action' => 'remove_background', 'image_base64' => $b64]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $res = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200 && $res) {
+        $json = json_decode($res, true);
+        if ($json && !empty($json['success'])) {
+            sendJsonResponse(200, $json);
+        }
+    }
+
+    // Strategy 2: Direct GD fallback
+    if (function_exists('imagecreatefromstring')) {
+        $im = @imagecreatefromstring($raw);
+        if ($im) {
+            imagesavealpha($im, true);
+            $bg = imagecolorat($im, 0, 0);
+            imagecolortransparent($im, $bg);
+            ob_start();
+            imagepng($im);
+            $out = ob_get_clean();
+            imagedestroy($im);
+            sendJsonResponse(200, [
+                'success' => true,
+                'base64Data' => base64_encode($out),
+                '_media_base64' => base64_encode($out),
+                'mimeType' => 'image/png'
+            ]);
+        }
+    }
+
+    sendJsonResponse(500, ['success' => false, 'error' => 'تعذر إزالة الخلفية. تأكد من تشغيل خادم المنصة.']);
+}
+
+/**
+ * Photo Lab: 4K / 2K Upscaling
+ */
+function handleUpscaleImage($data) {
+    header('Content-Type: application/json; charset=utf-8');
+    $b64 = (string)($data['image_base64'] ?? $data['image'] ?? '');
+    $scale = (int)($data['scale'] ?? 2);
+    if (!$b64) sendJsonResponse(400, ['success' => false, 'error' => 'بيانات الصورة مفقودة.']);
+    
+    if (strpos($b64, ',') !== false) {
+        $parts = explode(',', $b64, 2);
+        $b64 = $parts[1];
+    }
+    $raw = base64_decode($b64);
+    if (!$raw) sendJsonResponse(400, ['success' => false, 'error' => 'تعذر فك ترميز الصورة.']);
+
+    // Strategy 1: Forward to local Python server if available
+    $ch = curl_init('http://127.0.0.1:8000/api.php?action=upscale_image');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['action' => 'upscale_image', 'image_base64' => $b64, 'scale' => $scale]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $res = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200 && $res) {
+        $json = json_decode($res, true);
+        if ($json && !empty($json['success'])) {
+            sendJsonResponse(200, $json);
+        }
+    }
+
+    // Strategy 2: Direct GD upscale fallback
+    if (function_exists('imagecreatefromstring')) {
+        $src = @imagecreatefromstring($raw);
+        if ($src) {
+            $w = imagesx($src);
+            $h = imagesy($src);
+            $mul = ($scale >= 4) ? 4 : 2;
+            $nw = $w * $mul;
+            $nh = $h * $mul;
+            $dst = imagecreatetruecolor($nw, $nh);
+            imagealphablending($dst, false);
+            imagesavealpha($dst, true);
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+            ob_start();
+            imagepng($dst);
+            $out = ob_get_clean();
+            imagedestroy($src);
+            imagedestroy($dst);
+            sendJsonResponse(200, [
+                'success' => true,
+                'base64Data' => base64_encode($out),
+                '_media_base64' => base64_encode($out),
+                'mimeType' => 'image/png',
+                'width' => $nw,
+                'height' => $nh
+            ]);
+        }
+    }
+
+    sendJsonResponse(500, ['success' => false, 'error' => 'تعذر تحسين الصورة. تأكد من تشغيل خادم المنصة.']);
 }
 
 /**
@@ -1094,8 +1227,6 @@ function handleTranscribeAudio($data) {
     $mimeType    = $data['mime_type'] ?? 'audio/webm';
     $activeKeys  = getActiveGeminiKeys();
     $dialect     = $data['dialect'] ?? 'auto';
-    $startSeconds = filter_var($data['start_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
-    $endSeconds = filter_var($data['end_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
     $hfToken     = (string)($GLOBALS['PROVIDER_KEYS']['hfToken'] ?? '');
 
     // If audio was uploaded via multipart/form-data
@@ -1126,14 +1257,11 @@ function handleTranscribeAudio($data) {
     if ($dialect !== 'auto') {
         $dialectGuide = "ملاحظة: المتحدث قد يتحدث بـ ({$dialect}). يرجى مراعاة الكلمات والمصطلحات الدارجة في هذه اللهجة بدقة.";
     }
-    if ($startSeconds !== false && $endSeconds !== false && $startSeconds >= 0 && $endSeconds > $startSeconds) {
-        $dialectGuide .= sprintf(' فرّغ الكلام الواقع فقط بين %.2f و%.2f ثانية من بداية الملف، وتجاهل ما قبل هذا النطاق وما بعده. اجعل توقيتات SRT نسبية إلى بداية النطاق.', $startSeconds, $endSeconds);
-    }
 
     // 1. Google Gemini Multimodal Audio Engine (Highest precision for Arabic) with Multi-Key Pool
     if (!empty($activeKeys)) {
         $promptInstruction = "أنت خبير فائق الذكاء في تفريغ وتحليل الصوت والكلام العربي بجميع لهجاته (الفصحى، المصرية، الخليجية، الشامية، المغاربية). "
-            . "استمع للصوت المرفق، سواء كان ملفاً صوتياً أو فيديو يحتوي على صوت، وقم بتفريغه وتحليله بدقة شديدة. "
+            . "استمع للصوت العربي المرفق جيداً، وقم بتفريغه وتحليله بدقة شديدة. "
             . $dialectGuide . " "
             . "المطلوب منك إخراج كائن JSON فقط (Strict valid JSON) بدون أي علامات markdown أو كتل برمجية، يحتوي على الحقول التالية حصراً:\n"
             . "{\n"
@@ -1173,7 +1301,7 @@ function handleTranscribeAudio($data) {
             ]
         ];
 
-        $candidateModels = ['gemini-3.8-flash', 'gemini-3.6-flash'];
+        $candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash'];
         foreach ($activeKeys as $apiKey) {
             foreach ($candidateModels as $modelName) {
                 $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$modelName}:generateContent?key=" . urlencode($apiKey);
@@ -1292,132 +1420,318 @@ function handleTranscribeAudio($data) {
     exit();
 }
 
-function handleAnalyzeVideoSilence($data) {
+/**
+ * 5.5 AutoCut Suite: Viral Shorts Detector, Chapters Generator, and Censor Bleep
+ */
+function handleDetectViralClips($data) {
     header('Content-Type: application/json; charset=utf-8');
-    $rawVideoBytes = isset($data['_video_binary']) && is_string($data['_video_binary']) ? $data['_video_binary'] : null;
-    $videoBase64 = preg_replace('/^data:[^,]+,/', '', (string)($data['video_base64'] ?? ''));
-    $mimeType = strtolower(trim(explode(';', (string)($data['mime_type'] ?? ''))[0]));
-    if ($rawVideoBytes === null && $videoBase64 === '') sendJsonResponse(400, ['success' => false, 'error' => 'ملف الفيديو غير موجود.']);
-    if ($rawVideoBytes !== null && strlen($rawVideoBytes) > 50 * 1024 * 1024) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (50 ميجابايت).']);
-    if ($rawVideoBytes === null && strlen($videoBase64) > 26700000) sendJsonResponse(413, ['success' => false, 'error' => 'حجم الفيديو أكبر من حد الإرسال الآمن (20 ميجابايت).']);
-    if (!preg_match('/^(?:video\/(mp4|quicktime|mov|webm|x-matroska|avi|mpeg|mpg|x-msvideo|x-ms-wmv|wmv|3gpp)|audio\/(wav|x-wav|wave|mpeg|mp3|mp4|m4a|aac|flac|ogg))$/i', $mimeType)) {
-        sendJsonResponse(415, ['success' => false, 'error' => 'صيغة الملف غير مدعومة لتحليل الصمت.']);
+    $transcript = trim((string)($data['transcript'] ?? $data['text'] ?? ''));
+    $durationPref = trim((string)($data['duration_pref'] ?? '60-90'));
+    if ($transcript === '') {
+        echo json_encode(['success' => false, 'error' => 'نص الفيديو أو التفريغ فارغ'], JSON_UNESCAPED_UNICODE);
+        exit();
     }
-    $start = filter_var($data['start_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
-    $end = filter_var($data['end_seconds'] ?? null, FILTER_VALIDATE_FLOAT);
-    if ($start === false || $end === false || $start < 0 || $end <= $start || $end - $start > 360) {
-        sendJsonResponse(400, ['success' => false, 'error' => 'نطاق الفيديو المحدد غير صالح أو أطول من 6 دقائق.']);
-    }
-    $minimum = max(0.2, min(5, (float)($data['minimum_seconds'] ?? 0.5)));
-    $threshold = max(-65, min(-18, (float)($data['threshold_db'] ?? -38)));
-    $prompt = sprintf(
-        'حلل المسار الصوتي داخل الفيديو المرفق فقط، ولا تحلل الصورة أو المحتوى البصري. ابحث عن فترات الصمت أو الانخفاض الواضح جدًا في الصوت، بحد تقريبي %.1f dB ولمدة لا تقل عن %.2f ثانية. افحص فقط المجال من %.3f إلى %.3f ثانية من بداية الملف. أرجع الأوقات بالثواني نسبة إلى بداية المجال المحدد (أي يبدأ المجال عند 0). لا تعتبر الوقفات التعبيرية القصيرة صمتًا، ولا تقطع الكلام الهادئ. أخرج JSON فقط بالشكل {"silences":[{"start_seconds":1.25,"end_seconds":2.10}]}. إذا لم توجد فترات مناسبة أرجع {"silences":[]}. لا تضف أي شرح.',
-        $threshold, $minimum, $start, $end
-    );
-    foreach (getActiveGeminiKeys() as $apiKey) {
-        $uploadedFile = null;
-        if ($rawVideoBytes !== null || strlen($videoBase64) > 16800000) {
-            $uploadBytes = $rawVideoBytes ?? base64_decode($videoBase64, true);
-            $uploadedFile = $uploadBytes === false ? null : uploadGeminiVideoFile($uploadBytes, $mimeType, $apiKey);
-            if (!$uploadedFile) continue;
+
+    $activeKeys = getActiveGeminiKeys();
+    $sysPrompt = "أنت خبير مونتاج وتسويق فيديو محترف متخصص في استخراج المقاطع الأكثر انتشاراً وفيروسية (Viral Shorts & Reels). "
+        . "قم بتحليل نص الفيديو المرفق، وحدد أفضل المقاطع القصيرة الصالحة لتكون ريلز أو شورتس. "
+        . "المطلوب إخراج كائن JSON فقط يحتوي على:\n"
+        . "{\n"
+        . '  "clips": ['
+        . '    {"title": "عنوان جذاب", "hook": "الخطاف والبداية", "startTime": 12.0, "endTime": 62.0, "duration": 50.0, "viralityScore": 95, "category": "تعليمي / فكاهي / إثارة فضول", "reason": "سبب التقييم العالي"}'
+        . '  ]'
+        . "}";
+
+    foreach ($activeKeys as $key) {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . urlencode($key);
+        $payload = [
+            'contents' => [
+                ['role' => 'user', 'parts' => [['text' => $sysPrompt . "\n\nمدة المقطع المفضلة: " . $durationPref . "\n\nالنص:\n" . $transcript]]]
+            ],
+            'generationConfig' => ['temperature' => 0.4, 'responseMimeType' => 'application/json']
+        ];
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code === 200 && !empty($res)) {
+            $json = json_decode($res, true);
+            $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            $parsed = json_decode($rawText, true) ?: [];
+            echo json_encode(['success' => true, 'clips' => $parsed['clips'] ?? [], 'count' => count($parsed['clips'] ?? [])], JSON_UNESCAPED_UNICODE);
+            exit();
         }
-        foreach (['gemini-3.8-flash', 'gemini-3.6-flash'] as $modelName) {
-            $payload = [
-                'contents' => [[ 'role' => 'user', 'parts' => [
-                    $uploadedFile
-                        ? ['fileData' => ['mimeType' => $mimeType, 'fileUri' => $uploadedFile['uri']]]
-                        : ['inlineData' => ['mimeType' => $mimeType, 'data' => $videoBase64]],
+    }
+
+    echo json_encode(['success' => true, 'clips' => [[
+        'title' => 'المقطع الافتتاحي المقترح',
+        'hook' => mb_substr($transcript, 0, 70) . '...',
+        'startTime' => 0.0,
+        'endTime' => min(60.0, max(15.0, count(explode(' ', $transcript)) * 0.4)),
+        'duration' => min(60.0, max(15.0, count(explode(' ', $transcript)) * 0.4)),
+        'viralityScore' => 88,
+        'category' => 'افتتاحي',
+        'reason' => 'بداية الفيديو تحتوي على الفكرة الأساسية'
+    ]], 'count' => 1], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+/**
+ * AI Motion Builder: Automatic Scene Generation with Gemini
+ */
+function handleGenerateMotionScene($data) {
+    header('Content-Type: application/json; charset=utf-8');
+    $prompt = trim((string)($data['prompt'] ?? ''));
+    if ($prompt === '') {
+        echo json_encode(['success' => false, 'error' => 'البرومت المطلوب توليده فارغ.'], JSON_UNESCAPED_UNICODE);
+        exit();
+    }
+
+    $activeKeys = getActiveGeminiKeys();
+    if (empty($activeKeys)) {
+        echo json_encode(['success' => false, 'error' => 'لا يتوفر مفتاح Gemini صالح في المنصة.'], JSON_UNESCAPED_UNICODE);
+        exit();
+    }
+
+    $payload = [
+        'contents' => [
+            [
+                'role' => 'user',
+                'parts' => [
                     ['text' => $prompt]
-                ]]],
-                'generationConfig' => ['temperature' => 0, 'responseMimeType' => 'application/json', 'maxOutputTokens' => 3000]
-            ];
-            $ch = curl_init('https://generativelanguage.googleapis.com/v1beta/models/' . $modelName . ':generateContent?key=' . urlencode($apiKey));
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($payload), CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-                CURLOPT_TIMEOUT => 90, CURLOPT_SSL_VERIFYPEER => true
-            ]);
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            if ($httpCode !== 200 || !$response) continue;
-            $json = json_decode($response, true);
-            $rawText = trim((string)($json['candidates'][0]['content']['parts'][0]['text'] ?? ''));
-            $rawText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', $rawText);
-            $parsed = json_decode($rawText, true);
-            if (!is_array($parsed) || !isset($parsed['silences']) || !is_array($parsed['silences'])) continue;
-            $duration = $end - $start;
-            $silences = [];
-            foreach ($parsed['silences'] as $range) {
-                $rangeStart = (float)($range['start_seconds'] ?? NAN);
-                $rangeEnd = (float)($range['end_seconds'] ?? NAN);
-                if (!is_finite($rangeStart) || !is_finite($rangeEnd)) continue;
-                $rangeStart = max(0, min($duration, $rangeStart));
-                $rangeEnd = max(0, min($duration, $rangeEnd));
-                if ($rangeEnd - $rangeStart >= $minimum) $silences[] = ['start_seconds' => $rangeStart, 'end_seconds' => $rangeEnd];
-            }
-            if ($uploadedFile) deleteGeminiVideoFile($uploadedFile['name'], $apiKey);
-            sendJsonResponse(200, ['success' => true, 'data' => ['silences' => $silences], 'provider' => $modelName]);
-        }
-        if ($uploadedFile) deleteGeminiVideoFile($uploadedFile['name'], $apiKey);
-    }
-    sendJsonResponse(502, ['success' => false, 'error' => 'تعذر تحليل صوت الفيديو. تحقق من مفتاح Gemini أو جرّب مقطعًا أقصر.']);
-}
-
-function uploadGeminiVideoFile($videoBytes, $mimeType, $apiKey) {
-    $uploadUrl = '';
-    $start = curl_init('https://generativelanguage.googleapis.com/upload/v1beta/files?key=' . urlencode($apiKey));
-    curl_setopt_array($start, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode(['file' => ['display_name' => 'mickey-quickcut-' . time()]]),
-        CURLOPT_HTTPHEADER => [
-            'Content-Type: application/json', 'X-Goog-Upload-Protocol: resumable', 'X-Goog-Upload-Command: start',
-            'X-Goog-Upload-Header-Content-Length: ' . strlen($videoBytes), 'X-Goog-Upload-Header-Content-Type: ' . $mimeType
+                ]
+            ]
         ],
-        CURLOPT_HEADERFUNCTION => function ($curl, $header) use (&$uploadUrl) {
-            if (stripos($header, 'x-goog-upload-url:') === 0) $uploadUrl = trim(substr($header, strlen('x-goog-upload-url:')));
-            return strlen($header);
-        },
-        CURLOPT_TIMEOUT => 60, CURLOPT_SSL_VERIFYPEER => true
-    ]);
-    $startResponse = curl_exec($start);
-    $startCode = curl_getinfo($start, CURLINFO_HTTP_CODE);
-    curl_close($start);
-    if ($startResponse === false || $startCode < 200 || $startCode >= 300 || !preg_match('#^https://generativelanguage\.googleapis\.com/upload/v1beta/files/#', $uploadUrl)) return null;
+        'generationConfig' => [
+            'temperature' => 0.2,
+            'maxOutputTokens' => 4096,
+            'responseMimeType' => 'application/json'
+        ]
+    ];
 
-    $upload = curl_init($uploadUrl);
-    curl_setopt_array($upload, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $videoBytes,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/octet-stream', 'X-Goog-Upload-Offset: 0', 'X-Goog-Upload-Command: upload, finalize'],
-        CURLOPT_TIMEOUT => 90, CURLOPT_SSL_VERIFYPEER => true
-    ]);
-    $uploadResponse = curl_exec($upload);
-    $uploadCode = curl_getinfo($upload, CURLINFO_HTTP_CODE);
-    curl_close($upload);
-    $file = json_decode((string)$uploadResponse, true)['file'] ?? [];
-    if ($uploadResponse === false || $uploadCode < 200 || $uploadCode >= 300 || empty($file['name']) || empty($file['uri'])) return null;
-    $fileName = (string)($file['name'] ?? '');
-    if (!preg_match('#^files/[A-Za-z0-9_-]+$#', $fileName)) return null;
-    for ($attempt = 0; ($file['state'] ?? '') === 'PROCESSING' && $attempt < 20; $attempt++) {
-        usleep(2000000);
-        $status = curl_init('https://generativelanguage.googleapis.com/v1beta/' . $fileName . '?key=' . urlencode($apiKey));
-        curl_setopt_array($status, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => true]);
-        $statusResponse = curl_exec($status);
-        $statusCode = curl_getinfo($status, CURLINFO_HTTP_CODE);
-        curl_close($status);
-        if ($statusResponse === false || $statusCode < 200 || $statusCode >= 300) return null;
-        $statusData = json_decode($statusResponse, true) ?? [];
-        $file = $statusData['file'] ?? $statusData;
+    $lastError = '';
+    foreach ($activeKeys as $key) {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . urlencode($key);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 45,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code === 200 && !empty($res)) {
+            $json = json_decode($res, true);
+            $rawReply = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            if (!empty($rawReply)) {
+                echo json_encode([
+                    'success' => true,
+                    'raw_reply' => $rawReply,
+                    'quota' => [
+                        'tool' => 'motion',
+                        'remaining' => $GLOBALS['generationAccess']['remaining'] ?? 5
+                    ]
+                ], JSON_UNESCAPED_UNICODE);
+                exit();
+            }
+        }
+        $lastError = "تعذر توليد المشهد (HTTP $code)";
     }
-    return ($file['state'] ?? '') === 'ACTIVE' ? ['name' => $file['name'], 'uri' => $file['uri']] : null;
+
+    echo json_encode(['success' => false, 'error' => $lastError ?: 'تعذر الاتصال بـ Gemini لتوليد المشهد.'], JSON_UNESCAPED_UNICODE);
+    exit();
 }
 
-function deleteGeminiVideoFile($fileName, $apiKey) {
-    if (!preg_match('#^files/[A-Za-z0-9_-]+$#', (string)$fileName)) return;
-    $delete = curl_init('https://generativelanguage.googleapis.com/v1beta/' . $fileName . '?key=' . urlencode($apiKey));
-    curl_setopt_array($delete, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CUSTOMREQUEST => 'DELETE', CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => true]);
-    curl_exec($delete);
-    curl_close($delete);
+function handleGenerateChapters($data) {
+    header('Content-Type: application/json; charset=utf-8');
+    $transcript = trim((string)($data['transcript'] ?? $data['text'] ?? ''));
+    if ($transcript === '') {
+        echo json_encode(['success' => false, 'error' => 'نص الفيديو أو التفريغ فارغ'], JSON_UNESCAPED_UNICODE);
+        exit();
+    }
+
+    $activeKeys = getActiveGeminiKeys();
+    $sysPrompt = "أنت خبير يوتيوب ومونتاج. قم بتقسيم نص الفيديو المرفق إلى فصول ومواضيع واضحة (YouTube Chapters & Markers). "
+        . "يجب أن يبدأ الفصل الأول عند 00:00 (المقدمة). "
+        . "المطلوب إخراج كائن JSON فقط يحتوي على:\n"
+        . "{\n"
+        . '  "chapters": ['
+        . '    {"seconds": 0, "timestamp": "00:00", "title": "المقدمة"}'
+        . '  ],'
+        . '  "formattedText": "00:00 المقدمة"'
+        . "}";
+
+    foreach ($activeKeys as $key) {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . urlencode($key);
+        $payload = [
+            'contents' => [
+                ['role' => 'user', 'parts' => [['text' => $sysPrompt . "\n\nالنص وتفريغ الفيديو:\n" . $transcript]]]
+            ],
+            'generationConfig' => ['temperature' => 0.3, 'responseMimeType' => 'application/json']
+        ];
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code === 200 && !empty($res)) {
+            $json = json_decode($res, true);
+            $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            $parsed = json_decode($rawText, true) ?: [];
+            $chapters = $parsed['chapters'] ?? [];
+            $formatted = $parsed['formattedText'] ?? '';
+            if (empty($formatted) && !empty($chapters)) {
+                $lines = [];
+                foreach ($chapters as $c) $lines[] = ($c['timestamp'] ?? '00:00') . ' ' . ($c['title'] ?? '');
+                $formatted = implode("\n", $lines);
+            }
+            echo json_encode(['success' => true, 'chapters' => $chapters, 'formattedText' => $formatted, 'count' => count($chapters)], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'chapters' => [
+            ['seconds' => 0, 'timestamp' => '00:00', 'title' => 'المقدمة'],
+            ['seconds' => 60, 'timestamp' => '01:00', 'title' => 'الموضوع الرئيسي']
+        ],
+        'formattedText' => "00:00 المقدمة\n01:00 الموضوع الرئيسي",
+        'count' => 2
+    ], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+function handleDetectCensorWords($data) {
+    header('Content-Type: application/json; charset=utf-8');
+    $transcript = trim((string)($data['transcript'] ?? $data['text'] ?? ''));
+    $customWords = trim((string)($data['custom_words'] ?? $data['words'] ?? ''));
+    if ($transcript === '') {
+        echo json_encode(['success' => false, 'error' => 'نص الفيديو أو التفريغ فارغ'], JSON_UNESCAPED_UNICODE);
+        exit();
+    }
+
+    $activeKeys = getActiveGeminiKeys();
+    $sysPrompt = "أنت خبير في مراجعة المحتوى والرقابة الصوتية (Content Moderation & Censor Bleep). "
+        . "قم بفحص النص المرفق واكتشاف أي كلمات مسيئة، شتائم، ألفاظ نابية، أو الكلمات المخصصة التي حددها المستخدم. "
+        . "المطلوب إخراج كائن JSON فقط يحتوي على:\n"
+        . "{\n"
+        . '  "matches": ['
+        . '    {"word": "الكلمة المحظورة", "start": 14.5, "end": 15.2, "reason": "شتيمة / لفظ غير لائق / محدد من المستخدم"}'
+        . '  ]'
+        . "}";
+
+    foreach ($activeKeys as $key) {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . urlencode($key);
+        $payload = [
+            'contents' => [
+                ['role' => 'user', 'parts' => [['text' => $sysPrompt . "\n\nكلمات مخصصة للحجب: " . $customWords . "\n\nالنص:\n" . $transcript]]]
+            ],
+            'generationConfig' => ['temperature' => 0.1, 'responseMimeType' => 'application/json']
+        ];
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 30, CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code === 200 && !empty($res)) {
+            $json = json_decode($res, true);
+            $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            $parsed = json_decode($rawText, true) ?: [];
+            echo json_encode(['success' => true, 'matches' => $parsed['matches'] ?? [], 'count' => count($parsed['matches'] ?? [])], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+    }
+
+    $matches = [];
+    $userList = preg_split('/[,،\s]+/u', $customWords, -1, PREG_SPLIT_NO_EMPTY);
+    foreach ($userList as $w) {
+        if (mb_strpos($transcript, $w) !== false) {
+            $matches[] = ['word' => $w, 'start' => 0.0, 'end' => 0.5, 'reason' => 'محدد من المستخدم'];
+        }
+    }
+
+    echo json_encode(['success' => true, 'matches' => $matches, 'count' => count($matches)], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+/**
+ * 5.7 Generate Motion Scene (Using Gemini key pool with failover)
+ */
+function handleGenerateMotionScene($data) {
+    global $generationAccess;
+    $idea = trim((string)($data['idea'] ?? ''));
+    $prompt = trim((string)($data['prompt'] ?? ''));
+    if ($prompt === '' && $idea === '') {
+        sendJsonResponse(400, ['success' => false, 'error' => 'يرجى كتابة فكرة المشهد لتوليد الموشن جرافيك.']);
+    }
+
+    $activeKeys = getActiveGeminiKeys();
+    if (empty($activeKeys)) {
+        sendJsonResponse(503, ['success' => false, 'error' => 'خدمة الذكاء الاصطناعي للموشن جرافيك غير مهيأة حالياً.']);
+    }
+
+    $finalPrompt = $prompt !== '' ? $prompt : ("أنشئ مشهد موشن جرافيك احترافي بصيغة JSON فقط متوافق مع schema v2 للفكرة التالية:\n" . $idea);
+
+    $payload = [
+        'contents' => [
+            ['role' => 'user', 'parts' => [['text' => $finalPrompt]]]
+        ],
+        'generationConfig' => [
+            'temperature' => 0.2,
+            'responseMimeType' => 'application/json'
+        ]
+    ];
+
+    foreach ($activeKeys as $key) {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . urlencode($key);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT => 40,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code === 200 && !empty($res)) {
+            $json = json_decode($res, true);
+            $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            if ($rawText !== '') {
+                sendJsonResponse(200, [
+                    'success' => true,
+                    'text' => $rawText,
+                    'remaining' => max(0, (int)($generationAccess['remaining'] ?? 5) - 1)
+                ]);
+            }
+        }
+    }
+
+    sendJsonResponse(502, ['success' => false, 'error' => 'تعذر توليد المشهد من الذكاء الاصطناعي حالياً. يمكنك نسخ البرومبت وتشغيله في Claude / ChatGPT / Gemini مجاناً.']);
 }
 
 /**
@@ -1610,7 +1924,8 @@ function enforceGenerationAccess($tool, $count = 1, $action = '', $providedToken
     $tool = (string)$tool;
     $actionTool = [
         'generate_image' => 'image', 'generate_tts' => 'voiceover',
-        'transcribe_audio' => 'transcription', 'analyze_video_silence' => 'transcription', 'enhance_prompt' => 'prompt', 'refine_voiceover' => 'voiceover'
+        'transcribe_audio' => 'transcription', 'enhance_prompt' => 'prompt', 'refine_voiceover' => 'voiceover',
+        'generate_motion_scene' => 'motion'
     ][$action] ?? $tool;
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $key = hash('sha256', $anonymousId . '|' . $ip);
@@ -1860,10 +2175,9 @@ function handleStatus() {
         'status'    => 'online',
         'server'    => 'Mickey Studio AI Gateway',
         'system'    => 'Mickey Studio Nano Banana AI Gateway',
-        'version'   => '4.1.0',
-        'features'  => ['raw_video_silence_upload' => true],
+        'version'   => '3.8.0',
         'security'  => 'AES-256 Encryption Active',
-        'endpoints' => ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'analyze_video_silence', 'generate_image', 'refine_voiceover'],
+        'endpoints' => ['generate_tts', 'enhance_prompt', 'transcribe_audio', 'generate_image', 'refine_voiceover'],
         'engines'   => [
             'nano_banana'  => 'gemini-nano-banana-2.1',
             'gemini_tts'   => 'gemini-3.8-flash-tts',

@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "id": "outro_social_connect",
+  "name": "خاتمة حسابات التواصل (Social Connect Outro)",
+  "nameEn": "Social Media Connect End Screen",
+  "category": "outro_endscreens",
+  "description": "عرض أنيق لحسابات السوشيال ميديا والموقع الرسمي في نهاية الفيديو.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5.5,
+  "background": {
+    "type": "color",
+    "color": "#090a12"
+  },
+  "layers": [
+    {
+      "id": "out_title",
+      "type": "text",
+      "name": "عنوان الخاتمة",
+      "start": 0.2,
+      "duration": 5.3,
+      "transform": {
+        "x": 960,
+        "y": 380,
+        "w": 1000,
+        "h": 90,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 60,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "تواصل معنا وتابع جديدنا",
+        "textEn": "Stay Connected & Follow Us"
+      }
+    },
+    {
+      "id": "out_handle",
+      "type": "text",
+      "name": "معرف الحساب",
+      "start": 0.6,
+      "duration": 4.9,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 800,
+        "h": 80,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "Inter",
+        "fontSize": 48,
+        "fontWeight": 800,
+        "align": "center"
+      },
+      "content": {
+        "text": "@MickeyStudioOfficial"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        }
+      }
+    }
+  ]
+}

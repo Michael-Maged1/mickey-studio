@@ -1,0 +1,135 @@
+{
+  "version": 2,
+  "id": "title_kinetic_pop",
+  "name": "مقدمة حركية نطّاطة (Kinetic Pop)",
+  "nameEn": "Kinetic Pop Bouncing Intro",
+  "category": "titles_intros",
+  "description": "حركة دخول صاخبة ومرحة للعناوين الحماسية واليوتيوب.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 4.5,
+  "background": {
+    "type": "color",
+    "color": "#0d1117"
+  },
+  "layers": [
+    {
+      "id": "star_decor_1",
+      "type": "shape",
+      "name": "نجمة زينة يسار",
+      "start": 0.2,
+      "duration": 4.3,
+      "transform": {
+        "x": 340,
+        "y": 460,
+        "w": 120,
+        "h": 120,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.8
+      },
+      "style": {
+        "fill": "brand.accent"
+      },
+      "content": {
+        "shape": "star",
+        "sides": 5
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5
+        },
+        "loop": {
+          "name": "spin",
+          "speed": 0.15
+        }
+      }
+    },
+    {
+      "id": "star_decor_2",
+      "type": "shape",
+      "name": "حلقة ديكور يمين",
+      "start": 0.3,
+      "duration": 4.2,
+      "transform": {
+        "x": 1580,
+        "y": 520,
+        "w": 160,
+        "h": 160,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.4
+      },
+      "style": {
+        "fill": "brand.primary",
+        "stroke": "brand.secondary",
+        "strokeWidth": 4,
+        "radius": 80
+      },
+      "content": {
+        "shape": "donut",
+        "innerRadius": 55
+      },
+      "presets": {
+        "loop": {
+          "name": "pulse",
+          "period": 2
+        }
+      }
+    },
+    {
+      "id": "pop_title",
+      "type": "text",
+      "name": "نص العنوان النشط",
+      "start": 0.4,
+      "duration": 4.1,
+      "transform": {
+        "x": 960,
+        "y": 520,
+        "w": 1200,
+        "h": 150,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.primary",
+        "font": "brand.heading",
+        "fontSize": 96,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl",
+        "glow": {
+          "color": "brand.primary",
+          "blur": 24
+        }
+      },
+      "content": {
+        "text": "فيديو اليوم غير أي فيديو!",
+        "textEn": "TODAY IS TOTALLY DIFFERENT!"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.7,
+          "sfx": "pop"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 1.5
+        }
+      }
+    }
+  ]
+}

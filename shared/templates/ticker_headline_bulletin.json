@@ -1,0 +1,82 @@
+{
+  "version": 2,
+  "id": "ticker_headline_bulletin",
+  "name": "شريط العناوين الرسمية (Headline Bulletin)",
+  "nameEn": "Formal Headline Bulletin Banner",
+  "category": "news_ticker",
+  "description": "شريط قنوات إخبارية رسمي مع علامة الساعة والمنطقة الزمنية.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "bulletin_bg",
+      "type": "shape",
+      "name": "خلفية النشرة",
+      "start": 0.2,
+      "duration": 5.8,
+      "transform": {
+        "x": 960,
+        "y": 980,
+        "w": 1760,
+        "h": 80,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.94
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.primary",
+        "strokeWidth": 2,
+        "radius": 10
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideUp",
+          "dur": 0.5
+        }
+      }
+    },
+    {
+      "id": "bulletin_text",
+      "type": "text",
+      "name": "نص النشرة",
+      "start": 0.6,
+      "duration": 5.4,
+      "transform": {
+        "x": 960,
+        "y": 980,
+        "w": 1600,
+        "h": 40,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 26,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "نشرة أخبار التكنولوجيا • استثمارات جديدة بقيمة 100 مليون دولار في الذكاء الاصطناعي",
+        "textEn": "Tech Bulletin • 100M Dollars New Investments in Generative AI"
+      }
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "version": 2,
+  "id": "title_cinematic_bold",
+  "name": "عنوان سينمائي عريض (Cinematic Bold)",
+  "nameEn": "Cinematic Bold Intro Title",
+  "category": "titles_intros",
+  "description": "عنوان افتتاحي سينمائي ضخم مع ظهور بالتمويه وحركة عوم هادئة.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "color",
+    "color": "#090a12"
+  },
+  "layers": [
+    {
+      "id": "main_title",
+      "type": "text",
+      "name": "العنوان الرئيسي",
+      "start": 0.3,
+      "duration": 4.7,
+      "transform": {
+        "x": 960,
+        "y": 480,
+        "w": 1400,
+        "h": 160,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 88,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl",
+        "glow": {
+          "color": "brand.primary",
+          "blur": 30
+        }
+      },
+      "content": {
+        "text": "عالم المؤثرات السينمائية",
+        "textEn": "Cinematic Visual Universe"
+      },
+      "presets": {
+        "in": {
+          "name": "blur_in",
+          "dur": 0.8,
+          "sfx": "impact"
+        },
+        "loop": {
+          "name": "float",
+          "period": 4
+        }
+      }
+    },
+    {
+      "id": "sub_title",
+      "type": "text",
+      "name": "العنوان الفرعي",
+      "start": 0.8,
+      "duration": 4.2,
+      "transform": {
+        "x": 960,
+        "y": 620,
+        "w": 1000,
+        "h": 60,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "brand.body",
+        "fontSize": 32,
+        "fontWeight": 600,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "إنتاج احترافي متكامل برؤية إبداعية حديثة",
+        "textEn": "Full Professional Production & Creative Vision"
+      },
+      "presets": {
+        "in": {
+          "name": "slideUp",
+          "dur": 0.6
+        }
+      }
+    }
+  ]
+}

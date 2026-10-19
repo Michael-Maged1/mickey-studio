@@ -1,0 +1,446 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mickey Studio Tools Registry",
+  "description": "Unified tools registry driving card-based navigation in both CEP Extension and Web Platform",
+  "version": "1.1.0",
+  "lucideVersion": "0.468.0",
+  "lucideLicense": "ISC",
+  "groups": [
+    "المونتاج",
+    "النص والمحتوى",
+    "الصوت",
+    "الصور والفيديو",
+    "الموشن والمنصات",
+    "أدوات المشروع"
+  ],
+  "tools": [
+    {
+      "id": "silence-cut",
+      "arabicName": "قص السكتات",
+      "shortBenefit": "حذف فترات الصمت والوقفات تلقائياً لتسريع إيقاع الفيديو",
+      "icon": "scissors",
+      "group": "المونتاج",
+      "requires": [],
+      "legacy_id": "autocut",
+      "badge": "جديد",
+      "target": {
+        "ext": "page-silence-cut",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 1
+    },
+    {
+      "id": "auto-zoom",
+      "arabicName": "الزووم التلقائي",
+      "shortBenefit": "تقريب ديناميكي سينمائي على المتحدث لكسر رتابة المشهد",
+      "icon": "zoom-in",
+      "group": "المونتاج",
+      "requires": [],
+      "legacy_id": "autocut",
+      "badge": null,
+      "target": {
+        "ext": "page-auto-zoom",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 2
+    },
+    {
+      "id": "text-montage",
+      "arabicName": "المونتاج بالنص",
+      "shortBenefit": "حذف الكلمات والمشاهد غير المرغوبة من خلال قراءة النص",
+      "icon": "file-text",
+      "group": "المونتاج",
+      "requires": [
+        "transcript"
+      ],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-text-montage",
+        "site": null
+      },
+      "availableIn": "ext",
+      "order": 3
+    },
+    {
+      "id": "multicam",
+      "arabicName": "مالتي كام البودكاست",
+      "shortBenefit": "تبديل زاوية الكاميرا تلقائياً على التايملاين بين المتحدثين",
+      "icon": "video",
+      "group": "المونتاج",
+      "requires": [],
+      "legacy_id": "autocut",
+      "badge": null,
+      "target": {
+        "ext": "page-multicam",
+        "site": "section-podcast-studio"
+      },
+      "availableIn": "both",
+      "order": 4
+    },
+    {
+      "id": "captions",
+      "arabicName": "الكابشنز المتحركة",
+      "shortBenefit": "توليد نصوص متحركة وشفافة بتأثيرات كاريوكي وبوب-إن متزامنة حياً للمقاطع",
+      "icon": "captions",
+      "group": "النص والمحتوى",
+      "requires": [
+        "transcript"
+      ],
+      "legacy_id": "autocut",
+      "badge": "جديد",
+      "target": {
+        "ext": "page-captions",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 5
+    },
+    {
+      "id": "word-mute",
+      "arabicName": "حجب الكلمات",
+      "shortBenefit": "كشف وحجب الألفاظ المحظورة مع إدراج صفارة الرقابة الصوتية تلقائياً",
+      "icon": "volume-x",
+      "group": "النص والمحتوى",
+      "requires": [
+        "transcript"
+      ],
+      "legacy_id": "autocut",
+      "badge": null,
+      "target": {
+        "ext": "page-word-mute",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 6
+    },
+    {
+      "id": "viral-clips",
+      "arabicName": "المقاطع الفيروسية",
+      "shortBenefit": "اقتطاع اللحظات الأكثر تفاعلاً وإثارة لصناعة مقاطع ريلز وشورتس",
+      "icon": "flame",
+      "group": "النص والمحتوى",
+      "requires": [
+        "transcript"
+      ],
+      "legacy_id": "autocut",
+      "badge": null,
+      "target": {
+        "ext": "page-viral-clips",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 7
+    },
+    {
+      "id": "yt-chapters",
+      "arabicName": "فصول يوتيوب",
+      "shortBenefit": "توليد فصول وتوقيتات زمنية جاهزة لوصف فيديو يوتيوب مع ماركرز",
+      "icon": "bookmark",
+      "group": "النص والمحتوى",
+      "requires": [
+        "transcript"
+      ],
+      "legacy_id": "autocut",
+      "badge": null,
+      "target": {
+        "ext": "page-yt-chapters",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 8
+    },
+    {
+      "id": "transcript-hub",
+      "arabicName": "مركز التفريغ",
+      "shortBenefit": "تفريغ الكلام وتحويل التسجيلات إلى نصوص دقيقة بالمللي ثانية",
+      "icon": "file-audio",
+      "group": "النص والمحتوى",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-transcript",
+        "site": "section-transcribe-studio"
+      },
+      "availableIn": "both",
+      "order": 9
+    },
+    {
+      "id": "audio-clean",
+      "arabicName": "تنقية الصوت",
+      "shortBenefit": "عزل الضوضاء والصدى وتحسين العلو بجودة الاستوديو الاحترافية",
+      "icon": "sparkles",
+      "group": "الصوت",
+      "requires": [],
+      "legacy_id": "autocut",
+      "badge": null,
+      "target": {
+        "ext": "page-audio-clean",
+        "site": "section-autocut-suite"
+      },
+      "availableIn": "both",
+      "order": 10
+    },
+    {
+      "id": "voice-studio",
+      "arabicName": "التعليق الصوتي",
+      "shortBenefit": "تحويل النص المكتوب إلى صوت بشري واقعي فائق الجودة",
+      "icon": "mic",
+      "group": "الصوت",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-voiceover",
+        "site": "section-voice-studio"
+      },
+      "availableIn": "both",
+      "order": 11
+    },
+    {
+      "id": "podcast-studio",
+      "arabicName": "استوديو البودكاست",
+      "shortBenefit": "إنشاء حوار صوتي احترافي وتفاعلي بين شخصين بنقرة واحدة",
+      "icon": "podcast",
+      "group": "الصوت",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-podcast",
+        "site": "section-podcast-studio"
+      },
+      "availableIn": "both",
+      "order": 12
+    },
+    {
+      "id": "audiobook-studio",
+      "arabicName": "الكتب والروايات",
+      "shortBenefit": "قراءة الكتب والمقالات الطويلة بصوت متصل ومريح للسمع",
+      "icon": "book-open",
+      "group": "الصوت",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-audiobook",
+        "site": "section-audiobook-studio"
+      },
+      "availableIn": "both",
+      "order": 13
+    },
+    {
+      "id": "transcribe-studio",
+      "arabicName": "تفريغ وتحليل الصوت",
+      "shortBenefit": "استخراج النصوص بدقة عالية من التسجيلات ومقاطع التايملاين",
+      "icon": "file-audio",
+      "group": "الصوت",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-transcript",
+        "site": "section-transcribe-studio"
+      },
+      "availableIn": "both",
+      "order": 14
+    },
+    {
+      "id": "image-studio",
+      "arabicName": "توليد الصور",
+      "shortBenefit": "ابتكار صور إبداعية وواقعية بمجرد كتابة وصف باللغة العربية",
+      "icon": "image",
+      "group": "الصور والفيديو",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-create",
+        "site": "section-image-studio"
+      },
+      "availableIn": "both",
+      "order": 15
+    },
+    {
+      "id": "photo-lab",
+      "arabicName": "معمل الصور",
+      "shortBenefit": "إزالة خلفيات الصور وتحسين الجودة وتكبير الأبعاد بوضوح",
+      "icon": "wand-sparkles",
+      "group": "الصور والفيديو",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-photolab",
+        "site": "section-photo-lab"
+      },
+      "availableIn": "both",
+      "order": 16
+    },
+    {
+      "id": "video-studio",
+      "arabicName": "استوديو الفيديو",
+      "shortBenefit": "تحريك الصور وتوليد مقاطع فيديو سينمائية متحركة بالذكاء الاصطناعي",
+      "icon": "film",
+      "group": "الصور والفيديو",
+      "requires": [],
+      "legacy_id": null,
+      "badge": "تجريبي",
+      "target": {
+        "ext": "page-video",
+        "site": "section-video-studio"
+      },
+      "availableIn": "both",
+      "order": 17
+    },
+    {
+      "id": "motion-builder",
+      "arabicName": "صانع الموشن جرافيك",
+      "shortBenefit": "تصميم مشاهد موشن جرافيك احترافية جاهزة للإدراج على الفيديو",
+      "icon": "sparkles",
+      "group": "الموشن والمنصات",
+      "requires": [],
+      "legacy_id": null,
+      "badge": "جديد",
+      "target": {
+        "ext": "page-library",
+        "site": "section-motion-builder"
+      },
+      "availableIn": "both",
+      "order": 18
+    },
+    {
+      "id": "motion-editor",
+      "arabicName": "محرر الموشن الاحترافي",
+      "shortBenefit": "تحرير طبقات المشهد وحركات العناصر والإطارات بكامل الحرية",
+      "icon": "layers",
+      "group": "الموشن والمنصات",
+      "requires": [],
+      "legacy_id": null,
+      "badge": "جديد",
+      "target": {
+        "ext": null,
+        "site": "section-motion-editor"
+      },
+      "availableIn": "site",
+      "hideFromGrid": true,
+      "order": 19
+    },
+    {
+      "id": "safezone",
+      "arabicName": "سيف زون المنصات",
+      "shortBenefit": "معاينة المناطق الآمنة لـ Reels وTikTok وShorts فوق خط الزمن",
+      "icon": "smartphone",
+      "group": "الموشن والمنصات",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-safezone",
+        "site": null
+      },
+      "availableIn": "ext",
+      "order": 20
+    },
+    {
+      "id": "shortcuts",
+      "arabicName": "اختصارات المؤثرات",
+      "shortBenefit": "تطبيق مفضلات ومؤثرات بريمير الصوتية والبصرية بنقرة واحدة",
+      "icon": "star",
+      "group": "أدوات المشروع",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-shortcuts",
+        "site": null
+      },
+      "availableIn": "ext",
+      "order": 21
+    },
+    {
+      "id": "organizer",
+      "arabicName": "ترتيب المشروع",
+      "shortBenefit": "فرز وتنظيم ملفات المشروع في مجلدات ذكية للحفاظ على الترتيب",
+      "icon": "folder-tree",
+      "group": "أدوات المشروع",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-organizer",
+        "site": null
+      },
+      "availableIn": "ext",
+      "order": 22
+    },
+    {
+      "id": "library",
+      "arabicName": "معرض أعمالي ومكتبتي",
+      "shortBenefit": "الوصول السريع إلى كل تصاميمك وملفاتك السابقة والمحفوظة",
+      "icon": "folder-archive",
+      "group": "أدوات المشروع",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-library",
+        "site": "section-vault-gallery"
+      },
+      "availableIn": "both",
+      "order": 23
+    },
+    {
+      "id": "diagnostics",
+      "arabicName": "تشخيص النظام",
+      "shortBenefit": "فحص اتصال بريمير وسجل الأخطاء وتحديثات المكونات البرمجية",
+      "icon": "activity",
+      "group": "أدوات المشروع",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": "page-diagnostics",
+        "site": null
+      },
+      "availableIn": "ext",
+      "hideFromGrid": true,
+      "order": 24
+    },
+    {
+      "id": "developer-api",
+      "arabicName": "بوابة المطورين (API)",
+      "shortBenefit": "مفاتيح الربط البرمجي السحابي والتوثيق للمبرمجين مجاناً",
+      "icon": "code",
+      "group": "أدوات المشروع",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": null,
+        "site": "section-developer-api"
+      },
+      "availableIn": "site",
+      "order": 25
+    },
+    {
+      "id": "jobs-queue",
+      "arabicName": "المهام والعمليات الجارية",
+      "shortBenefit": "متابعة قائمة التوليدات ومعالجات الذكاء الاصطناعي الخلفية",
+      "icon": "list-todo",
+      "group": "أدوات المشروع",
+      "requires": [],
+      "legacy_id": null,
+      "badge": null,
+      "target": {
+        "ext": null,
+        "site": "modal-jobs-queue"
+      },
+      "availableIn": "site",
+      "order": 26
+    }
+  ]
+}

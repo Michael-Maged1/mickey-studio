@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "id": "cta_youtube_subscribe",
+  "name": "زر اشتراك يوتيوب (YouTube Subscribe)",
+  "nameEn": "YouTube Subscribe & Bell CTA",
+  "category": "subscribe_cta",
+  "description": "زر اشتراك أحمر مع أيقونة الجرس وتأثير ارتداد جذاب.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 4.5,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "btn_sub",
+      "type": "shape",
+      "name": "زر الاشتراك أحمر",
+      "start": 0.3,
+      "duration": 4.2,
+      "transform": {
+        "x": 960,
+        "y": 880,
+        "w": 520,
+        "h": 90,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "#ef4444",
+        "radius": 45,
+        "shadow": {
+          "color": "rgba(239,68,68,0.5)",
+          "blur": 24,
+          "x": 0,
+          "y": 6
+        }
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.6,
+          "sfx": "pop"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 2
+        }
+      }
+    },
+    {
+      "id": "sub_text",
+      "type": "text",
+      "name": "نص الاشتراك",
+      "start": 0.5,
+      "duration": 4,
+      "transform": {
+        "x": 960,
+        "y": 880,
+        "w": 450,
+        "h": 40,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "#ffffff",
+        "font": "Cairo",
+        "fontSize": 36,
+        "fontWeight": 900,
+        "align": "center"
+      },
+      "content": {
+        "text": "اشترك الآن 🔔",
+        "textEn": "SUBSCRIBE NOW 🔔"
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 0.4
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,178 @@
+{
+  "version": 2,
+  "id": "listicle_three_points",
+  "name": "قائمة 3 خطوات متتابعة (3 Steps Listicle)",
+  "nameEn": "3 Sequential Steps Listicle",
+  "category": "listicles",
+  "description": "ثلاث خطوات مرتبة برقم وأيقونة تظهر بالتسلسل السينمائي.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "color",
+    "color": "#090b14"
+  },
+  "layers": [
+    {
+      "id": "list_head",
+      "type": "text",
+      "name": "عنوان القائمة",
+      "start": 0.2,
+      "duration": 5.8,
+      "transform": {
+        "x": 960,
+        "y": 200,
+        "w": 1000,
+        "h": 80,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 56,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "3 خطوات لإنتاج فيديو فيروسي 🚀",
+        "textEn": "3 Steps to Produce a Viral Video 🚀"
+      }
+    },
+    {
+      "id": "step_1",
+      "type": "text",
+      "name": "الخطوة 1",
+      "start": 0.6,
+      "duration": 5.4,
+      "transform": {
+        "x": 960,
+        "y": 380,
+        "w": 1100,
+        "h": 70,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl",
+        "backgroundBox": {
+          "fill": "brand.dark",
+          "padding": 12,
+          "radius": 10
+        }
+      },
+      "content": {
+        "text": "١. خطاف قوي في أول 3 ثوانٍ يخطف الانتباه",
+        "textEn": "1. Powerful hook in first 3 seconds"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.5,
+          "sfx": "pop"
+        }
+      }
+    },
+    {
+      "id": "step_2",
+      "type": "text",
+      "name": "الخطوة 2",
+      "start": 1.1,
+      "duration": 4.9,
+      "transform": {
+        "x": 960,
+        "y": 500,
+        "w": 1100,
+        "h": 70,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl",
+        "backgroundBox": {
+          "fill": "brand.dark",
+          "padding": 12,
+          "radius": 10
+        }
+      },
+      "content": {
+        "text": "٢. إيقاع مونتاج سريع وحركات نصوص ديناميكية",
+        "textEn": "2. Fast editing pace & kinetic text"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.5,
+          "sfx": "pop"
+        }
+      }
+    },
+    {
+      "id": "step_3",
+      "type": "text",
+      "name": "الخطوة 3",
+      "start": 1.6,
+      "duration": 4.4,
+      "transform": {
+        "x": 960,
+        "y": 620,
+        "w": 1100,
+        "h": 70,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl",
+        "backgroundBox": {
+          "fill": "brand.dark",
+          "padding": 12,
+          "radius": 10
+        }
+      },
+      "content": {
+        "text": "٣. دعوة واضحة لاتخاذ إجراء في النهاية (CTA)",
+        "textEn": "3. Clear call to action at the end"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.5,
+          "sfx": "pop"
+        }
+      }
+    }
+  ]
+}

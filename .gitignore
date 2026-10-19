@@ -7,7 +7,11 @@ gemini_keys.json
 api_keys.json
 .mickey-provider-keys.php
 .mickey-gemini-pool.php
+serviceAccountKey.json
+*.pem
+*.p12
 dist/
+node_modules/
 .venv/
 video-worker/.venv/
 video-worker/__pycache__/

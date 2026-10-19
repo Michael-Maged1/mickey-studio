@@ -107,10 +107,18 @@ window.MickeyStudio = (function () {
     },
 
     // Settings (API Vault)
+        autocut: {
+      subTab: 'silence',
+      silenceFile: null,
+      lastSilences: [],
+      lastViralClips: [],
+      lastChapters: [],
+      lastCensorMatches: []
+    },
     settings: {
       cloudflareWorkerUrl: localStorage.getItem('mickey_cloudflare_worker_url') || 'https://mickey-studio-api.kma279500.workers.dev',
       gradioSpace: localStorage.getItem('mickey_gradio_space') || 'Lightricks/ltx-video-distilled',
-      sfxEnabled: localStorage.getItem('mickey_sfx_enabled') !== 'false'
+      sfxEnabled: false
     }
   };
 
@@ -131,22 +139,8 @@ window.MickeyStudio = (function () {
 
   const SFX = {
     playClick() {
-      if (!STATE.settings.sfxEnabled) return;
-      try {
-        const ctx = getAudioCtx();
-        if (!ctx) return;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.05);
-      } catch (e) {}
+      // تم إلغاء أصوات اللمس والنقر داخل الموقع نهائياً بناءً على طلب المستخدم
+      return;
     },
 
     playSuccess() {
@@ -285,6 +279,7 @@ window.MickeyStudio = (function () {
       return cipherText;
     }
   };
+  window.CryptoVault = CryptoVault;
 
   // -----------------------------------------------------------------
   // 3. INDEXEDDB PERSISTENCE (MY AI VAULT)
@@ -295,24 +290,30 @@ window.MickeyStudio = (function () {
 
   function initIndexedDB() {
     return new Promise((resolve) => {
-      const request = indexedDB.open(DB_NAME, 1);
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(DB_STORE)) {
-          const store = db.createObjectStore(DB_STORE, { keyPath: 'id' });
-          store.createIndex('type', 'type', { unique: false });
-          store.createIndex('timestamp', 'timestamp', { unique: false });
-        }
-      };
-      request.onsuccess = (e) => {
-        dbInstance = e.target.result;
-        updateVaultCountBadge();
-        resolve(dbInstance);
-      };
-      request.onerror = () => {
-        console.warn('IndexedDB unavailable, falling back to in-memory store');
+      try {
+        if (typeof indexedDB === 'undefined') return resolve(null);
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(DB_STORE)) {
+            const store = db.createObjectStore(DB_STORE, { keyPath: 'id' });
+            store.createIndex('type', 'type', { unique: false });
+            store.createIndex('timestamp', 'timestamp', { unique: false });
+          }
+        };
+        request.onsuccess = (e) => {
+          dbInstance = e.target.result;
+          updateVaultCountBadge();
+          resolve(dbInstance);
+        };
+        request.onerror = () => {
+          console.warn('IndexedDB unavailable, falling back to in-memory store');
+          resolve(null);
+        };
+      } catch (err) {
+        console.warn('IndexedDB unavailable:', err);
         resolve(null);
-      };
+      }
     });
   }
 
@@ -433,6 +434,7 @@ window.MickeyStudio = (function () {
       setTimeout(() => toast.remove(), 300);
     }, 4500);
   }
+  window.showToast = showToast;
 
   function downloadBlob(blob, filename) {
     if (!blob) return;
@@ -465,6 +467,19 @@ window.MickeyStudio = (function () {
     }
     const byteArray = new Uint8Array(byteNumbers);
     return new Blob([byteArray], { type: mimeType });
+  }
+
+  function findGradioFile(value) {
+    if (!value) return null;
+    if (Array.isArray(value)) {
+      for (const item of value) { const found = findGradioFile(item); if (found) return found; }
+    } else if (typeof value === 'object') {
+      if (value.url || value.path) return value.url || value.path;
+      for (const child of Object.values(value)) { const found = findGradioFile(child); if (found) return found; }
+    } else if (typeof value === 'string' && /^(https?:|blob:|data:|\/)/i.test(value)) {
+      return value;
+    }
+    return null;
   }
 
   async function translateToEnglish(text) {
@@ -638,2906 +653,136 @@ window.MickeyStudio = (function () {
   }
 
   // -----------------------------------------------------------------
-  // 6. STUDIO 1: MASTER PHOTOREALISTIC IMAGE GENERATOR
-  // -----------------------------------------------------------------
-  function updateModelTag(modelName) {
-    STATE.image.model = modelName;
-    const tag = document.getElementById('current-model-tag');
-    if (tag) tag.textContent = modelName.toUpperCase();
-    SFX.playClick();
-  }
-
-  function selectRatio(buttonEl, width, height) {
-    STATE.image.width = width;
-    STATE.image.height = height;
-    document.querySelectorAll('#image-ratio-selector .ratio-btn').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    buttonEl.classList.add('active');
-    SFX.playClick();
-  }
-
-  function selectStyle(btnEl, styleKey) {
-    STATE.image.selectedStyle = styleKey;
-    document.querySelectorAll('#image-style-tags .pill-option').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    if (btnEl) btnEl.classList.add('active');
-    SFX.playClick();
-  }
-
-  function randomizeSeed() {
-    const seed = Math.floor(Math.random() * 999999999);
-    STATE.image.seed = seed;
-    const input = document.getElementById('image-seed-input');
-    if (input) input.value = seed;
-    SFX.playClick();
-  }
-
-  function setBatchCount(btnOrCount, maybeCount) {
-    let count = typeof btnOrCount === 'number' ? btnOrCount : (maybeCount || 1);
-    let btnEl = (btnOrCount && btnOrCount.nodeType) ? btnOrCount : (window.event && window.event.currentTarget) || null;
-    STATE.image.batchCount = count;
-    document.querySelectorAll('.batch-count-btn').forEach(btn => {
-      btn.classList.remove('active', 'bg-cyan-500/20', 'text-cyan-neon', 'border-cyan-500/40');
-      btn.classList.add('bg-white/5', 'text-slate-300', 'border-white/10');
-    });
-    if (btnEl) {
-      btnEl.classList.add('active', 'bg-cyan-500/20', 'text-cyan-neon', 'border-cyan-500/40');
-      btnEl.classList.remove('bg-white/5', 'text-slate-300', 'border-white/10');
-    }
-    SFX.playClick();
-  }
-
-  async function generateImage() {
-    const promptInput = document.getElementById('image-prompt-input');
-    let prompt = promptInput ? promptInput.value.trim() : '';
-    if (!prompt) {
-      showToast('يرجى إدخال وصف للصورة المراد توليدها!', 'warning');
-      if (promptInput) promptInput.focus();
-      return;
-    }
-    if (!await authorizeAndConsume('image', STATE.image.batchCount || 1)) return;
-
-    SFX.playLaser();
-
-    const generateBtn = document.getElementById('btn-generate-image');
-    const laserScanner = document.getElementById('image-laser-scanner');
-    const emptyState = document.getElementById('image-empty-state');
-    const resultGrid = document.getElementById('image-result-grid');
-    const actionsBar = document.getElementById('image-actions-bar');
-    const statusPill = document.getElementById('image-status-pill');
-
-    // UI Busy State
-    generateBtn.disabled = true;
-    generateBtn.classList.add('opacity-70');
-    laserScanner.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    resultGrid.classList.add('hidden');
-    actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    statusPill.textContent = 'جاري إعداد معايير التصوير والواقعية...';
-    statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-cyan-400';
-
-    const seedVal = parseInt(document.getElementById('image-seed-input')?.value) || Math.floor(Math.random() * 9999999);
-    STATE.image.seed = seedVal;
-    STATE.image.lastPrompt = prompt;
-
-    try {
-      // Step A: Determine whether to boost/translate prompt to English photorealistic
-      const autoBoost = document.getElementById('auto-prompt-boost')?.checked !== false;
-      let finalPrompt = prompt;
-
-      if (autoBoost || /[\u0600-\u06FF]/.test(prompt)) {
-        statusPill.textContent = 'جاري تحويل الوصف لمعايير كاميرا واقعية احترافية...';
-        finalPrompt = await craftMasterPhotorealisticPrompt(prompt, STATE.image.selectedStyle);
-      }
-      STATE.image.lastEnhancedPrompt = finalPrompt;
-
-      // Route 1: Gemini Nano Banana 2.1 through the server-side key proxy.
-      if (STATE.image.model === 'nano-banana') {
-        statusPill.textContent = 'جاري التوليد عبر Google Nano Banana 2.1 (2K)...';
-        const aspectRatioStr = STATE.image.width > STATE.image.height ? '16:9' : STATE.image.height > STATE.image.width ? '9:16' : '1:1';
-        const res = await gatewayFetch('generate_image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: finalPrompt, aspectRatio: aspectRatioStr }) });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success || !data.image_base64) throw new Error(data.error || 'تعذر التوليد عبر Google Nano Banana 2.1.');
-        const providerTitle = ({
-          'gemini-nano-banana-2.1': 'Nano Banana 2.1',
-          'gemini-3.1-flash-image': 'Nano Banana 2',
-          'gemini-2.5-flash-image': 'Nano Banana'
-        })[data.provider] || 'Nano Banana';
-        const b64 = data.image_base64;
-        const mime = data.mime_type || 'image/jpeg';
-        const blob = base64ToBlob(b64, mime);
-        const dataUrl = `data:${mime};base64,${b64}`;
-        STATE.image.lastGeneratedBlob = blob;
-        STATE.image.lastGeneratedUrl = dataUrl;
-        resultGrid.innerHTML = '';
-        resultGrid.className = 'w-full h-full flex items-center justify-center p-2';
-        const imgEl = document.createElement('img');
-        imgEl.src = dataUrl;
-        imgEl.alt = prompt;
-        imgEl.className = 'max-h-[500px] w-auto rounded-xl object-contain shadow-2xl transition-all cursor-pointer hover:scale-[1.01]';
-        imgEl.onclick = () => MickeyStudio.openLightbox(imgEl.src);
-        resultGrid.appendChild(imgEl);
-        laserScanner.classList.add('hidden');
-        resultGrid.classList.remove('hidden');
-        actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-        statusPill.textContent = `اكتمل التوليد (Google ${providerTitle})`;
-        statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-400';
-        SFX.playSuccess();
-        showToast(`تم توليد الصورة عبر Google ${providerTitle} بنجاح!`, 'success');
-        return;
-      }
-
-      // Route 2: Cloudflare FLUX
-      if (STATE.image.model === 'cloudflare-flux') {
-        statusPill.textContent = 'جاري التوليد عبر FLUX.2 klein 4B على Cloudflare...';
-        const blob = await generateWithCloudflareFlux(finalPrompt, STATE.image.width, STATE.image.height);
-        const imageUrl = URL.createObjectURL(blob);
-        STATE.image.lastGeneratedBlob = blob;
-        STATE.image.lastGeneratedUrl = imageUrl;
-        resultGrid.innerHTML = '';
-        resultGrid.className = 'w-full h-full flex items-center justify-center p-2';
-        const imgEl = document.createElement('img');
-        imgEl.src = imageUrl;
-        imgEl.alt = prompt;
-        imgEl.className = 'max-h-[500px] w-auto rounded-xl object-contain shadow-2xl transition-all cursor-pointer hover:scale-[1.01]';
-        imgEl.onclick = () => MickeyStudio.openLightbox(imgEl.src);
-        resultGrid.appendChild(imgEl);
-        laserScanner.classList.add('hidden');
-        resultGrid.classList.remove('hidden');
-        actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-        statusPill.textContent = 'اكتمل التوليد (FLUX.2 klein 4B / Cloudflare)';
-        statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-200';
-        SFX.playSuccess();
-        showToast('تم توليد الصورة عبر FLUX.2 klein 4B بنجاح.', 'success');
-        return;
-      }
-
-      // Route 3: Hugging Face Z-Image-Turbo
-      if (STATE.image.model === 'zimage-hf') {
-        statusPill.textContent = 'جاري الاتصال بـ Z-Image-Turbo على Hugging Face...';
-        const blob = await generateWithHuggingFaceZImage(
-          finalPrompt,
-          STATE.image.width,
-          STATE.image.height,
-          seedVal
-        );
-        const imageUrl = URL.createObjectURL(blob);
-        STATE.image.lastGeneratedBlob = blob;
-        STATE.image.lastGeneratedUrl = imageUrl;
-        resultGrid.innerHTML = '';
-        resultGrid.className = 'w-full h-full flex items-center justify-center p-2';
-        const imgEl = document.createElement('img');
-        imgEl.src = imageUrl;
-        imgEl.alt = prompt;
-        imgEl.className = 'max-h-[500px] w-auto rounded-xl object-contain shadow-2xl transition-all cursor-pointer hover:scale-[1.01]';
-        imgEl.onclick = () => MickeyStudio.openLightbox(imgEl.src);
-        resultGrid.appendChild(imgEl);
-        laserScanner.classList.add('hidden');
-        resultGrid.classList.remove('hidden');
-        actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-        statusPill.textContent = 'اكتمل التوليد (Z-Image-Turbo / Hugging Face)';
-        statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-200';
-        SFX.playSuccess();
-        showToast('تم التوليد عبر Z-Image بعد تحسين الوصف.', 'success');
-        return;
-      }
-
-      // Route 4: FLUX Photorealistic (DEFAULT - Free & High-Definition)
-      statusPill.textContent = 'جاري التوليد الفوتوغرافي الفائق عبر FLUX...';
-      const cleanPrompt = finalPrompt.replace(/\//g, ' ');
-      const encodedPrompt = encodeURIComponent(cleanPrompt);
-      const count = STATE.image.batchCount;
-      const loadedItems = [];
-
-      for (let i = 0; i < count; i++) {
-        const currentSeed = seedVal + i;
-        const candidates = [
-          `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${STATE.image.width}&height=${STATE.image.height}&seed=${currentSeed}&model=flux&nologo=true`,
-          `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${STATE.image.width}&height=${STATE.image.height}&seed=${currentSeed}&nologo=true`
-        ];
-
-        let itemBlob = null;
-        let itemUrl = null;
-
-        for (const candidateUrl of candidates) {
-          try {
-            const resp = await fetch(candidateUrl);
-            if (resp.ok) {
-              const b = await resp.blob();
-              if (b && b.size > 1000 && b.type.startsWith('image/')) {
-                itemBlob = b;
-                itemUrl = URL.createObjectURL(b);
-                break;
-              }
-            }
-          } catch (e) {}
-        }
-
-        if (!itemBlob || !itemUrl) {
-          const fallbackUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${STATE.image.width}&height=${STATE.image.height}&seed=${currentSeed}&model=flux&nologo=true`;
-          await new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => {
-              itemUrl = fallbackUrl;
-              resolve();
-            };
-            img.onerror = () => reject(new Error('خدمة التوليد مشغولة حالياً أو واجهت ضغطاً مؤقتاً. أعد المحاولة بعد ثوانٍ.'));
-            img.src = fallbackUrl;
-          });
-        }
-
-        loadedItems.push({ blob: itemBlob, url: itemUrl });
-      }
-
-      // Render images in Viewport
-      resultGrid.innerHTML = '';
-      if (count === 1) {
-        resultGrid.className = 'w-full h-full flex items-center justify-center p-2';
-        const imgEl = document.createElement('img');
-        imgEl.src = loadedItems[0].url;
-        imgEl.alt = prompt;
-        imgEl.className = 'max-h-[500px] w-auto rounded-xl object-contain shadow-2xl transition-all cursor-pointer hover:scale-[1.01]';
-        imgEl.onclick = () => MickeyStudio.openLightbox(imgEl.src);
-        resultGrid.appendChild(imgEl);
-      } else {
-        resultGrid.className = 'w-full grid grid-cols-2 gap-3 p-2';
-        loadedItems.forEach(({ url }, idx) => {
-          const card = document.createElement('div');
-          card.className = 'relative rounded-xl overflow-hidden group cursor-pointer border border-white/10 hover:border-white/30 transition-all';
-          card.innerHTML = `
-            <img src="${url}" alt="Variation ${idx + 1}" class="w-full h-48 object-cover">
-            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <button onclick="MickeyStudio.openLightbox('${url}')" class="p-2 rounded-lg bg-white text-black text-xs font-bold">
-                <i class="fa-solid fa-expand"></i>
-              </button>
-            </div>
-          `;
-          resultGrid.appendChild(card);
-        });
-      }
-
-      // Safe Blob capture
-      STATE.image.lastGeneratedUrl = loadedItems[0].url;
-      STATE.image.lastGeneratedBlob = loadedItems[0].blob;
-      if (!STATE.image.lastGeneratedBlob && loadedItems[0].url) {
-        try {
-          const response = await fetch(loadedItems[0].url);
-          STATE.image.lastGeneratedBlob = await response.blob();
-        } catch (e) {}
-      }
-
-      // UI Success State
-      laserScanner.classList.add('hidden');
-      resultGrid.classList.remove('hidden');
-      actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-      statusPill.textContent = 'اكتمل التوليد الواقعي (FLUX.1 Ultra)';
-      statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-300';
-
-      SFX.playSuccess();
-      showToast('تم إنتاج الصورة بجودة واقعية مذهلة!', 'success');
-
-    } catch (err) {
-      console.error(err);
-      laserScanner.classList.add('hidden');
-      emptyState.classList.remove('hidden');
-      statusPill.textContent = 'خطأ في التوليد';
-      statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-red-400';
-      showToast(huggingFaceErrorMessage(err, 'حدث خطأ أثناء الاتصال بمحرك التوليد، يرجى المحاولة ثانية'), 'error');
-    } finally {
-      generateBtn.disabled = false;
-      generateBtn.classList.remove('opacity-70');
-    }
-  }
-
-  function downloadCurrentImage() {
-    if (!STATE.image.lastGeneratedBlob && !STATE.image.lastGeneratedUrl) return;
-    SFX.playClick();
-    if (STATE.image.lastGeneratedBlob) {
-      downloadBlob(STATE.image.lastGeneratedBlob, `mickey_studio_${Date.now()}.png`);
-    } else {
-      window.open(STATE.image.lastGeneratedUrl, '_blank');
-    }
-    showToast('جاري تحميل الصورة بدقة PNG الأصلية...', 'info');
-  }
-
-  function transferToVideoStudio() {
-    if (!STATE.image.lastGeneratedUrl) {
-      showToast('يرجى توليد صورة أولاً لنقلها إلى استوديو الفيديو!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    switchTab('video-studio');
-    useLastGeneratedImageForVideo();
-    showToast('تم نقل الصورة إلى استوديو الفيديو السينمائي بنجاح!', 'success');
-  }
-
-  function transferToPhotoLab() {
-    if (!STATE.image.lastGeneratedUrl) {
-      showToast('يرجى توليد صورة أولاً لنقلها إلى مختبر التعديل!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    switchTab('photo-lab');
-    useLastImageForPhotoLab();
-    showToast('تم تحميل الصورة في مختبر التعديل وتكبير الجودة!', 'success');
-  }
 
   // -----------------------------------------------------------------
-  // 7. STUDIO 2: AI VIDEO & MOTION STUDIO (3D PARALLAX & CANVAS)
+  // DYNAMIC STUDIO MODULE LOADER (Item 1: Lazy-Loading)
   // -----------------------------------------------------------------
-  function setVideoEngine(engine) {
-    STATE.video.engine = engine;
-    document.getElementById('btn-engine-canvas').classList.toggle('active', engine === 'canvas');
-    document.getElementById('btn-engine-gradio').classList.toggle('active', engine === 'gradio');
-    document.getElementById('video-prompt-wrap')?.classList.toggle('hidden', engine === 'canvas');
-
-    SFX.playClick();
-    if (engine === 'gradio') {
-      showToast('وضع LTX AI السحابي نشط. اكتب وصف الحركة قبل الإنتاج.', 'info');
-    } else {
-      showToast('محرك الحركة اللحظي نشط (مضمون 100% وبدون طوابير انتطار)', 'success');
-    }
-  }
-
-  function useLastGeneratedImageForVideo() {
-    if (!STATE.image.lastGeneratedUrl) {
-      showToast('لا توجد صورة مولدة سابقة بعد!', 'warning');
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      STATE.video.sourceImage = img;
-      STATE.video.sourceImageUrl = STATE.image.lastGeneratedUrl;
-      document.getElementById('video-source-img').src = STATE.image.lastGeneratedUrl;
-      document.getElementById('video-source-preview').classList.remove('hidden');
-      document.getElementById('video-source-empty').classList.add('hidden');
-      SFX.playClick();
-    };
-    img.src = STATE.image.lastGeneratedUrl;
-  }
-
-  function handleVideoImageUpload(fileInput) {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        STATE.video.sourceImage = img;
-        STATE.video.sourceImageUrl = e.target.result;
-        document.getElementById('video-source-img').src = e.target.result;
-        document.getElementById('video-source-preview').classList.remove('hidden');
-        document.getElementById('video-source-empty').classList.add('hidden');
-        SFX.playSuccess();
-        showToast('تم تحميل الصورة بنجاح!', 'success');
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function selectCameraMotion(btnEl, motionType) {
-    STATE.video.cameraMotion = motionType;
-    document.querySelectorAll('#camera-motion-selector .cam-motion-btn').forEach(b => {
-      b.classList.remove('active');
-    });
-    btnEl.classList.add('active');
-    SFX.playClick();
-  }
-
-  function setVideoDuration(btnOrSec, maybeSec) {
-    let seconds = typeof btnOrSec === 'number' ? btnOrSec : (maybeSec || 3);
-    let btnEl = (btnOrSec && btnOrSec.nodeType) ? btnOrSec : (window.event && window.event.currentTarget) || null;
-    STATE.video.duration = seconds;
-    document.querySelectorAll('.video-dur-btn').forEach(btn => {
-      btn.classList.remove('active', 'bg-cyan-500/20', 'text-cyan-neon', 'border-cyan-500/40');
-      btn.classList.add('bg-white/5', 'text-slate-300', 'border-white/10');
-    });
-    if (btnEl) {
-      btnEl.classList.add('active', 'bg-cyan-500/20', 'text-cyan-neon', 'border-cyan-500/40');
-      btnEl.classList.remove('bg-white/5', 'text-slate-300', 'border-white/10');
-    }
-    SFX.playClick();
-  }
-
-  // Guaranteed Real-time 3D Cinematic Motion Engine (HTML5 Canvas + MediaRecorder API)
-  async function renderVideo() {
-    if (!STATE.video.sourceImage) {
-      showToast('يرجى اختيار صورة مصدر لإنتاج الفيديو أولاً!', 'warning');
-      return;
-    }
-    if (STATE.video.engine !== 'canvas' && !document.getElementById('video-prompt-input')?.value.trim()) {
-      showToast('اكتب وصف الحركة المطلوبة أولاً.', 'warning');
-      document.getElementById('video-prompt-input')?.focus();
-      return;
-    }
-    if (!await authorizeAndConsume('video')) return;
-
-    if (STATE.video.engine === 'gradio') {
-      renderGradioVideo();
-      return;
-    }
-    SFX.playLaser();
-    STATE.video.isRendering = true;
-
-    const canvas = document.getElementById('motion-render-canvas');
-    const videoEl = document.getElementById('final-rendered-video');
-    const emptyState = document.getElementById('video-empty-state');
-    const scanner = document.getElementById('video-laser-scanner');
-    const actionsBar = document.getElementById('video-actions-bar');
-    const renderCounter = document.getElementById('video-render-counter');
-    const progressPill = document.getElementById('video-render-progress');
-
-    // UI Busy State
-    scanner.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    videoEl.classList.add('hidden');
-    canvas.classList.remove('hidden');
-    actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    progressPill.textContent = 'جاري إنتاج الفيديو...';
-    progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400';
-
-    // Canvas Dimensions
-    const W = 1280;
-    const H = 720;
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
-
-    const durationSec = STATE.video.duration;
-    const fps = 30;
-    const totalFrames = durationSec * fps;
-    const motionType = STATE.video.cameraMotion;
-    const particleType = document.getElementById('video-particles-select')?.value || 'neon-sparks';
-    const soundTrackChoice = document.getElementById('video-soundtrack-select')?.value || 'none';
-
-    // Initialize Particles
-    const particles = [];
-    for (let i = 0; i < 70; i++) {
-      particles.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        size: Math.random() * 3.5 + 1,
-        speedX: (Math.random() - 0.5) * 1.5,
-        speedY: (Math.random() - 0.5) * 1.8 - 0.8,
-        alpha: Math.random() * 0.7 + 0.3,
-        hue: Math.random() > 0.5 ? 185 : 280 // Cyan or Purple
-      });
-    }
-
-    // Audio mixing setup
-    let audioStreamTrack = null;
-    let audioContext = null;
-    let osc = null;
-
-    if (soundTrackChoice === 'voiceover-custom' && STATE.voice.lastAudioBlob) {
-      try {
-        const audio = new Audio(URL.createObjectURL(STATE.voice.lastAudioBlob));
-        const actx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = actx.createMediaElementSource(audio);
-        const dest = actx.createMediaStreamDestination();
-        src.connect(dest);
-        src.connect(actx.destination);
-        audioStreamTrack = dest.stream.getAudioTracks()[0];
-        audio.play();
-      } catch (e) {}
-    } else if (soundTrackChoice !== 'none') {
-      try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const dest = audioContext.createMediaStreamDestination();
-        osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(60, audioContext.currentTime); // Deep cinematic drone
-        gain.gain.setValueAtTime(0.08, audioContext.currentTime);
-        osc.connect(gain);
-        gain.connect(dest);
-        osc.start();
-        audioStreamTrack = dest.stream.getAudioTracks()[0];
-      } catch (e) {}
-    }
-
-    // Capture Canvas Stream & Setup MediaRecorder
-    const canvasStream = canvas.captureStream(fps);
-    if (audioStreamTrack) {
-      canvasStream.addTrack(audioStreamTrack);
-    }
-
-    let recordedChunks = [];
-    let mediaRecorder = null;
-    let mimeType = 'video/webm;codecs=vp9';
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm';
-    }
-
-    try {
-      mediaRecorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 6000000 });
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
-      mediaRecorder.start();
-    } catch (e) {
-      console.warn('MediaRecorder fallback to default options');
-      mediaRecorder = new MediaRecorder(canvasStream);
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
-      mediaRecorder.start();
-    }
-
-    const img = STATE.video.sourceImage;
-    let currentFrame = 0;
-
-    function renderLoop() {
-      if (currentFrame >= totalFrames) {
-        // Finish Recording
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-          mediaRecorder.stop();
-        }
-        if (osc) {
-          try { osc.stop(); } catch(e){}
-        }
-
-        mediaRecorder.onstop = () => {
-          const videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
-          STATE.video.renderedVideoBlob = videoBlob;
-          STATE.video.renderedVideoUrl = URL.createObjectURL(videoBlob);
-
-          videoEl.src = STATE.video.renderedVideoUrl;
-          videoEl.classList.remove('hidden');
-          canvas.classList.add('hidden');
-          scanner.classList.add('hidden');
-          actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-          progressPill.textContent = 'تم إنتاج الفيديو بنجاح ✓';
-          progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400 text-zinc-200';
-
-          videoEl.play();
-          SFX.playSuccess();
-          showToast('تم تصدير الفيديو السينمائي بنجاح وبدقة فائقة!', 'success');
-          STATE.video.isRendering = false;
-        };
-        return;
-      }
-
-      const progress = currentFrame / totalFrames; // 0.0 to 1.0
-      renderCounter.textContent = `RENDERING: ${Math.round(progress * 100)}%`;
-
-      // Clear Canvas
-      ctx.fillStyle = '#05050A';
-      ctx.fillRect(0, 0, W, H);
-
-      // Camera Transformation Matrix
-      ctx.save();
-      let scale = 1.0;
-      let transX = 0;
-      let transY = 0;
-      let rot = 0;
-
-      if (motionType === 'zoom-in') {
-        scale = 1.0 + progress * 0.28;
-      } else if (motionType === 'zoom-out') {
-        scale = 1.28 - progress * 0.28;
-      } else if (motionType === 'pan-horizontal') {
-        scale = 1.15;
-        transX = (progress - 0.5) * 120;
-      } else if (motionType === 'shake-3d') {
-        scale = 1.1;
-        transX = Math.sin(progress * 25) * 8;
-        transY = Math.cos(progress * 20) * 6;
-        rot = (Math.sin(progress * 15) * 0.015);
-      }
-
-      ctx.translate(W / 2 + transX, H / 2 + transY);
-      ctx.rotate(rot);
-      ctx.scale(scale, scale);
-
-      // Draw Base Image Center-Fitted
-      const imgAspect = img.width / img.height;
-      const canvasAspect = W / H;
-      let drawW, drawH;
-
-      if (imgAspect > canvasAspect) {
-        drawH = H;
-        drawW = H * imgAspect;
-      } else {
-        drawW = W;
-        drawH = W / imgAspect;
-      }
-
-      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
-      ctx.restore();
-
-      // Atmospheric Particles Overlay
-      if (particleType !== 'none') {
-        particles.forEach(p => {
-          ctx.save();
-          if (particleType === 'neon-sparks') {
-            ctx.fillStyle = p.hue === 185 ? `rgba(0, 240, 255, ${p.alpha})` : `rgba(112, 0, 255, ${p.alpha})`;
-            ctx.shadowColor = p.hue === 185 ? '#00F0FF' : '#7000FF';
-            ctx.shadowBlur = 10;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            p.y += p.speedY * 1.5;
-            p.x += p.speedX;
-            if (p.y < 0) p.y = H;
-            if (p.x < 0) p.x = W;
-            if (p.x > W) p.x = 0;
-          } else if (particleType === 'cyber-rain') {
-            ctx.strokeStyle = `rgba(0, 240, 255, ${p.alpha * 0.8})`;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x - 3, p.y + 18);
-            ctx.stroke();
-            p.y += 9;
-            p.x -= 1.5;
-            if (p.y > H) { p.y = -10; p.x = Math.random() * W; }
-          } else if (particleType === 'cosmic-dust') {
-            ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(Math.sin(progress * 10 + p.x)) * 0.7})`;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2);
-            ctx.fill();
-            p.x += Math.sin(progress * 5 + p.y) * 0.4;
-          }
-          ctx.restore();
-        });
-      }
-
-      // Vignette & Cinematic Letterbox
-      const grad = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.8);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.5)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-
-      currentFrame++;
-      requestAnimationFrame(renderLoop);
-    }
-
-    renderLoop();
-  }
-
-  // HuggingFace Gradio Client Video Integration
-  async function renderGradioVideo() {
-    if (STATE.video.isRendering) return;
-    const prompt = document.getElementById('video-prompt-input')?.value.trim() || '';
-    if (!prompt) {
-      showToast('اكتب وصف الحركة المطلوبة أولاً.', 'warning');
-      document.getElementById('video-prompt-input')?.focus();
-      return;
-    }
-    const scanner = document.getElementById('video-laser-scanner');
-    const emptyState = document.getElementById('video-empty-state');
-    const videoEl = document.getElementById('final-rendered-video');
-    const canvas = document.getElementById('motion-render-canvas');
-    const actionsBar = document.getElementById('video-actions-bar');
-    const progressPill = document.getElementById('video-render-progress');
-    STATE.video.isRendering = true;
-    scanner.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    videoEl.classList.add('hidden');
-    canvas.classList.add('hidden');
-    actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    progressPill.textContent = 'جاري توليد الفيديو بنموذج LTX…';
-    progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-white/10 text-zinc-400';
-    try {
-      const savedSpace = String(STATE.settings.gradioSpace || '').trim();
-      const spaceId = !savedSpace || savedSpace.toLowerCase() === 'lightricks/ltx-video'
-        ? 'Lightricks/ltx-video-distilled' : savedSpace;
-      const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client@latest/dist/index.min.js');
-      const client = await Client.connect(spaceId);
-      const sourceResponse = await fetch(STATE.video.sourceImageUrl);
-      if (!sourceResponse.ok) throw new Error('تعذر قراءة ملف الصورة لإرساله إلى LTX AI.');
-      const sourceBlob = await sourceResponse.blob();
-      const imageFile = new File([sourceBlob], 'mickey-source.png', { type: sourceBlob.type || 'image/png' });
-      progressPill.textContent = 'يرسل الصورة إلى LTX AI…';
-      const duration = Math.min(8.5, Math.max(0.3, Number(STATE.video.duration) || 3));
-      const result = await client.predict('/image_to_video', [
-        prompt, 'worst quality, inconsistent motion, blurry, jittery, distorted', await handle_file(imageFile), '',
-        512, 704, 'image-to-video', duration, 9, Math.floor(Math.random() * 2 ** 32), true, 1, true
-      ]);
-      const videoUrl = findGradioFile(result?.data?.[0]);
-      if (!videoUrl) throw new Error('لم يُرجع نموذج LTX ملف فيديو.');
-      const spaceHost = `https://${spaceId.toLowerCase().replace('/', '-')}.hf.space/`;
-      const response = await fetch(new URL(videoUrl, spaceHost).href);
-      if (!response.ok) throw new Error('تعذر تنزيل الفيديو الناتج من Hugging Face.');
-      const videoBlob = await response.blob();
-      if (!videoBlob.type.startsWith('video/') || videoBlob.size < 1000) throw new Error('أعاد نموذج LTX ملف فيديو غير صالح.');
-      if (STATE.video.renderedVideoUrl) URL.revokeObjectURL(STATE.video.renderedVideoUrl);
-      STATE.video.renderedVideoBlob = videoBlob;
-      STATE.video.renderedVideoUrl = URL.createObjectURL(videoBlob);
-      videoEl.src = STATE.video.renderedVideoUrl;
-      videoEl.classList.remove('hidden');
-      videoEl.load();
-      actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-      progressPill.textContent = 'اكتمل توليد الفيديو عبر LTX AI';
-      progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-emerald-500/30 text-emerald-400';
-      SFX.playSuccess();
-      showToast('اكتمل توليد الفيديو بالذكاء الاصطناعي ويمكن تنزيله الآن.', 'success');
-    } catch (error) {
-      console.error('[LTX video generation]', error);
-      progressPill.textContent = 'تعذر توليد الفيديو عبر LTX AI';
-      progressPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-zinc-900 border border-rose-500/30 text-rose-400';
-      emptyState.classList.remove('hidden');
-      showToast(error?.message || 'خدمة LTX AI مشغولة حالياً. حاول مجدداً بعد قليل.', 'error');
-    } finally {
-      scanner.classList.add('hidden');
-      STATE.video.isRendering = false;
-    }
-  }
-
-  function downloadCurrentVideo() {
-    if (!STATE.video.renderedVideoBlob) return;
-    SFX.playClick();
-    const extension = STATE.video.renderedVideoBlob.type.includes('mp4') ? 'mp4' : 'webm';
-    downloadBlob(STATE.video.renderedVideoBlob, `mickey_cinema_${Date.now()}.${extension}`);
-    showToast('جاري تحميل ملف الفيديو السينمائي...', 'info');
-  }
-
-  function toggleVideoPlayback() {
-    const videoEl = document.getElementById('final-rendered-video');
-    if (!videoEl) return;
-    SFX.playClick();
-    if (videoEl.paused) {
-      videoEl.play();
-    } else {
-      videoEl.pause();
-    }
-  }
-
-  // -----------------------------------------------------------------
-  // 8. STUDIO 3: AI PHOTO LAB (BG REMOVER + 4K UPSCALER)
-  // -----------------------------------------------------------------
-  function setPhotoLabTab(tabKey) {
-    STATE.photoLab.subTab = tabKey;
-    const btnBg = document.getElementById('btn-subtab-bg-remover');
-    const btnUp = document.getElementById('btn-subtab-upscaler');
-    const viewBg = document.getElementById('photolab-view-bg-remover');
-    const viewUp = document.getElementById('photolab-view-upscaler');
-
-    if (tabKey === 'bg-remover') {
-      btnBg.className = 'px-3.5 py-2 text-xs font-bold rounded-lg bg-pink-neon text-white shadow-[0_0_15px_rgba(255,0,122,0.4)]';
-      btnUp.className = 'px-3.5 py-2 text-xs font-bold rounded-lg text-slate-300 hover:text-white';
-      viewBg.classList.remove('hidden');
-      viewUp.classList.add('hidden');
-    } else {
-      btnUp.className = 'px-3.5 py-2 text-xs font-bold rounded-lg bg-cyan-neon text-black shadow-[0_0_15px_rgba(0,240,255,0.4)]';
-      btnBg.className = 'px-3.5 py-2 text-xs font-bold rounded-lg text-slate-300 hover:text-white';
-      viewUp.classList.remove('hidden');
-      viewBg.classList.add('hidden');
-    }
-    SFX.playClick();
-  }
-
-  function useLastImageForPhotoLab() {
-    if (!STATE.image.lastGeneratedUrl) {
-      showToast('لا توجد صورة سابقة للاستخدام!', 'warning');
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      if (STATE.photoLab.subTab === 'bg-remover') {
-        STATE.photoLab.bgSourceImage = img;
-        STATE.photoLab.bgSourceFile = STATE.image.lastGeneratedBlob ? new File([STATE.image.lastGeneratedBlob], 'generated-image.png', { type: STATE.image.lastGeneratedBlob.type || 'image/png' }) : null;
-        document.getElementById('bg-upload-img').src = STATE.image.lastGeneratedUrl;
-        document.getElementById('bg-upload-preview').classList.remove('hidden');
-        document.getElementById('bg-upload-empty').classList.add('hidden');
-      } else {
-        STATE.photoLab.upscaleSourceImage = img;
-        STATE.photoLab.upscaleSourceFile = STATE.image.lastGeneratedBlob ? new File([STATE.image.lastGeneratedBlob], 'generated-image.png', { type: STATE.image.lastGeneratedBlob.type || 'image/png' }) : null;
-        document.getElementById('upscale-upload-img').src = STATE.image.lastGeneratedUrl;
-        document.getElementById('upscale-upload-preview').classList.remove('hidden');
-        document.getElementById('upscale-upload-empty').classList.add('hidden');
-      }
-      SFX.playClick();
-      showToast('تم تحميل الصورة بنجاح!', 'success');
-    };
-    img.src = STATE.image.lastGeneratedUrl;
-  }
-
-  function handleBgImageUpload(input) {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        STATE.photoLab.bgSourceImage = img;
-        STATE.photoLab.bgSourceFile = file;
-        document.getElementById('bg-upload-img').src = e.target.result;
-        document.getElementById('bg-upload-preview').classList.remove('hidden');
-        document.getElementById('bg-upload-empty').classList.add('hidden');
-        SFX.playSuccess();
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  async function photoLabGradioFile(sourceImage, savedFile, name) {
-    if (savedFile) return savedFile;
-    const response = await fetch(sourceImage.src);
-    if (!response.ok) throw new Error('تعذر قراءة ملف الصورة لإرساله إلى خدمة المعالجة.');
-    const blob = await response.blob();
-    return new File([blob], name, { type: blob.type || 'image/png' });
-  }
-
-  function findGradioFile(value) {
-    if (!value) return null;
-    if (Array.isArray(value)) {
-      for (const item of value) { const found = findGradioFile(item); if (found) return found; }
-    } else if (typeof value === 'object') {
-      if (value.url || value.path) return value.url || value.path;
-      for (const child of Object.values(value)) { const found = findGradioFile(child); if (found) return found; }
-    } else if (typeof value === 'string' && /^(https?:|blob:|data:|\/)/i.test(value)) return value;
-    return null;
-  }
-
-  async function gradioOutputBlob(value) {
-    const url = findGradioFile(value);
-    if (!url) throw new Error('لم تُرجع خدمة الذكاء الاصطناعي ملف صورة صالحًا.');
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('تعذر تحميل نتيجة المعالجة من Hugging Face.');
-    return response.blob();
-  }
-
-  async function hasTransparentPixels(blob) {
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.min(256, bitmap.width);
-    canvas.height = Math.min(256, bitmap.height);
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] < 250) return true;
-    }
-    return false;
-  }
-
-  // AI background removal through the public BiRefNet Hugging Face Space.
-  async function removeBackground() {
-    if (!STATE.photoLab.bgSourceImage) {
-      showToast('يرجى اختيار صورة أولاً لإزالة خلفيتها!', 'warning');
-      return;
-    }
-    if (!await authorizeAndConsume('background_removal')) return;
-
-    SFX.playLaser();
-    const scanner = document.getElementById('bg-laser-scanner');
-    const emptyState = document.getElementById('bg-result-empty');
-    const canvas = document.getElementById('bg-canvas-result');
-    const actionsBar = document.getElementById('bg-actions-bar');
-    const statusPill = document.getElementById('bg-process-status');
-
-    scanner.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    canvas.classList.add('hidden');
-    actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    statusPill.textContent = 'جاري عزل العناصر...';
-
-    const sourceImg = STATE.photoLab.bgSourceImage;
-    try {
-      statusPill.textContent = 'جاري الاتصال بنموذج إزالة الخلفية...';
-      const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
-      const client = await Client.connect('ZhengPeng7/BiRefNet_demo');
-      const file = await photoLabGradioFile(sourceImg, STATE.photoLab.bgSourceFile, 'photo.png');
-      const result = await client.predict('/image', [await handle_file(file), '1024x1024', 'General']);
-      const sliderImages = result?.data?.[0];
-      const candidates = Array.isArray(sliderImages) ? [...sliderImages].reverse() : [sliderImages];
-      let processedBlob = null;
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        const outputBlob = await gradioOutputBlob(candidate);
-        if (await hasTransparentPixels(outputBlob)) {
-          processedBlob = outputBlob;
-          break;
-        }
-      }
-      if (!processedBlob) throw new Error('لم يُرجع نموذج إزالة الخلفية صورة شفافة. أعد المحاولة أو استخدم صورة أوضح.');
-      const cutoutImg = new Image();
-      cutoutImg.src = URL.createObjectURL(processedBlob);
-      await new Promise((resolve, reject) => { cutoutImg.onload = resolve; cutoutImg.onerror = reject; });
-      const W = sourceImg.naturalWidth || sourceImg.width;
-      const H = sourceImg.naturalHeight || sourceImg.height;
-      canvas.width = W;
-      canvas.height = H;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(cutoutImg, 0, 0, W, H);
-      STATE.photoLab.bgResultBlob = await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('تعذر تجهيز ملف PNG.')), 'image/png'));
-
-      scanner.classList.add('hidden');
-      canvas.classList.remove('hidden');
-      actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-      statusPill.textContent = 'تم العزل بنجاح ✓';
-      SFX.playSuccess();
-      showToast('تمت إزالة الخلفية وحفظ العنصر بصيغة PNG شفافة.', 'success');
-
-    } catch (err) {
-      console.error(err);
-      scanner.classList.add('hidden');
-      emptyState.classList.remove('hidden');
-      statusPill.textContent = 'تعذرت المعالجة';
-      showToast(huggingFaceErrorMessage(err, 'تعذرت خدمة إزالة الخلفية. أعد المحاولة لاحقًا.'), 'error');
-    }
-  }
-
-  function downloadBgResult() {
-    if (!STATE.photoLab.bgResultBlob) return;
-    SFX.playClick();
-    downloadBlob(STATE.photoLab.bgResultBlob, `mickey_cutout_${Date.now()}.png`);
-    showToast('جاري تحميل الصورة المفرغة بدقة أصلية...', 'info');
-  }
-
-  // -----------------------------------------------------------------
-  // 9. 4K UPSCALER & INTERACTIVE SPLIT COMPARISON SLIDER
-  // -----------------------------------------------------------------
-  function handleUpscaleImageUpload(input) {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        STATE.photoLab.upscaleSourceImage = img;
-        STATE.photoLab.upscaleSourceFile = file;
-        document.getElementById('upscale-upload-img').src = e.target.result;
-        document.getElementById('upscale-upload-preview').classList.remove('hidden');
-        document.getElementById('upscale-upload-empty').classList.add('hidden');
-        SFX.playSuccess();
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function setUpscaleMultiplier(btnOrMul, maybeMul) {
-    let mul = typeof btnOrMul === 'number' ? btnOrMul : (maybeMul || 2);
-    let btnEl = (btnOrMul && btnOrMul.nodeType) ? btnOrMul : (window.event && window.event.currentTarget) || null;
-    STATE.photoLab.upscaleMultiplier = mul;
-    document.querySelectorAll('#upscale-multipliers .upscale-mul-btn').forEach(b => {
-      b.classList.remove('active', 'border-cyan-500/40', 'text-cyan-neon');
-      b.classList.add('border-white/10', 'text-slate-300');
-    });
-    if (btnEl) {
-      btnEl.classList.add('active', 'border-cyan-500/40', 'text-cyan-neon');
-      btnEl.classList.remove('border-white/10', 'text-slate-300');
-    }
-    SFX.playClick();
-  }
-
-  async function processUpscale() {
-    if (!STATE.photoLab.upscaleSourceImage) {
-      showToast('يرجى اختيار صورة أولاً لتحسين جودتها!', 'warning');
-      return;
-    }
-    if (!await authorizeAndConsume('upscale')) return;
-
-    SFX.playLaser();
-    const scanner = document.getElementById('upscale-laser-scanner');
-    const emptyState = document.getElementById('upscale-empty-state');
-    const compareBox = document.getElementById('active-compare-container');
-    const actionsBar = document.getElementById('upscale-actions-bar');
-    const statusPill = document.getElementById('upscale-process-status');
-
-    scanner.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    compareBox.classList.add('hidden');
-    actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    statusPill.textContent = 'جاري تحسين التفاصيل بنموذج Real-ESRGAN...';
-
-    const src = STATE.photoLab.upscaleSourceImage;
-    const mul = STATE.photoLab.upscaleMultiplier;
-    try {
-      const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
-      const client = await Client.connect('guetLzy/Real-ESRGAN-Demo');
-      const file = await photoLabGradioFile(src, STATE.photoLab.upscaleSourceFile, 'photo.png');
-      const result = await client.predict('/enhance', [await handle_file(file), 'RealESRGAN_x4plus', mul, false]);
-      const outputBlob = await gradioOutputBlob(result?.data?.[0]);
-      STATE.photoLab.upscaleResultBlob = outputBlob;
-      const originalImg = document.getElementById('img-compare-original');
-      const upscaledImg = document.getElementById('img-compare-upscaled');
-      originalImg.src = src.src;
-      upscaledImg.src = URL.createObjectURL(outputBlob);
-      await new Promise((resolve, reject) => { upscaledImg.onload = resolve; upscaledImg.onerror = reject; });
-      initCompareSlider();
-      scanner.classList.add('hidden');
-      compareBox.classList.remove('hidden');
-      actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-      statusPill.textContent = `اكتمل تحسين الصورة ${mul}X ✓`;
-      SFX.playSuccess();
-      showToast(`اكتمل التحسين بالذكاء الاصطناعي: ${upscaledImg.naturalWidth}×${upscaledImg.naturalHeight}`, 'success');
-    } catch (err) {
-      console.error(err);
-      scanner.classList.add('hidden');
-      emptyState.classList.remove('hidden');
-      statusPill.textContent = 'تعذرت المعالجة';
-      showToast(huggingFaceErrorMessage(err, 'تعذرت خدمة التكبير. أعد المحاولة لاحقًا.'), 'error');
-    }
-  }
-
-  function initCompareSlider() {
-    const container = document.getElementById('active-compare-container');
-    const wrapper = document.getElementById('wrapper-compare-upscaled');
-    const handle = document.getElementById('handle-compare-slider');
-
-    let isDragging = false;
-
-    function moveDivider(x) {
-      const rect = container.getBoundingClientRect();
-      let percent = ((x - rect.left) / rect.width) * 100;
-      percent = Math.max(0, Math.min(100, percent));
-      wrapper.style.width = percent + '%';
-      handle.style.left = percent + '%';
-    }
-
-    container.onmousedown = (e) => { isDragging = true; moveDivider(e.clientX); };
-    window.onmousemove = (e) => { if (isDragging) moveDivider(e.clientX); };
-    window.onmouseup = () => { isDragging = false; };
-
-    container.ontouchstart = (e) => { isDragging = true; moveDivider(e.touches[0].clientX); };
-    window.ontouchmove = (e) => { if (isDragging) moveDivider(e.touches[0].clientX); };
-    window.ontouchend = () => { isDragging = false; };
-  }
-
-  function downloadUpscaledResult() {
-    if (!STATE.photoLab.upscaleResultBlob) return;
-    SFX.playClick();
-    downloadBlob(STATE.photoLab.upscaleResultBlob, `mickey_upscale_${Date.now()}.png`);
-    showToast('جاري تحميل الصورة المحسّنة...', 'info');
-  }
-
-  // -----------------------------------------------------------------
-  // 10. STUDIO 4: AI VOICEOVER & AUDIO LAB
-  // -----------------------------------------------------------------
-  function generateAiScript() {
-    SFX.playClick();
-    const scripts = [
-      'مرحباً بكم في ميكي ستوديو، الأفق الجديد للذكاء الاصطناعي. هنا حيث تتحول الأفكار إلى واقع سينمائي مبهر بلا حدود.',
-      'في عالم يتسارع فيه الابتكار، تصنع الريادة بالقرارات الجريئة. استمتع بأقوى أدوات الإبداع الرقمي بين يديك الآن.',
-      'هل تساءلت يوماً كيف تبدو مدن المستقبل؟ استكشف آفاق الخيال العلمي وحوّل رؤيتك الفنية إلى لوحات سينمائية فائقة الدقة.',
-      'سواء كنت صانع محتوى، مصمماً، أو فناناً رقمياً، هذه المنصة هي محطتك المتكاملة للإنتاج الاحترافي مجاناً وبلا قيود.'
-    ];
-    const picked = scripts[Math.floor(Math.random() * scripts.length)];
-    const textInput = document.getElementById('voice-text-input');
-    if (textInput) textInput.value = picked;
-    showToast('تم توليد سكريبت احترافي بالذكاء الاصطناعي!', 'success');
-  }
-
-  async function requestVoiceScriptRefinement(text, dialect) {
-    const response = await gatewayFetch('refine_voiceover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, dialect }) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.success) throw new Error(data.error || `تعذر تحسين النص (${response.status}).`);
-    return String(data.refined || '').trim();
-  }
-
-  async function refineVoiceScript() {
-    const input = document.getElementById('voice-text-input');
-    const text = input?.value.trim() || '';
-    if (!text) { showToast('اكتب النص الذي تريد تحسينه أولاً.', 'warning'); return; }
-    if (text.length > 6000) { showToast('النص طويل جدًا. الحد الأقصى 6000 حرف.', 'warning'); return; }
-    const button = document.getElementById('btn-refine-voice-script');
-    if (button) button.disabled = true;
-    try {
-      const dialect = document.getElementById('voice-dialect-select')?.selectedOptions?.[0]?.textContent || 'المصرية';
-      if (!await authorizeAndConsume('voiceover')) return;
-      const refined = await requestVoiceScriptRefinement(text, dialect);
-      if (!refined) throw new Error('لم تُرجع الخدمة نصًا محسنًا.');
-      input.value = refined;
-      showToast('تم تحسين النص للإلقاء. راجعه قبل إنشاء الصوت.', 'success');
-    } catch (error) { showToast(error.message || 'تعذر تحسين النص.', 'error'); }
-    finally { if (button) button.disabled = false; }
-  }
-
-  // Helper to format seconds as M:SS or H:MM:SS (matches screenshot style 0:00 / 52:29)
-  function formatAudioTime(seconds) {
-    if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '0:00';
-    const totalSec = Math.floor(seconds);
-    const hrs = Math.floor(totalSec / 3600);
-    const mins = Math.floor((totalSec % 3600) / 60);
-    const secs = totalSec % 60;
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  let customPlayerInitialized = false;
-  function setupCustomAudioPlayer(audioEl) {
-    if (!audioEl) return;
-    const playIcon = document.getElementById('icon-custom-play');
-    const timeCurrent = document.getElementById('audio-time-current');
-    const timeTotal = document.getElementById('audio-time-total');
-    const waveformContainer = document.getElementById('waveform-container');
-
-    audioEl.onplay = () => {
-      if (playIcon) playIcon.className = 'fa-solid fa-pause text-sm';
-    };
-
-    audioEl.onpause = () => {
-      if (playIcon) playIcon.className = 'fa-solid fa-play text-sm ml-0.5';
-    };
-
-    audioEl.onended = () => {
-      if (playIcon) playIcon.className = 'fa-solid fa-play text-sm ml-0.5';
-      if (!audioEl.loop && timeCurrent) {
-        timeCurrent.textContent = formatAudioTime(0);
-      }
-    };
-
-    audioEl.ontimeupdate = () => {
-      if (timeCurrent) timeCurrent.textContent = formatAudioTime(audioEl.currentTime);
-    };
-
-    audioEl.onloadedmetadata = () => {
-      if (timeTotal) timeTotal.textContent = formatAudioTime(audioEl.duration);
-    };
-
-    if (audioEl.duration && isFinite(audioEl.duration) && timeTotal) {
-      timeTotal.textContent = formatAudioTime(audioEl.duration);
-    }
-
-    // Interactive waveform click & drag to seek
-    if (!customPlayerInitialized && waveformContainer) {
-      const handleSeek = (e) => {
-        if (!audioEl.duration || !isFinite(audioEl.duration)) return;
-        const rect = waveformContainer.getBoundingClientRect();
-        const clientX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
-        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        audioEl.currentTime = ratio * audioEl.duration;
-        if (timeCurrent) timeCurrent.textContent = formatAudioTime(audioEl.currentTime);
-      };
-
-      waveformContainer.addEventListener('click', handleSeek);
-
-      let isDragging = false;
-      waveformContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        handleSeek(e);
-      });
-      window.addEventListener('mousemove', (e) => {
-        if (isDragging) handleSeek(e);
-      });
-      window.addEventListener('mouseup', () => {
-        if (isDragging) isDragging = false;
-      });
-
-      waveformContainer.addEventListener('touchstart', (e) => {
-        handleSeek(e);
-      }, { passive: true });
-      waveformContainer.addEventListener('touchmove', (e) => {
-        handleSeek(e);
-      }, { passive: true });
-
-      customPlayerInitialized = true;
-    }
-  }
-
-  function toggleCustomPlay() {
-    const audioEl = document.getElementById('final-rendered-audio');
-    if (!audioEl) return;
-    SFX.playClick();
-    if (audioEl.paused) {
-      if (audioEl.src && audioEl.src !== window.location.href) {
-        audioEl.play().catch(e => {
-          console.warn('Play error:', e);
-          fallbackSpeakText();
-        });
-      } else {
-        fallbackSpeakText();
-      }
-    } else {
-      audioEl.pause();
-      if ('speechSynthesis' in window) window.speechSynthesis.pause();
-    }
-  }
-
-  function fallbackSpeakText() {
-    const text = document.getElementById('voice-text-input')?.value.trim();
-    if (text && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ar-SA';
-      const audioEl = document.getElementById('final-rendered-audio');
-      setupAudioSpectrumVisualizer(audioEl);
-      window.speechSynthesis.speak(utter);
-      showToast('يتم تشغيل الصوت عبر محرك النطق 🔊', 'info');
-    }
-  }
-
-  // Playback Speed Switcher (User requested)
-  const AUDIO_SPEEDS = [1.0, 1.25, 1.5, 1.75, 2.0];
-  let currentSpeedIdx = 0;
-  function cycleAudioSpeed() {
-    const audioEl = document.getElementById('final-rendered-audio');
-    const speedBtn = document.getElementById('btn-audio-speed');
-    currentSpeedIdx = (currentSpeedIdx + 1) % AUDIO_SPEEDS.length;
-    const speed = AUDIO_SPEEDS[currentSpeedIdx];
-    if (audioEl) audioEl.playbackRate = speed;
-    if (speedBtn) speedBtn.textContent = `${speed.toFixed(speed % 1 === 0 ? 1 : 2)}x`;
-    SFX.playClick();
-    showToast(`سرعة التشغيل: ${speed}x ⚡`, 'info');
-  }
-
-  // Volume slider and mute toggle
-  let previousAudioVolume = 1.0;
-  function setVolume(val) {
-    const audioEl = document.getElementById('final-rendered-audio');
-    const volIcon = document.getElementById('volume-icon');
-    const slider = document.getElementById('audio-volume-slider');
-    const v = Math.max(0, Math.min(1, parseFloat(val)));
-    if (audioEl) {
-      audioEl.volume = v;
-      audioEl.muted = (v === 0);
-    }
-    if (slider) slider.value = v;
-    if (volIcon) {
-      if (v === 0) {
-        volIcon.className = 'fa-solid fa-volume-xmark text-xs text-rose-400';
-      } else if (v < 0.5) {
-        volIcon.className = 'fa-solid fa-volume-low text-xs text-zinc-300';
-      } else {
-        volIcon.className = 'fa-solid fa-volume-high text-xs text-zinc-300';
-      }
-    }
-    if (v > 0) previousAudioVolume = v;
-  }
-
-  function toggleMute() {
-    const audioEl = document.getElementById('final-rendered-audio');
-    if (!audioEl) return;
-    SFX.playClick();
-    if (audioEl.muted || audioEl.volume === 0) {
-      const restoreVol = previousAudioVolume > 0 ? previousAudioVolume : 1.0;
-      setVolume(restoreVol);
-      showToast('تم إلغاء كتم الصوت 🔊', 'info');
-    } else {
-      previousAudioVolume = audioEl.volume || 1.0;
-      setVolume(0);
-      showToast('تم كتم الصوت 🔇', 'info');
-    }
-  }
-
-  // Skip Forward / Backward (User requested +10s specifically)
-  function skipAudio(seconds) {
-    const audioEl = document.getElementById('final-rendered-audio');
-    if (!audioEl) return;
-    SFX.playClick();
-    const duration = audioEl.duration || 0;
-    const newTime = Math.max(0, Math.min(duration, audioEl.currentTime + seconds));
-    audioEl.currentTime = newTime;
-    const timeCurrent = document.getElementById('audio-time-current');
-    if (timeCurrent) timeCurrent.textContent = formatAudioTime(newTime);
-    if (seconds > 0) {
-      showToast(`تقديم +${seconds} ثوانٍ ⏩`, 'info');
-    } else {
-      showToast(`ترجيع ${seconds} ثوانٍ ⏪`, 'info');
-    }
-  }
-
-  function toggleAudioLoop() {
-    const audioEl = document.getElementById('final-rendered-audio');
-    const loopBtn = document.getElementById('btn-audio-loop');
-    if (!audioEl) return;
-    SFX.playClick();
-    audioEl.loop = !audioEl.loop;
-    if (loopBtn) {
-      if (audioEl.loop) {
-        loopBtn.className = 'p-1.5 rounded-full text-sky-400 bg-sky-500/10 transition-colors';
-        showToast('تم تفعيل التكرار التلقائي للمقطع 🔁', 'info');
-      } else {
-        loopBtn.className = 'p-1.5 rounded-full text-zinc-400 hover:text-zinc-200 transition-colors';
-        showToast('تم إلغاء تكرار المقطع', 'info');
-      }
-    }
-  }
-
-  // Harmonic Sine Envelope Waveform Visualizer (Exact match with user screenshot)
-  let spectrumAnimId = null;
-  function setupAudioSpectrumVisualizer(audioEl) {
-    const canvas = document.getElementById('audio-spectrum-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    if (spectrumAnimId) {
-      cancelAnimationFrame(spectrumAnimId);
-      spectrumAnimId = null;
-    }
-
-    const barsCount = 96;
-    let wavePhase = 0;
-
-    function renderFrame() {
-      // Auto-adapt canvas width to parent width
-      const container = canvas.parentElement;
-      if (container && container.clientWidth > 0 && Math.abs(canvas.width - container.clientWidth) > 4) {
-        canvas.width = container.clientWidth;
-      }
-
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      const isPlaying = audioEl && !audioEl.paused;
-      if (isPlaying) {
-        wavePhase += 0.07;
-      }
-
-      const duration = (audioEl && isFinite(audioEl.duration) && audioEl.duration > 0) ? audioEl.duration : 1;
-      const currentTime = audioEl ? (audioEl.currentTime || 0) : 0;
-      const progressRatio = Math.max(0, Math.min(1, currentTime / duration));
-
-      const centerY = h / 2;
-      const minBarHeight = 3.5;
-      const maxBarHeight = h * 0.82; // ~46px on 56px canvas
-      const barWidth = 2.4;
-      const step = (w - barWidth) / (barsCount - 1);
-
-      for (let i = 0; i < barsCount; i++) {
-        const u = i / (barsCount - 1); // 0.0 to 1.0
-        const x = i * step;
-
-        // Envelope: 4 symmetric nodes/antinodes using |sin(4 * PI * u)|
-        const envelope = Math.pow(Math.abs(Math.sin(u * 4 * Math.PI)), 0.95);
-        let barHeight = minBarHeight + envelope * (maxBarHeight - minBarHeight);
-
-        // Dynamic harmonic breathing when playing
-        if (isPlaying) {
-          const breathing = 0.92 + 0.08 * Math.sin(wavePhase + u * 6.28);
-          barHeight *= breathing;
-        }
-
-        const topY = centerY - (barHeight / 2);
-
-        // Color split: white before progress head, translucent white after
-        if (u <= progressRatio) {
-          ctx.fillStyle = '#ffffff';
-          if (isPlaying) {
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
-            ctx.shadowBlur = 4;
-          } else {
-            ctx.shadowBlur = 0;
-          }
-        } else {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
-          ctx.shadowBlur = 0;
-        }
-
-        // Draw pill-shaped vertical line (rounded caps)
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(x, topY, barWidth, barHeight, barWidth / 2);
-        } else {
-          ctx.rect(x, topY, barWidth, barHeight);
-        }
-        ctx.fill();
-      }
-
-      spectrumAnimId = requestAnimationFrame(renderFrame);
-    }
-
-    renderFrame();
-  }
-
-  // =================================================================
-  // SAVIO STUDIO PERSONAS & VOICE GALLERY
-  // =================================================================
-  const VOICE_PERSONAS = {
-    male: [
-      { id: 'yusuf', name: 'يوسف', role: 'وثائقي قوي', fullName: 'يوسف · وثائقي قوي', tags: ['عميق', 'رزين', 'موثوق'], previewText: 'أهلاً بكم في هذا الوثائقي، حيث نكتشف أسرار الحضارة وعظمة التاريخ.' },
-      { id: 'malik', name: 'مالك', role: 'إعلان وتسويق', fullName: 'مالك · إعلاني سريع', tags: ['سريع', 'واثق', 'حماسي', 'مقنع'], previewText: 'عرض خاص وحصري! اشترك الآن واستمتع بأقوى المزايا بأفضل جودة.' },
-      { id: 'rami', name: 'رامي', role: 'بودكاست هادئ', fullName: 'رامي · بودكاست هادئ', tags: ['تفاعلي', 'حيوي', 'عفوي', 'ودود'], previewText: 'مرحباً أصدقائي في حلقة اليوم، حديثنا شيق ومليء بالأفكار الملهمة.' },
-      { id: 'saif', name: 'سيف', role: 'درامي عاطفي', fullName: 'سيف · درامي عاطفي', tags: ['تعبير مؤثر', 'مشاعر متدفقة'], previewText: 'في تلك اللحظة الحاسمة، أدركت أن كل شيء كان على وشك التغير للأبد.' },
-      { id: 'zaid', name: 'زيد', role: 'راوٍ قصصي', fullName: 'زيد · راوٍ قصصي', tags: ['سردي', 'مشوق', 'دافئ'], previewText: 'كان يا ما كان في قديم الزمان، قصة تروى عبر الأجيال بحكمة وجمال.' },
-      { id: 'neutral', name: 'متوازن', role: 'متوازن وطبيعي', fullName: 'متوازن · طبيعي وواضح', tags: ['طبيعي', 'واضح', 'متزن'], previewText: 'أهلاً بكم، نقدم لكم هذا المحتوى بنبرة واضحة ومناسبة لمختلف الأعمال.' },
-    ],
-    female: [
-      { id: 'mariam', name: 'مريم', role: 'صوت قصصي', fullName: 'مريم · صوت قصصي', tags: ['هادئ', 'متزن', 'عاطفي', 'دافئ'], previewText: 'كانت الليالي هادئة في تلك المدينة القديمة، وتحمل بين أزقتها حكايات لا تُنسى.' },
-      { id: 'laila', name: 'ليلى', role: 'إعلان وتسويق', fullName: 'ليلى · إعلان وتسويق', tags: ['سريع', 'واثق', 'حماسي', 'مقنع'], previewText: 'اكتشف الفرق الحقيقي اليوم! جودة استثنائية وأداء لا يقارن، لا تفوت الفرصة.' },
-      { id: 'sama', name: 'سما', role: 'بودكاست ومحتوى اجتماعي', fullName: 'سما · بودكاست ومحتوى اجتماعي', tags: ['تفاعلي', 'حيوي', 'عفوي', 'ودود'], previewText: 'يا هلا ومرحب! سعيدة أشارككم اليوم تجربة فريدة وممتعة للغاية.' },
-      { id: 'salma', name: 'سلمى', role: 'درامي عاطفي', fullName: 'سلمى · درامي عاطفي', tags: ['تعبير مؤثر', 'مشاعر متدفقة'], previewText: 'لم تكن مجرد صدفة عابرة، بل كانت لحظة مصيرية قلبت كل الموازين.' },
-      { id: 'farida', name: 'فريدة', role: 'وثائقي رصين', fullName: 'فريدة · وثائقي رصين', tags: ['عميق', 'رزين', 'حضور قوي'], previewText: 'تشير السجلات التاريخية إلى بداية عصر جديد غيّر ملامح المنطقة بالكامل.' },
-      { id: 'neutral', name: 'متوازنة', role: 'متوازنة وطبيعية', fullName: 'متوازنة · طبيعي وواضح', tags: ['طبيعي', 'واضح', 'متزنة'], previewText: 'مرحباً بكم، نقدم لكم هذا التقرير بأداء صوتي طبيعي ومريح للمستمع.' },
-    ]
+  const STUDIO_MODULE_MAP = {
+    'image-studio': 'studios/image-studio.js',
+    'video-studio': 'studios/video-studio.js',
+    'photo-lab': 'studios/photo-lab.js',
+    'voice-studio': 'studios/voice-studio.js',
+    'podcast-studio': 'studios/voice-studio.js',
+    'audiobook-studio': 'studios/voice-studio.js',
+    'transcribe-studio': 'studios/transcribe-studio.js',
+    'autocut-suite': 'studios/autocut-suite.js',
+    'vault-gallery': 'studios/vault-gallery.js',
+    'developer-api': 'studios/developer-api.js'
   };
 
-  let currentPreviewAudio = null;
-  let activePlayingPersonaId = null;
+  const loadedStudioScripts = new Set();
+  const loadingPromises = new Map();
 
-  function onVoiceGenderChanged() {
-    const genderSelect = document.getElementById('voice-gender-select');
-    const perfSelect = document.getElementById('voice-performance-select');
-    if (!genderSelect || !perfSelect) return;
-    
-    const gender = genderSelect.value || 'male';
-    const list = VOICE_PERSONAS[gender] || VOICE_PERSONAS.male;
-    const currentVal = perfSelect.value;
-    
-    perfSelect.innerHTML = list.map((p, idx) => 
-      `<option value="${p.id}" ${p.id === currentVal || (!list.some(x => x.id === currentVal) && idx === 0) ? 'selected' : ''}>${p.fullName}</option>`
-    ).join('');
+  async function ensureStudioLoaded(tabId) {
+    const scriptPath = STUDIO_MODULE_MAP[tabId];
+    if (!scriptPath) return;
+    if (loadedStudioScripts.has(scriptPath)) return;
 
-    filterVoiceGallery(gender);
-  }
+    if (loadingPromises.has(scriptPath)) {
+      return loadingPromises.get(scriptPath);
+    }
 
-  function filterVoiceGallery(filter = 'all') {
-    const btnAll = document.getElementById('btn-filter-all');
-    const btnMale = document.getElementById('btn-filter-male');
-    const btnFemale = document.getElementById('btn-filter-female');
-    [btnAll, btnMale, btnFemale].forEach(b => {
-      if (b) {
-        b.className = 'px-3 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition-colors';
-      }
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = scriptPath + '?v=2.6';
+      script.async = true;
+      script.onload = () => {
+        loadedStudioScripts.add(scriptPath);
+        loadingPromises.delete(scriptPath);
+        resolve();
+      };
+      script.onerror = () => {
+        loadingPromises.delete(scriptPath);
+        reject(new Error('فشل تحميل الاستوديو: ' + scriptPath));
+      };
+      document.head.appendChild(script);
     });
 
-    const activeBtn = filter === 'male' ? btnMale : filter === 'female' ? btnFemale : btnAll;
-    if (activeBtn) {
-      activeBtn.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors';
-    }
-
-    renderVoiceGallery(filter);
+    loadingPromises.set(scriptPath, promise);
+    return promise;
   }
 
-  function renderVoiceGallery(filter = 'all') {
-    const grid = document.getElementById('voice-gallery-cards-grid');
-    if (!grid) return;
-
-    let personasToShow = [];
-    if (filter === 'all') {
-      const f = VOICE_PERSONAS.female.map(p => ({ ...p, gender: 'female' }));
-      const m = VOICE_PERSONAS.male.map(p => ({ ...p, gender: 'male' }));
-      personasToShow = [...f, ...m];
-    } else if (filter === 'female') {
-      personasToShow = VOICE_PERSONAS.female.map(p => ({ ...p, gender: 'female' }));
-    } else {
-      personasToShow = VOICE_PERSONAS.male.map(p => ({ ...p, gender: 'male' }));
-    }
-
-    const currentGender = document.getElementById('voice-gender-select')?.value || 'male';
-    const currentPerf = document.getElementById('voice-performance-select')?.value || 'neutral';
-
-    grid.innerHTML = personasToShow.map(p => {
-      const isSelected = p.gender === currentGender && p.id === currentPerf;
-      const isFemale = p.gender === 'female';
-      const avatarBg = isFemale ? 'from-rose-500/20 to-purple-500/20 text-rose-300 border-rose-500/30' : 'from-cyan-500/20 to-blue-500/20 text-cyan-300 border-cyan-500/30';
-      const isPlaying = activePlayingPersonaId === `${p.gender}_${p.id}`;
-
-      return `
-        <div onclick="MickeyStudio.selectPersonaFromGallery('${p.id}', '${p.gender}')" 
-             class="p-3.5 rounded-2xl bg-zinc-900/50 border ${isSelected ? 'border-cyan-400 ring-1 ring-cyan-400/50 bg-cyan-950/20' : 'border-white/5 hover:border-white/20'} transition-all cursor-pointer flex flex-col justify-between space-y-3 group relative">
-          
-          <div class="flex items-start justify-between">
-            <div class="flex items-center gap-2.5">
-              <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${avatarBg} border flex items-center justify-center font-bold text-sm shadow-inner">
-                ${p.name.slice(0, 1)}
-              </div>
-              <div>
-                <div class="flex items-center gap-1.5">
-                  <h4 class="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors">${p.name}</h4>
-                  <span class="text-[9px] px-1.5 py-0.2 rounded font-mono ${isFemale ? 'bg-rose-500/10 text-rose-300' : 'bg-cyan-500/10 text-cyan-300'}">${isFemale ? 'أنثى' : 'ذكر'}</span>
-                </div>
-                <p class="text-[10px] text-zinc-400 mt-0.5">${p.role}</p>
-              </div>
-            </div>
-
-            <button type="button" 
-                    onclick="event.stopPropagation(); MickeyStudio.playPersonaPreview('${p.id}', '${p.gender}')" 
-                    class="w-8 h-8 rounded-full ${isPlaying ? 'bg-emerald-500 text-black animate-pulse' : 'bg-white/5 hover:bg-emerald-500 hover:text-black text-zinc-300'} border border-white/10 flex items-center justify-center transition-all shadow-sm"
-                    title="استمع للمعاينة">
-              <i class="fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'} text-[10px] ${isPlaying ? '' : 'ml-0.5'}"></i>
-            </button>
-          </div>
-
-          <div class="flex flex-wrap gap-1">
-            ${p.tags.map(t => `<span class="text-[9px] px-2 py-0.5 rounded-md bg-white/[0.03] text-zinc-400 border border-white/5">${t}</span>`).join('')}
-          </div>
-
-          <div class="text-[10px] text-zinc-500 line-clamp-1 italic">
-            "${p.previewText}"
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  function selectPersonaFromGallery(personaId, gender) {
-    const genderSelect = document.getElementById('voice-gender-select');
-    if (genderSelect) genderSelect.value = gender;
-    
-    const perfSelect = document.getElementById('voice-performance-select');
-    const list = VOICE_PERSONAS[gender] || VOICE_PERSONAS.male;
-    if (perfSelect) {
-      perfSelect.innerHTML = list.map(p => 
-        `<option value="${p.id}" ${p.id === personaId ? 'selected' : ''}>${p.fullName}</option>`
-      ).join('');
-      perfSelect.value = personaId;
-    }
-
-    renderVoiceGallery(gender);
-    SFX.playClick();
-    const pObj = (VOICE_PERSONAS[gender] || []).find(x => x.id === personaId);
-    showToast(`تم اختيار شخصية: ${pObj?.fullName || personaId}`, 'success');
-  }
-
-  async function playPersonaPreview(personaId, gender) {
-    const key = `${gender}_${personaId}`;
-    if (activePlayingPersonaId === key && currentPreviewAudio) {
-      currentPreviewAudio.pause();
-      currentPreviewAudio = null;
-      activePlayingPersonaId = null;
-      renderVoiceGallery(document.getElementById('voice-gender-select')?.value || 'all');
-      return;
-    }
-
-    if (currentPreviewAudio) {
-      currentPreviewAudio.pause();
-      currentPreviewAudio = null;
-    }
-
-    const pObj = (VOICE_PERSONAS[gender] || []).find(x => x.id === personaId) || {};
-    const phrase = pObj.previewText || 'مرحباً بكم، هذا نموذج صوتي واقعي بالذكاء الاصطناعي.';
-    activePlayingPersonaId = key;
-    renderVoiceGallery(document.getElementById('voice-gender-select')?.value || 'all');
-
-    try {
-      const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-      const res = await gatewayFetch('generate_tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: phrase,
-          performance: personaId,
-          gender: gender,
-          dialect: document.getElementById('voice-dialect-select')?.value || 'egyptian',
-          engine: engine
-        })
-      });
-
-      if (!res.ok) throw new Error('فشل توليد المعاينة');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      currentPreviewAudio = new Audio(url);
-      currentPreviewAudio.onended = () => {
-        activePlayingPersonaId = null;
-        renderVoiceGallery(document.getElementById('voice-gender-select')?.value || 'all');
-      };
-      currentPreviewAudio.play();
-    } catch (e) {
-      console.warn('[Persona Preview]', e);
-      activePlayingPersonaId = null;
-      renderVoiceGallery(document.getElementById('voice-gender-select')?.value || 'all');
-      showToast('تعذر تشغيل المعاينة، تحقق من الاتصال أو مفتاح Gemini', 'warning');
-    }
-  }
-
-  function concatWavBuffers(buffers) {
-    if (buffers.length === 1) return new Blob([buffers[0]], { type: 'audio/wav' });
-    
-    const firstView = new DataView(buffers[0]);
-    const isWav = buffers[0].byteLength >= 44 && 
-                  String.fromCharCode(firstView.getUint8(0), firstView.getUint8(1), firstView.getUint8(2), firstView.getUint8(3)) === 'RIFF';
-
-    if (!isWav) {
-      return new Blob(buffers, { type: 'audio/mpeg' });
-    }
-
-    let totalDataLen = 0;
-    const pcmChunks = [];
-    for (const buf of buffers) {
-      if (buf.byteLength > 44) {
-        const pcm = buf.slice(44);
-        pcmChunks.push(pcm);
-        totalDataLen += pcm.byteLength;
-      }
-    }
-
-    const newHeader = new Uint8Array(buffers[0].slice(0, 44));
-    const headerView = new DataView(newHeader.buffer);
-    headerView.setUint32(4, 36 + totalDataLen, true);
-    headerView.setUint32(40, totalDataLen, true);
-
-    return new Blob([newHeader, ...pcmChunks], { type: 'audio/wav' });
-  }
-
-  // -----------------------------------------------------------------
-  // PODCAST STUDIO (DUAL-SPEAKER MULTI-TURN SYNTHESIS)
-  // -----------------------------------------------------------------
-  async function generatePodcastScript() {
-    const topicInput = document.getElementById('podcast-topic-input');
-    const topic = topicInput?.value.trim() || 'الذكاء الاصطناعي في صناعة الفيديو والمونتاج';
-    const s1Name = document.getElementById('podcast-speaker1-name')?.value || 'المحاور';
-    const s2Name = document.getElementById('podcast-speaker2-name')?.value || 'الضيف';
-    const btn = document.getElementById('btn-gen-podcast-script');
-    if (btn) btn.disabled = true;
-
-    try {
-      showToast('جاري تأليف حوار البودكاست الذكي...', 'info');
-      const prompt = `اكتب سيناريو حلقة بودكاست حوارية عربية قصيرة وشيقة بين "${s1Name}" و "${s2Name}" حول موضوع: "${topic}".
-اكتب كل دور في سطر منفصل يبدأ بـ "${s1Name}: " أو "${s2Name}: ".
-الحوار يتكون من 4 إلى 6 أسطر فقط، طبيعي وواقعي وممتع. لا تكتب أي مقدمات أو ملاحظات خارجية.`;
-
-      const res = await gatewayFetch('generate_text', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, stream: false })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const script = data.text || data.response || data.content;
-        if (script) {
-          document.getElementById('podcast-dialog-input').value = script.trim();
-          showToast('تم تأليف سيناريو البودكاست بنجاح!', 'success');
-          return;
-        }
-      }
-      throw new Error('Fallback needed');
-    } catch (e) {
-      document.getElementById('podcast-dialog-input').value = 
-`${s1Name}: مرحباً بكم في حلقة جديدة من البودكاست، وحديثنا اليوم عن ${topic}.
-${s2Name}: أهلاً بك يا ${s1Name}، سعيد جداً بتواجدي معكم لمناقشة هذا التطور المذهل.
-${s1Name}: ما هي أبرز التقنيات التي تراها الأكثر تأثيراً على صناع المحتوى الآن؟
-${s2Name}: بلا شك، نماذج الصوت والذكاء الاصطناعي التي تختصر ساعات العمل في ثوانٍ معدودة.
-${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى لقاء قريب في الحلقة القادمة.`;
-      showToast('تم إدراج نموذج حوار بودكاست جاهز!', 'success');
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  let STATE_PODCAST = { lastAudioBlob: null, lastAudioUrl: null };
-
-  async function generatePodcastAudio() {
-    const textInput = document.getElementById('podcast-dialog-input');
-    const script = textInput?.value.trim();
-    if (!script) {
-      showToast('يرجى كتابة أو توليد سيناريو الحوار أولاً!', 'warning');
-      return;
-    }
-
-    const s1Name = (document.getElementById('podcast-speaker1-name')?.value || 'المحاور').trim();
-    const s2Name = (document.getElementById('podcast-speaker2-name')?.value || 'الضيف').trim();
-    const s1Voice = document.getElementById('podcast-speaker1-voice')?.value || 'rami';
-    const s2Voice = document.getElementById('podcast-speaker2-voice')?.value || 'mariam';
-    const dialect = document.getElementById('podcast-dialect-select')?.value || 'egyptian';
-    const engine = document.getElementById('podcast-engine-select')?.value || 'gemini';
-    const btn = document.getElementById('btn-generate-podcast');
-    btn.disabled = true;
-    showToast('جاري إنتاج أصوات المتحاورين ودمج الحلقة...', 'info');
-
-    try {
-      const lines = script.split('\n').map(l => l.trim()).filter(Boolean);
-      const audioBuffers = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        let speakerVoice = s1Voice;
-        let speakerGender = ['mariam', 'laila', 'sama', 'salma', 'farida'].includes(s1Voice) ? 'female' : 'male';
-        let cleanText = line;
-
-        if (line.startsWith(s2Name) || line.startsWith('الضيف')) {
-          speakerVoice = s2Voice;
-          speakerGender = ['mariam', 'laila', 'sama', 'salma', 'farida'].includes(s2Voice) ? 'female' : 'male';
-          cleanText = line.replace(new RegExp(`^${s2Name}\\s*[:：]\\s*`, 'i'), '').replace(/^الضيف\s*[:：]\\s*/i, '');
-        } else if (line.startsWith(s1Name) || line.startsWith('المحاور')) {
-          cleanText = line.replace(new RegExp(`^${s1Name}\\s*[:：]\\s*`, 'i'), '').replace(/^المحاور\s*[:：]\\s*/i, '');
-        }
-
-        if (!cleanText.trim()) continue;
-
-        const res = await gatewayFetch('generate_tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: cleanText,
-            performance: speakerVoice,
-            gender: speakerGender,
-            dialect,
-            engine
-          })
-        });
-
-        if (!res.ok) throw new Error(`فشل توليد مقطع: ${cleanText.slice(0, 20)}`);
-        const ab = await res.arrayBuffer();
-        audioBuffers.push(ab);
-      }
-
-      if (audioBuffers.length === 0) throw new Error('لم يتم استخراج أي أسطر صوتية من الحوار.');
-
-      const unifiedBlob = concatWavBuffers(audioBuffers);
-      const url = URL.createObjectURL(unifiedBlob);
-      STATE_PODCAST.lastAudioBlob = unifiedBlob;
-      STATE_PODCAST.lastAudioUrl = url;
-
-      const playerCard = document.getElementById('podcast-active-player');
-      const emptyView = document.getElementById('podcast-empty-view');
-      const audioEl = document.getElementById('podcast-audio-element');
-
-      if (emptyView) emptyView.classList.add('hidden');
-      if (playerCard) playerCard.classList.remove('hidden');
-      if (audioEl) {
-        audioEl.src = url;
-        audioEl.play().catch(() => {});
-      }
-
-      showToast('تم إنتاج حلقة البودكاست الثنائية بنجاح!', 'success');
-    } catch (err) {
-      console.error('[Podcast Gen]', err);
-      showToast(err.message || 'تعذر إنتاج حلقة البودكاست.', 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  function downloadPodcastAudio() {
-    if (!STATE_PODCAST.lastAudioUrl) return;
-    const a = document.createElement('a');
-    a.href = STATE_PODCAST.lastAudioUrl;
-    a.download = `podcast_${Date.now()}.wav`;
-    a.click();
-  }
-
-  async function savePodcastToVault() {
-    if (!STATE_PODCAST.lastAudioUrl) return;
-    const asset = {
-      id: 'podcast_' + Date.now(),
-      type: 'audio',
-      title: 'حلقة بودكاست: ' + (document.getElementById('podcast-topic-input')?.value || 'محادثة ثنائية').slice(0, 30),
-      url: STATE_PODCAST.lastAudioUrl,
-      prompt: 'بودكاست ثنائي متحدثين',
-      timestamp: Date.now()
-    };
-    await saveAssetToDB(asset);
-    showToast('تم حفظ البودكاست في المعرض!', 'success');
-  }
-
-  // -----------------------------------------------------------------
-  // AUDIOBOOK STUDIO (CHAPTER-BASED NARRATIVE SYNTHESIS)
-  // -----------------------------------------------------------------
-  let STATE_AUDIOBOOK = { lastAudioBlob: null, lastAudioUrl: null };
-
-  async function generateAudiobookChapter() {
-    const textInput = document.getElementById('book-chapter-text');
-    const text = textInput?.value.trim();
-    if (!text) {
-      showToast('يرجى إدخال نص الفصل المراد تسجيله!', 'warning');
-      return;
-    }
-
-    const bookTitle = document.getElementById('book-title-input')?.value.trim() || 'رواية جديدة';
-    const chapterTitle = document.getElementById('chapter-title-input')?.value.trim() || 'الفصل الأول';
-    const narrator = document.getElementById('book-narrator-select')?.value || 'mariam';
-    const gender = ['mariam', 'farida', 'salma'].includes(narrator) ? 'female' : 'male';
-    const mood = document.getElementById('book-mood-select')?.value || 'mystery';
-    const pace = Number(document.getElementById('book-pace-select')?.value) || 1.0;
-    const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-    const btn = document.getElementById('btn-generate-audiobook');
-    btn.disabled = true;
-    showToast('جاري تسجيل الفصل الصوتي بصوت الراوي المختار...', 'info');
-
-    try {
-      const res = await gatewayFetch('generate_tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          performance: narrator,
-          gender,
-          dialect: 'fusha',
-          rate: pace,
-          engine,
-          style: `Audiobook chapter reading for "${bookTitle} - ${chapterTitle}". Atmospheric mood: ${mood}. Professional literary storytelling narration with proper dramatic pauses.`
-        })
-      });
-
-      if (!res.ok) throw new Error('فشل تسجيل الفصل الصوتي.');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      STATE_AUDIOBOOK.lastAudioBlob = blob;
-      STATE_AUDIOBOOK.lastAudioUrl = url;
-
-      const playerCard = document.getElementById('audiobook-active-player');
-      const emptyView = document.getElementById('audiobook-empty-view');
-      const audioEl = document.getElementById('audiobook-audio-element');
-      const bookEl = document.getElementById('audiobook-player-book');
-      const chapEl = document.getElementById('audiobook-player-chapter');
-
-      if (emptyView) emptyView.classList.add('hidden');
-      if (playerCard) playerCard.classList.remove('hidden');
-      if (bookEl) bookEl.textContent = bookTitle;
-      if (chapEl) chapEl.textContent = chapterTitle;
-      if (audioEl) {
-        audioEl.src = url;
-        audioEl.play().catch(() => {});
-      }
-
-      showToast(`تم إنتاج الفصل "${chapterTitle}" بنجاح!`, 'success');
-    } catch (e) {
-      console.error('[Audiobook Gen]', e);
-      showToast(e.message || 'تعذر إنتاج الفصل الصوتي.', 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  function downloadAudiobookAudio() {
-    if (!STATE_AUDIOBOOK.lastAudioUrl) return;
-    const bookTitle = document.getElementById('book-title-input')?.value.trim() || 'Audiobook';
-    const a = document.createElement('a');
-    a.href = STATE_AUDIOBOOK.lastAudioUrl;
-    a.download = `${bookTitle}_${Date.now()}.wav`;
-    a.click();
-  }
-
-  async function saveAudiobookToVault() {
-    if (!STATE_AUDIOBOOK.lastAudioUrl) return;
-    const bookTitle = document.getElementById('book-title-input')?.value.trim() || 'كتاب صوتي';
-    const chapTitle = document.getElementById('chapter-title-input')?.value.trim() || 'الفصل';
-    const asset = {
-      id: 'audiobook_' + Date.now(),
-      type: 'audio',
-      title: `${bookTitle} · ${chapTitle}`,
-      url: STATE_AUDIOBOOK.lastAudioUrl,
-      prompt: 'كتاب صوتي ورواية',
-      timestamp: Date.now()
-    };
-    await saveAssetToDB(asset);
-    showToast('تم حفظ الفصل في المعرض!', 'success');
-  }
-
-  // -----------------------------------------------------------------
-  // VOICE OVER GENERATION
-  // -----------------------------------------------------------------
-  async function generateVoiceover() {
-    const textInput = document.getElementById('voice-text-input');
-    const text = textInput ? textInput.value.trim() : '';
-    if (!text) { showToast('يرجى كتابة نص لتوليد التعليق الصوتي!', 'warning'); return; }
-    if (text.length > 6000) { showToast('النص طويل جدًا. الحد الأقصى 6000 حرف لكل ملف صوتي.', 'warning'); return; }
-    if (!await authorizeAndConsume('voiceover')) return;
-
-    const button = document.getElementById('btn-generate-voice');
-    const scanner = document.getElementById('voice-laser-scanner');
-    const emptyState = document.getElementById('voice-empty-state');
-    const activeControls = document.getElementById('voice-active-controls');
-    const actionsBar = document.getElementById('voice-actions-bar');
-    const statusPill = document.getElementById('voice-process-status');
-    const audioEl = document.getElementById('final-rendered-audio');
-    const rate = Number(document.getElementById('voice-rate-slider')?.value) || 1;
-    const pitch = Number(document.getElementById('voice-pitch-slider')?.value) || 1;
-    const dialectSelect = document.getElementById('voice-dialect-select');
-    const dialect = dialectSelect?.value || 'egyptian';
-    const dialectLabel = dialectSelect?.selectedOptions?.[0]?.textContent || 'المصرية';
-    const gender = document.getElementById('voice-gender-select')?.value || 'male';
-    const genderLabel = gender === 'female' ? 'نسائي' : 'رجالي';
-    const age = document.getElementById('voice-age-select')?.value || 'adult';
-    const performance = document.getElementById('voice-performance-select')?.value || 'neutral';
-    const warmth = document.getElementById('voice-warmth-select')?.value || 'balanced';
-    const emotion = document.getElementById('voice-emotion-select')?.value || 'medium';
-    const intensity = document.getElementById('voice-intensity-select')?.value || 'medium';
-    const voices = {
-      yusuf: ['Charon', 'Kore', 'authoritative documentary narration, deep, measured, and confident'],
-      malik: ['Puck', 'Sadachbia', 'bright, energetic commercial delivery with clear articulation'],
-      rami: ['Iapetus', 'Aoede', 'warm, natural, conversational podcast delivery'],
-      saif: ['Fenrir', 'Sulafat', 'dramatic, emotionally engaging narration with controlled intensity'],
-      zaid: ['Rasalgethi', 'Vindemiatrix', 'expressive storytelling, vivid and steady'],
-      mariam: ['Rasalgethi', 'Vindemiatrix', 'expressive, warm storytelling narration with serene pacing'],
-      laila: ['Puck', 'Sadachbia', 'bright, fast, confident commercial and marketing delivery'],
-      sama: ['Iapetus', 'Aoede', 'lively, friendly, natural podcast and social media delivery'],
-      salma: ['Fenrir', 'Sulafat', 'deeply emotional and expressive dramatic delivery'],
-      farida: ['Charon', 'Kore', 'poised, authoritative documentary narration with deep presence'],
-      neutral: ['Orus', 'Schedar', 'balanced, natural, and clear delivery'],
-    };
-    const dialects = { egyptian: 'Egyptian Arabic', saudi: 'Saudi Arabic', levantine: 'Levantine Arabic', iraqi: 'Iraqi Arabic', algerian: 'Algerian Arabic', moroccan: 'Moroccan Arabic', tunisian: 'Tunisian Arabic', gulf: 'Gulf Arabic', fusha: 'Modern Standard Arabic' };
-    const performanceInfo = voices[performance] || voices.neutral;
-    const voice = gender === 'female' ? performanceInfo[1] : performanceInfo[0];
-    const ageStyle = ({ adult: 'adult', senior: 'older adult', cartoon: 'animated character' })[age] || 'adult';
-    const warmthStyle = ({ cool: 'cool and composed', balanced: 'balanced warmth', warm: 'warm and human' })[warmth] || 'balanced warmth';
-    const emotionStyle = ({ calm: 'calm and restrained', medium: 'moderately expressive', strong: 'highly expressive' })[emotion] || 'moderately expressive';
-    const intensityStyle = ({ light: 'subtle dramatic intensity', medium: 'moderate dramatic intensity', strong: 'strong dramatic intensity' })[intensity] || 'moderate dramatic intensity';
-    const style = `Speak in ${dialects[dialect] || dialects.egyptian}, with a ${gender === 'female' ? 'feminine' : 'masculine'} ${ageStyle} voice. Use ${performanceInfo[2]}; be ${warmthStyle} and ${emotionStyle}, with ${intensityStyle}. Pace ${rate < 0.9 ? 'slowly' : rate > 1.1 ? 'briskly' : 'at a natural pace'} (${rate.toFixed(2)}x), with a ${pitch < 0.9 ? 'lower' : pitch > 1.1 ? 'higher' : 'natural'} pitch. Read the supplied Arabic text verbatim; do not translate it or say these directions aloud.`;
-
-    const speakerBadge = document.getElementById('player-speaker-badge');
-    if (speakerBadge) speakerBadge.textContent = `${dialectLabel} · صوت ${genderLabel}`;
-    SFX.playLaser();
-    button.disabled = true;
-    scanner.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    activeControls.classList.add('hidden');
-    if (actionsBar) actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    
-    const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-    statusPill.textContent = engine === 'gemini' ? 'جاري التوليد عبر استوديو Gemini 3.8 Flash TTS…' : 'جاري التوليد عبر Google Translate TTS…';
-    try {
-      const response = await gatewayFetch('generate_tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text, voice, style, rate, pitch, dialect, gender, performance, age, warmth, emotion, intensity,
-          engine,
-          model: 'gemini-3.8-flash-tts',
-          input: [{ type: 'user_input', content: [{ type: 'text', text, annotations: [{ type: 'speech_metadata', style }] }] }],
-          response_format: { type: 'audio', mime_type: 'audio/wav', sample_rate: 24000 },
-          generation_config: { speech_config: [{ voice }] },
-        }),
-      });
-      const contentType = response.headers.get('content-type') || '';
-      if (!response.ok) {
-        const errorData = contentType.includes('json') ? await response.json().catch(() => ({})) : {};
-        throw new Error(errorData.error?.message || errorData.error || `تعذر إنشاء الصوت من الخادم (${response.status}).`);
-      }
-      let bytes;
-      let respJson = null;
-      if (contentType.startsWith('audio/')) {
-        bytes = new Uint8Array(await response.arrayBuffer());
-      } else {
-        respJson = await response.json().catch(() => ({}));
-        const audioData = respJson.output_audio?.data || respJson._media_base64 || respJson.base64Data || (respJson.steps || []).flatMap(step => step.content || []).reverse().find(item => item.type === 'audio' && item.data)?.data;
-        if (!audioData) throw new Error(respJson.error || 'لم يُرجع الخادم بيانات صوتية صالحة.');
-        bytes = Uint8Array.from(atob(audioData), char => char.charCodeAt(0));
-      }
-      const isWav = bytes.length > 100 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WAVE';
-      const isMp3 = bytes.length > 100 && (
-        contentType.includes('mpeg') || contentType.includes('mp3') ||
-        (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) ||
-        (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33)
-      );
-      if (!isWav && !isMp3 && bytes.length < 100) throw new Error('ملف الصوت غير صالح.');
-
-      const audioMime = isWav ? 'audio/wav' : 'audio/mpeg';
-      const generatedBlob = new Blob([bytes], { type: audioMime });
-      if (STATE.voice.lastAudioUrl?.startsWith('blob:')) URL.revokeObjectURL(STATE.voice.lastAudioUrl);
-      const generatedUrl = URL.createObjectURL(generatedBlob);
-      STATE.voice.lastAudioBlob = generatedBlob;
-      STATE.voice.lastAudioUrl = generatedUrl;
-      audioEl.src = generatedUrl;
-      audioEl.load();
-      scanner.classList.add('hidden');
-      activeControls.classList.remove('hidden');
-      if (actionsBar) actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-      
-      const reportedEngine = response.headers.get('X-TTS-Engine') || '';
-      const engineUsed = respJson?.engine_used || (reportedEngine.includes('Gemini') || (!reportedEngine && isWav) ? 'gemini' : 'google-translate');
-      const isGeminiEngine = engineUsed === 'gemini';
-      const engineTitle = isGeminiEngine ? 'Gemini 3.8 Flash TTS' : 'Google Translate TTS';
-      statusPill.textContent = `اكتمل · ${engineTitle} · ${dialectLabel} · ${genderLabel}`;
-      
-      setupCustomAudioPlayer(audioEl);
-      setupAudioSpectrumVisualizer(audioEl);
-      audioEl.play().catch(() => {});
-      const optionCustom = document.getElementById('option-custom-voiceover');
-      if (optionCustom) { optionCustom.disabled = false; optionCustom.textContent = 'التعليق الصوتي المولد حديثاً ✓'; }
-      SFX.playSuccess();
-      showToast(respJson?.engine_note || `تم توليد التعليق الصوتي بنجاح عبر ${engineTitle}!`, 'success');
-    } catch (error) {
-      scanner.classList.add('hidden');
-      emptyState.classList.remove('hidden');
-      statusPill.textContent = 'تعذر إنشاء الملف';
-      showToast(error.message || 'تعذر إنشاء التعليق الصوتي.', 'error');
-    } finally { button.disabled = false; }
-  }
-
-  function onVoiceEngineChanged() {
-    const engine = document.getElementById('voice-engine-select')?.value || 'gemini';
-    const badge = document.getElementById('voice-engine-badge');
-    const descHint = document.getElementById('voice-engine-desc-hint');
-    if (badge) {
-      badge.textContent = engine === 'gemini' ? 'WAV استوديو سينمائي (افتراضي)' : 'Google Translate TTS (مجاني)';
-      badge.className = `text-[10px] font-mono ${engine === 'gemini' ? 'text-cyan-400' : 'text-sky-400'}`;
-    }
-    if (descHint) {
-      descHint.textContent = engine === 'gemini'
-        ? 'يستخدم Gemini 3.8 Flash TTS لتوليد WAV بنبرة ولهجة وأداء موجّه فائق الدقة (مدار تلقائياً عبر مفاتيح الخادم النشطة مع التدوير الذاتي).'
-        : 'يستخدم Google Translate TTS مجانًا. هذا الخيار لا يدعم اختيار شخصية الصوت أو ضمان نوعه.';
-    }
-  }
-
-  async function saveGeminiKeyFromVoiceStudio() {
-    const input = document.getElementById('voice-gemini-key-input');
-    const status = document.getElementById('voice-gemini-key-status');
-    const val = input ? input.value.trim() : '';
-    try {
-      const response = await gatewayFetch('save_gemini_key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ geminiKey: val, action: 'save_gemini_key' })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.success) throw new Error(data.error || 'تعذر حفظ المفتاح في Firestore.');
-      if (input) input.value = '';
-      localStorage.removeItem('mickey_gemini_key');
-      if (status) status.textContent = val ? `✓ محفوظ في Firestore (${data.masked_key})` : 'تم حذف المفتاح من Firestore';
-      showToast(data.message || (val ? 'تم حفظ مفتاح Google Gemini بشكل آمن في Firestore.' : 'تم حذف مفتاح Gemini من Firestore.'), 'success');
-    } catch (e) {
-      if (status) status.textContent = 'تعذر الحفظ في Firestore';
-      showToast(e.message || 'تعذر حفظ مفتاح Gemini في Firestore.', 'error');
-    }
-  }
-
-  async function downloadCurrentAudio() {
-    SFX.playClick();
-    const filename = `mickey_voiceover_${Date.now()}.wav`;
-    if (STATE.voice.lastAudioBlob) {
-      downloadBlob(STATE.voice.lastAudioBlob, filename);
-      showToast('جاري تنزيل التعليق الصوتي بصيغة WAV.', 'success');
-      return;
-    }
-    showToast('أنشئ التعليق الصوتي أولاً، ثم نزّله من المشغل.', 'warning');
-  }
-  function transferAudioToVideoStudio() {
-    if (!STATE.voice.lastAudioBlob) {
-      showToast('يرجى توليد تعليق صوتي أولاً لنقله!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    switchTab('video-studio');
-
-    const select = document.getElementById('video-soundtrack-select');
-    const badge = document.getElementById('video-attached-audio-badge');
-    if (select) select.value = 'voiceover-custom';
-    if (badge) badge.classList.remove('hidden');
-
-    showToast('تم دمج التعليق الصوتي في استوديو الفيديو تلقائياً!', 'success');
-  }
-
-  // -----------------------------------------------------------------
-  // 11. STUDIO 5: ARABIC SPEECH-TO-TEXT & AUDIO ANALYSIS STUDIO
-  // -----------------------------------------------------------------
-  function setTranscribeMode(mode) {
-    STATE.transcribe.mode = mode;
-    SFX.playClick();
-
-    const btnUpload = document.getElementById('btn-mode-upload');
-    const btnRecord = document.getElementById('btn-mode-record');
-    const containerUpload = document.getElementById('transcribe-upload-container');
-    const containerRecord = document.getElementById('transcribe-record-container');
-
-    if (mode === 'upload') {
-      if (btnUpload) btnUpload.classList.add('active');
-      if (btnRecord) btnRecord.classList.remove('active');
-      if (containerUpload) containerUpload.classList.remove('hidden');
-      if (containerRecord) containerRecord.classList.add('hidden');
-    } else {
-      if (btnRecord) btnRecord.classList.add('active');
-      if (btnUpload) btnUpload.classList.remove('active');
-      if (containerRecord) containerRecord.classList.remove('hidden');
-      if (containerUpload) containerUpload.classList.add('hidden');
-    }
-  }
-
-  function handleTranscribeFileUpload(input) {
-    const file = input.files && input.files[0];
-    if (!file) return;
-
-    SFX.playClick();
-    STATE.transcribe.audioFile = file;
-    STATE.transcribe.audioBlob = file;
-    STATE.transcribe.audioMime = file.type || 'audio/mp3';
-    STATE.transcribe.audioUrl = URL.createObjectURL(file);
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target.result;
-      const b64 = dataUrl.includes('base64,') ? dataUrl.split('base64,')[1] : dataUrl;
-      STATE.transcribe.audioBase64 = b64;
-    };
-    reader.readAsDataURL(file);
-
-    const previewEl = document.getElementById('transcribe-file-preview');
-    const emptyEl = document.getElementById('transcribe-upload-empty');
-    const nameEl = document.getElementById('transcribe-file-name');
-    const sizeEl = document.getElementById('transcribe-file-size');
-    const statusPill = document.getElementById('transcribe-status-pill');
-
-    if (nameEl) nameEl.textContent = file.name;
-    if (sizeEl) sizeEl.textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-    if (previewEl) previewEl.classList.remove('hidden');
-    if (emptyEl) emptyEl.classList.add('hidden');
-    if (statusPill) statusPill.textContent = 'تم اختيار الملف - جاهز للتفريغ والتحليل ✓';
-
-    const player = document.getElementById('transcribe-audio-player');
-    if (player) {
-      player.src = STATE.transcribe.audioUrl;
-    }
-    const titleEl = document.getElementById('transcribe-audio-title');
-    if (titleEl) titleEl.textContent = file.name;
-
-    showToast('تم تحميل الملف الصوتي بنجاح!', 'success');
-  }
-
-  function clearTranscribeFile() {
-    STATE.transcribe.audioFile = null;
-    STATE.transcribe.audioBlob = null;
-    STATE.transcribe.audioUrl = null;
-    STATE.transcribe.audioBase64 = null;
-
-    const input = document.getElementById('transcribe-file-input');
-    if (input) input.value = '';
-
-    const previewEl = document.getElementById('transcribe-file-preview');
-    const emptyEl = document.getElementById('transcribe-upload-empty');
-    const statusPill = document.getElementById('transcribe-status-pill');
-
-    if (previewEl) previewEl.classList.add('hidden');
-    if (emptyEl) emptyEl.classList.remove('hidden');
-    if (statusPill) statusPill.textContent = 'جاهز للتفريغ والتحليل';
-    SFX.playClick();
-  }
-
-  async function loadSampleArabicAudio() {
-    SFX.playClick();
-    showToast('جاري تحميل عينة صوتية عربية فصيحة...', 'info');
-
-    const sampleText = 'مرحباً بكم في استوديو ميكي للذكاء الاصطناعي. نقدم لكم اليوم تجربة متكاملة لتحويل الكلام العربي المنطوق إلى نصوص مكتوبة بدقة فائقة، مع استخراج ملفات الترجمة لبرامج المونتاج مثل بريمير، وتحليل المشاعر ونبرة الصوت.';
-    const sampleUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Tariq&text=${encodeURIComponent(sampleText)}`;
-
-    try {
-      const res = await fetch(sampleUrl);
-      if (!res.ok) throw new Error('Failed to fetch sample');
-      const blob = await res.blob();
-      STATE.transcribe.audioBlob = blob;
-      STATE.transcribe.audioMime = 'audio/mp3';
-      STATE.transcribe.audioUrl = URL.createObjectURL(blob);
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const b64 = e.target.result.split('base64,')[1];
-        STATE.transcribe.audioBase64 = b64;
-      };
-      reader.readAsDataURL(blob);
-
-      setTranscribeMode('upload');
-      const previewEl = document.getElementById('transcribe-file-preview');
-      const emptyEl = document.getElementById('transcribe-upload-empty');
-      const nameEl = document.getElementById('transcribe-file-name');
-      const sizeEl = document.getElementById('transcribe-file-size');
-      const titleEl = document.getElementById('transcribe-audio-title');
-      const player = document.getElementById('transcribe-audio-player');
-      const statusPill = document.getElementById('transcribe-status-pill');
-
-      if (nameEl) nameEl.textContent = 'عينة_صوت_عربي_فصحى.mp3';
-      if (sizeEl) sizeEl.textContent = (blob.size / 1024).toFixed(1) + ' KB';
-      if (previewEl) previewEl.classList.remove('hidden');
-      if (emptyEl) emptyEl.classList.add('hidden');
-      if (titleEl) titleEl.textContent = 'عينة_صوت_عربي_فصحى.mp3';
-      if (player) player.src = STATE.transcribe.audioUrl;
-      if (statusPill) statusPill.textContent = 'العينة التجريبية جاهزة للتفريغ والتحليل ✓';
-
-      SFX.playSuccess();
-      showToast('تم تحميل العينة الصوتية! اضغط على "بدء تفريغ وتحليل الصوت".', 'success');
-    } catch (err) {
-      showToast('تعذر تحميل العينة، يرجى رفع ملف أو استخدام الميكروفون', 'warning');
-    }
-  }
-
-  let liveSpeechRecInstance = null;
-  let liveSpeechTranscriptAccumulated = '';
-
-  async function toggleLiveRecording() {
-    if (STATE.transcribe.isRecording) {
-      stopLiveRecording();
-    } else {
-      await startLiveRecording();
-    }
-  }
-
-  async function startLiveRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      STATE.transcribe.audioStream = stream;
-      STATE.transcribe.isRecording = true;
-      SFX.playClick();
-
-      const pulseRing = document.getElementById('rec-pulse-ring');
-      const recBtnIcon = document.getElementById('rec-btn-icon');
-      const recStatus = document.getElementById('rec-status-label');
-      const recLiveMeter = document.getElementById('rec-live-meter');
-      const timerEl = document.getElementById('rec-timer');
-
-      if (pulseRing) pulseRing.classList.remove('hidden');
-      if (recBtnIcon) recBtnIcon.className = 'fa-solid fa-stop text-lg text-white';
-      if (recStatus) recStatus.textContent = 'جاري التسجيل المباشر... تحدث بوضوح';
-      if (recLiveMeter) recLiveMeter.classList.remove('hidden');
-
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        const actx = new AudioCtx();
-        const src = actx.createMediaStreamSource(stream);
-        const analyser = actx.createAnalyser();
-        analyser.fftSize = 64;
-        src.connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const volBar = document.getElementById('rec-volume-bar');
-
-        function updateMeter() {
-          if (!STATE.transcribe.isRecording) return;
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-          const avg = sum / dataArray.length;
-          const pct = Math.min(100, Math.round((avg / 128) * 100));
-          if (volBar) volBar.style.width = pct + '%';
-          requestAnimationFrame(updateMeter);
-        }
-        updateMeter();
-      } catch (e) {}
-
-      STATE.transcribe.recSeconds = 0;
-      if (timerEl) timerEl.textContent = '00:00';
-      clearInterval(STATE.transcribe.recInterval);
-      STATE.transcribe.recInterval = setInterval(() => {
-        STATE.transcribe.recSeconds++;
-        const mins = String(Math.floor(STATE.transcribe.recSeconds / 60)).padStart(2, '0');
-        const secs = String(STATE.transcribe.recSeconds % 60).padStart(2, '0');
-        if (timerEl) timerEl.textContent = `${mins}:${secs}`;
-      }, 1000);
-
-      const recordedChunks = [];
-      let mimeType = 'audio/webm;codecs=opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : '');
-      }
-
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-      STATE.transcribe.mediaRecorder = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          recordedChunks.push(e.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        const audioBlob = new Blob(recordedChunks, { type: mimeType || 'audio/webm' });
-        STATE.transcribe.audioBlob = audioBlob;
-        STATE.transcribe.audioMime = mimeType || 'audio/webm';
-        STATE.transcribe.audioUrl = URL.createObjectURL(audioBlob);
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const b64 = e.target.result.split('base64,')[1];
-          STATE.transcribe.audioBase64 = b64;
-        };
-        reader.readAsDataURL(audioBlob);
-
-        const player = document.getElementById('transcribe-audio-player');
-        if (player) player.src = STATE.transcribe.audioUrl;
-        const titleEl = document.getElementById('transcribe-audio-title');
-        if (titleEl) titleEl.textContent = `تسجيل_مباشر_${new Date().toLocaleTimeString('ar-EG')}.webm`;
-
-        const statusPill = document.getElementById('transcribe-status-pill');
-        if (statusPill) statusPill.textContent = 'تم اكتمال التسجيل - جاهز للتفريغ والتحليل ✓';
-      };
-
-      recorder.start(250);
-
-      liveSpeechTranscriptAccumulated = '';
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        try {
-          liveSpeechRecInstance = new SpeechRecognition();
-          liveSpeechRecInstance.continuous = true;
-          liveSpeechRecInstance.interimResults = true;
-          const dialect = document.getElementById('transcribe-dialect-select')?.value || 'auto';
-          liveSpeechRecInstance.lang = dialect === 'egyptian' ? 'ar-EG' : (dialect === 'gulf' ? 'ar-SA' : (dialect === 'maghrebi' ? 'ar-MA' : 'ar-SA'));
-
-          liveSpeechRecInstance.onresult = (event) => {
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                liveSpeechTranscriptAccumulated += event.results[i][0].transcript + ' ';
-              } else {
-                interim += event.results[i][0].transcript;
-              }
-            }
-          };
-          liveSpeechRecInstance.start();
-        } catch (e) {}
-      }
-
-    } catch (err) {
-      console.error(err);
-      showToast('تعذر الوصول إلى الميكروفون، يرجى منح الإذن للمتصفح', 'error');
-    }
-  }
-
-  function stopLiveRecording() {
-    STATE.transcribe.isRecording = false;
-    SFX.playClick();
-
-    const pulseRing = document.getElementById('rec-pulse-ring');
-    const recBtnIcon = document.getElementById('rec-btn-icon');
-    const recStatus = document.getElementById('rec-status-label');
-    const recLiveMeter = document.getElementById('rec-live-meter');
-
-    if (pulseRing) pulseRing.classList.add('hidden');
-    if (recBtnIcon) recBtnIcon.className = 'fa-solid fa-microphone text-xl text-white';
-    if (recStatus) recStatus.textContent = 'تم حفظ التسجيل! اضغط على زر التفريغ بالأسفل';
-    if (recLiveMeter) recLiveMeter.classList.add('hidden');
-
-    clearInterval(STATE.transcribe.recInterval);
-
-    if (STATE.transcribe.mediaRecorder && STATE.transcribe.mediaRecorder.state !== 'inactive') {
-      STATE.transcribe.mediaRecorder.stop();
-    }
-
-    if (STATE.transcribe.audioStream) {
-      STATE.transcribe.audioStream.getTracks().forEach(track => track.stop());
-      STATE.transcribe.audioStream = null;
-    }
-
-    if (liveSpeechRecInstance) {
-      try { liveSpeechRecInstance.stop(); } catch (e) {}
-      liveSpeechRecInstance = null;
-    }
-
-    SFX.playSuccess();
-    showToast('تم حفظ التسجيل الصوتي بنجاح!', 'success');
-  }
-
-  function setTranscribeOutputTab(tabKey) {
-    STATE.transcribe.outputTab = tabKey;
-    SFX.playClick();
-
-    ['transcript', 'srt', 'insights'].forEach(key => {
-      const btn = document.getElementById('tab-out-' + key);
-      const view = document.getElementById('view-transcribe-' + key);
-      if (btn) {
-        if (key === tabKey) btn.classList.add('active');
-        else btn.classList.remove('active');
-      }
-      if (view) {
-        if (key === tabKey) view.classList.remove('hidden');
-        else view.classList.add('hidden');
-      }
-    });
-  }
-
-  function generateSrtFromTranscript(text, totalDurationSec = 30) {
-    if (!text || !text.trim()) return '';
-    const sentences = text
-      .split(/(?<=[.،؟!؛\n])\s+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    if (sentences.length === 0) return '';
-    const durPerSent = Math.max(2.5, totalDurationSec / sentences.length);
-
-    let srt = '';
-    sentences.forEach((sentence, idx) => {
-      const start = idx * durPerSent;
-      const end = (idx + 1) * durPerSent;
-      const formatTime = (sec) => {
-        const h = String(Math.floor(sec / 3600)).padStart(2, '0');
-        const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
-        const s = String(Math.floor(sec % 60)).padStart(2, '0');
-        const ms = String(Math.floor((sec % 1) * 1000)).padStart(3, '0');
-        return `${h}:${m}:${s},${ms}`;
-      };
-
-      srt += `${idx + 1}\n${formatTime(start)} --> ${formatTime(end)}\n${sentence}\n\n`;
-    });
-    return srt.trim();
-  }
-
-  async function processAudioTranscription() {
-    if (!STATE.transcribe.audioBlob && !STATE.transcribe.audioBase64) {
-      showToast('يرجى اختيار ملف صوتي أو تسجيل صوتك أولاً!', 'warning');
-      return;
-    }
-    if (!await authorizeAndConsume('transcription')) return;
-
-    if (!STATE.transcribe.audioBase64 && STATE.transcribe.audioBlob) {
-      try {
-        STATE.transcribe.audioBase64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const d = e.target.result;
-            resolve(d.includes('base64,') ? d.split('base64,')[1] : d);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(STATE.transcribe.audioBlob);
-        });
-      } catch (e) {}
-    }
-
-    SFX.playLaser();
-    const scanner = document.getElementById('transcribe-laser-scanner');
-    const emptyState = document.getElementById('transcribe-empty-state');
-    const resultsContainer = document.getElementById('transcribe-results-container');
-    const actionsBar = document.getElementById('transcribe-actions-bar');
-    const statusPill = document.getElementById('transcribe-status-pill');
-
-    if (scanner) scanner.classList.remove('hidden');
-    if (emptyState) emptyState.classList.add('hidden');
-    if (resultsContainer) resultsContainer.classList.add('hidden');
-    if (actionsBar) actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    if (statusPill) statusPill.textContent = 'جاري تحليل الموجات الصوتية وتفريغ الكلام العربي...';
-
-    const engine = document.getElementById('transcribe-engine-select')?.value || 'gemini-multimodal';
-    const dialect = document.getElementById('transcribe-dialect-select')?.value || 'auto';
-
-    let dialectLabel = 'فصحى معاصرة';
-    if (dialect === 'egyptian') dialectLabel = 'لهجة مصرية';
-    else if (dialect === 'gulf') dialectLabel = 'لهجة خليجية';
-    else if (dialect === 'levantine') dialectLabel = 'لهجة شامية';
-    else if (dialect === 'maghrebi') dialectLabel = 'لهجة مغاربية';
-    else if (dialect === 'bilingual') dialectLabel = 'عربي + إنجليزي';
-
-    let parsedResult = null;
-    let providerName = 'Google Gemini 1.5 Flash';
-    let isSuccess = false;
-    let lastGeminiError = '';
-
-    // Determine and clean MIME type
-    let cleanMime = (STATE.transcribe.audioMime || '').split(';')[0].trim();
-    const fileName = (STATE.transcribe.audioFile?.name || '').toLowerCase();
-    if (!cleanMime || cleanMime === 'application/octet-stream') {
-      if (fileName.endsWith('.mp4')) cleanMime = 'video/mp4';
-      else if (fileName.endsWith('.mp3')) cleanMime = 'audio/mp3';
-      else if (fileName.endsWith('.wav')) cleanMime = 'audio/wav';
-      else if (fileName.endsWith('.m4a')) cleanMime = 'audio/mp4';
-      else if (fileName.endsWith('.webm')) cleanMime = 'audio/webm';
-      else if (fileName.endsWith('.ogg')) cleanMime = 'audio/ogg';
-      else cleanMime = 'audio/mp3';
-    }
-
-    const promptInstruction = "أنت خبير فائق الذكاء في تفريغ وتحليل الصوت والكلام العربي بجميع لهجاته (الفصحى، المصرية، الخليجية، الشامية، المغاربية). "
-      + "استمع للصوت العربي المرفق جيداً، وقم بتفريغه وتحليله بدقة متناهية. "
-      + (dialect !== 'auto' ? `ملاحظة: المتحدث قد يتحدث بـ (${dialectLabel}). راعِ المفردات الدارجة بدقة. ` : "")
-      + "المطلوب منك إخراج كائن JSON فقط (Strict valid JSON) بدون أي كتل برمجية، يحتوي على:\n"
-      + "{\n"
-      + '  "transcript": "النص الكامل الدقيق للكلام العربي المنطوق، مع وضع علامات الترقيم الصحيحة (الفواصل، النقاط، علامات الاستفهام)، وتنسيق الفقرات بسلاسة.",' + "\n"
-      + '  "srt": "توليد ملف ترجمة تزامني قياسي بصيغة SRT مع أرقام الفقرات والتوقيتات التقديرية 00:00:00,000 --> 00:00:00,000 جاهز للمونتاج في بريمير.",' + "\n"
-      + '  "dialect": "اللهجة المكتشفة في الصوت (مثال: فصحى معاصرة، لهجة مصرية، لهجة خليجية، شامية، مغاربية)",' + "\n"
-      + '  "tone": "نبرة الصوت والمشاعر (مثال: نبرة رسمية وهادئة، حماسية وتشويقية، تعليمية، عاطفية)",' + "\n"
-      + '  "summary": "ملخص ذكي وموجز في سطرين لأهم ما جاء في التسجيل الصوتي.",' + "\n"
-      + '  "key_points": ["نقطة رئيسية 1", "نقطة رئيسية 2", "نقطة رئيسية 3"],' + "\n"
-      + '  "words_count": 0,' + "\n"
-      + '  "estimated_speed": "معتدلة (~130 كلمة/دقيقة)"' + "\n"
-      + "}";
-
-    // Provider keys remain on the server; all remote transcription runs through api.php.
-    if (STATE.transcribe.audioBase64) {
-      try {
-        const response = await gatewayFetch('transcribe_audio', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio_base64: STATE.transcribe.audioBase64, mime_type: cleanMime, dialect })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (response.ok && data.success && data.data) {
-          parsedResult = data.data; providerName = data.provider || 'خدمة Mickey Studio'; isSuccess = true;
-        } else { lastGeminiError = data.error || `تعذر التفريغ (${response.status}).`; }
-      } catch (error) { lastGeminiError = error.message || 'تعذر الاتصال بخادم التفريغ.'; }
-    }
-
-    // 4. Fallback to Web Speech text if available
-    if (!parsedResult && liveSpeechTranscriptAccumulated && liveSpeechTranscriptAccumulated.trim()) {
-      const text = liveSpeechTranscriptAccumulated.trim();
-      parsedResult = {
-        transcript: text,
-        dialect: dialectLabel,
-        tone: 'طبيعية ومباشرة',
-        summary: text.slice(0, 140) + '...',
-        key_points: ['تم تفريغ الصوت مباشرة عبر محرك المتصفح المحلي.'],
-        words_count: text.split(/\s+/).length,
-        estimated_speed: 'مباشرة'
-      };
-      providerName = 'محرك المتصفح المباشر (Web Speech API)';
-      isSuccess = true;
-    }
-
-    // If neither the server nor browser speech recognition returned a transcript.
-    if (!parsedResult) {
-      const friendlyError = lastGeminiError || 'لم تُرجع خدمة التفريغ نصًا. حاول مجددًا لاحقًا.';
-      parsedResult = {
-        transcript: `تعذر تفريغ الملف الصوتي:\n${friendlyError}`, dialect: dialectLabel, tone: 'غير محدد',
-        summary: friendlyError, key_points: ['تحقق من توفر خدمات التفريغ على الخادم.'], words_count: 0, estimated_speed: '0'
-      };
-      isSuccess = false;
-    }
-
-    if (!parsedResult.srt || !parsedResult.srt.trim()) {
-      parsedResult.srt = generateSrtFromTranscript(parsedResult.transcript);
-    }
-
-    const wordsCount = parsedResult.words_count || (parsedResult.transcript ? parsedResult.transcript.trim().split(/\s+/).filter(Boolean).length : 0);
-    const estSpeed = parsedResult.estimated_speed || `~120 كلمة/دقيقة`;
-
-    const textOutput = document.getElementById('transcribe-text-output');
-    const srtOutput = document.getElementById('transcribe-srt-output');
-    const summaryText = document.getElementById('transcribe-summary-text');
-    const keyPointsList = document.getElementById('transcribe-key-points-list');
-    const metricDialect = document.getElementById('metric-dialect');
-    const metricWords = document.getElementById('metric-words');
-    const metricTone = document.getElementById('metric-tone');
-    const metricProvider = document.getElementById('metric-provider');
-
-    if (textOutput) textOutput.value = parsedResult.transcript || '';
-    if (srtOutput) srtOutput.value = parsedResult.srt || '';
-    if (summaryText) summaryText.textContent = parsedResult.summary || 'تم تفريغ الصوت بنجاح.';
-
-    if (keyPointsList) {
-      const points = Array.isArray(parsedResult.key_points) ? parsedResult.key_points : [parsedResult.summary || 'تفريغ صوتي'];
-      keyPointsList.innerHTML = points.map(pt => `<li class="flex items-start gap-2"><span class="text-indigo-400 mt-0.5">•</span> <span>${pt}</span></li>`).join('');
-    }
-
-    if (metricDialect) {
-      metricDialect.innerHTML = `<i class="fa-solid fa-language text-zinc-400 text-[11px]"></i> <span>${parsedResult.dialect || dialectLabel}</span>`;
-    }
-    if (metricWords) {
-      metricWords.innerHTML = `<i class="fa-solid fa-align-right text-zinc-400 text-[11px]"></i> <span>${isSuccess ? wordsCount + ' كلمة (' + estSpeed + ')' : '0 كلمة'}</span>`;
-    }
-    if (metricTone) {
-      metricTone.innerHTML = `<i class="fa-solid fa-chart-line text-zinc-400 text-[11px]"></i> <span>${parsedResult.tone || (isSuccess ? 'طبيعية ومتوازنة' : 'غير محدد')}</span>`;
-    }
-    if (metricProvider) {
-      metricProvider.innerHTML = `<i class="fa-solid fa-microchip text-zinc-400 text-[11px]"></i> <span>${providerName}</span>`;
-    }
-
-    STATE.transcribe.lastResult = parsedResult;
-
-    if (scanner) scanner.classList.add('hidden');
-    if (emptyState) emptyState.classList.add('hidden');
-    if (resultsContainer) resultsContainer.classList.remove('hidden');
-    if (actionsBar) actionsBar.classList.remove('opacity-0', 'pointer-events-none');
-
-    if (isSuccess) {
-      if (statusPill) {
-        statusPill.textContent = 'اكتمل التفريغ والتحليل الصوتي بنجاح ✓';
-        statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400';
-      }
-      SFX.playSuccess();
-      showToast('تم تفريغ وتحليل الصوت العربي بنجاح!', 'success');
-    } else {
-      if (statusPill) {
-        statusPill.textContent = 'فشلت المعالجة (تحقق من مفتاح API)';
-        statusPill.className = 'text-[11px] font-mono px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400';
-      }
-      SFX.playClick();
-      showToast('تعذر معالجة الملف الصوتي، يرجى فحص المفتاح في الخزنة', 'error');
-    }
-  }
-
-  function copyTranscribeCurrentText() {
-    SFX.playClick();
-    let textToCopy = '';
-    const tab = STATE.transcribe.outputTab;
-
-    if (tab === 'srt') {
-      textToCopy = document.getElementById('transcribe-srt-output')?.value || '';
-    } else if (tab === 'insights') {
-      const summary = document.getElementById('transcribe-summary-text')?.textContent || '';
-      const points = Array.from(document.querySelectorAll('#transcribe-key-points-list li')).map(li => li.textContent).join('\n');
-      textToCopy = `الملخص التنفيذي:\n${summary}\n\nالنقاط الرئيسية:\n${points}`;
-    } else {
-      textToCopy = document.getElementById('transcribe-text-output')?.value || '';
-    }
-
-    if (!textToCopy.trim()) {
-      showToast('لا يوجد نص لنسخه!', 'warning');
-      return;
-    }
-
-    navigator.clipboard.writeText(textToCopy)
-      .then(() => showToast('تم نسخ المحتوى إلى الحافظة بنجاح!', 'success'))
-      .catch(() => showToast('تعذر النسخ تلقائياً', 'error'));
-  }
-
-  function downloadTranscribeTxt() {
-    const text = document.getElementById('transcribe-text-output')?.value || '';
-    if (!text.trim()) {
-      showToast('لا يوجد نص للتحميل!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    downloadBlob(blob, `mickey_transcript_${Date.now()}.txt`);
-    showToast('جاري تحميل ملف النص TXT...', 'info');
-  }
-
-  function downloadTranscribeSrt() {
-    const srt = document.getElementById('transcribe-srt-output')?.value || '';
-    if (!srt.trim()) {
-      showToast('لا يوجد ملف ترجمة SRT للتحميل!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
-    downloadBlob(blob, `mickey_subtitles_${Date.now()}.srt`);
-    showToast('جاري تحميل ملف ترجمة بريمير SRT...', 'info');
-  }
-
-  function transferTranscribeToImageStudio() {
-    const text = document.getElementById('transcribe-text-output')?.value || '';
-    if (!text.trim()) {
-      showToast('يرجى تفريغ الصوت أولاً لنقل النص!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    const summary = document.getElementById('transcribe-summary-text')?.textContent;
-    const promptInput = document.getElementById('image-prompt-input');
-    if (promptInput) {
-      promptInput.value = summary || text.slice(0, 160);
-    }
-    switchTab('image-studio');
-    showToast('تم نقل ملخص الصوت كوصف للمشهد في استوديو الصور!', 'success');
-  }
-
-  function transferTranscribeToVoiceStudio() {
-    const text = document.getElementById('transcribe-text-output')?.value || '';
-    if (!text.trim()) {
-      showToast('يرجى تفريغ الصوت أولاً لنقل النص!', 'warning');
-      return;
-    }
-    SFX.playClick();
-    const voiceInput = document.getElementById('voice-text-input');
-    if (voiceInput) {
-      voiceInput.value = text;
-    }
-    switchTab('voice-studio');
-    showToast('تم إرسال النص المفرغ إلى استوديو التعليق الصوتي!', 'success');
-  }
-
-  // 12. STUDIO 6: MY AI VAULT (INDEXEDDB & ASSET STORAGE)
-  // -----------------------------------------------------------------
-  async function saveCurrentToVault(type) {
-    SFX.playClick();
-    let asset = null;
-    const now = Date.now();
-
-    if (type === 'image') {
-      if (!STATE.image.lastGeneratedBlob && !STATE.image.lastGeneratedUrl) return;
-      asset = {
-        id: 'img_' + now,
-        type: 'image',
-        title: STATE.image.lastPrompt.slice(0, 45) || 'صورة ذكاء اصطناعي',
-        url: STATE.image.lastGeneratedUrl,
-        prompt: STATE.image.lastPrompt,
-        timestamp: now
-      };
-    } else if (type === 'video') {
-      if (!STATE.video.renderedVideoUrl) return;
-      asset = {
-        id: 'vid_' + now,
-        type: 'video',
-        title: 'فيديو سينمائي 3D',
-        url: STATE.video.renderedVideoUrl,
-        prompt: 'حركة كاميرا: ' + STATE.video.cameraMotion,
-        timestamp: now
-      };
-    } else if (type === 'transcribe') {
-      const textOutput = document.getElementById('transcribe-text-output');
-      const transcriptText = textOutput ? textOutput.value.trim() : '';
-      if (!transcriptText) {
-        showToast('لا يوجد نص مفرغ لحفظه في الخزنة!', 'warning');
-        return;
-      }
-      const srtText = document.getElementById('transcribe-srt-output')?.value || '';
-      const summaryText = document.getElementById('transcribe-summary-text')?.textContent || '';
-      const dialectText = document.getElementById('metric-dialect')?.textContent?.trim() || 'عربي';
-
-      asset = {
-        id: 'trn_' + now,
-        type: 'transcribe',
-        title: transcriptText.slice(0, 45) + (transcriptText.length > 45 ? '...' : ''),
-        url: STATE.transcribe.audioUrl || '',
-        prompt: `لهجة: ${dialectText} | ${summaryText || transcriptText.slice(0, 70)}`,
-        transcript: transcriptText,
-        srt: srtText,
-        summary: summaryText,
-        timestamp: now
-      };
-    }
-
-    if (asset) {
-      await saveAssetToDB(asset);
-      SFX.playSuccess();
-      showToast('تم الحفظ في خزنة أعمالك السحابية بنجاح!', 'success');
-    }
-  }
-
-  async function saveBgResultToVault() {
-    if (!STATE.photoLab.bgResultBlob) return;
-    const url = URL.createObjectURL(STATE.photoLab.bgResultBlob);
-    const asset = {
-      id: 'bg_' + Date.now(),
-      type: 'image',
-      title: 'صورة مفرغة الخلفية PNG',
-      url: url,
-      prompt: 'عزل خلفية ذكي',
-      timestamp: Date.now()
-    };
-    await saveAssetToDB(asset);
-    SFX.playSuccess();
-    showToast('تم حفظ الصورة المفرغة بالخزنة!', 'success');
-  }
-
-  async function saveUpscaledToVault() {
-    if (!STATE.photoLab.upscaleResultBlob) return;
-    const url = URL.createObjectURL(STATE.photoLab.upscaleResultBlob);
-    const asset = {
-      id: 'up_' + Date.now(),
-      type: 'image',
-      title: 'صورة محسّنة بالذكاء الاصطناعي',
-      url: url,
-      prompt: 'تكبير وتحسين الصورة باستخدام Real-ESRGAN',
-      timestamp: Date.now()
-    };
-    await saveAssetToDB(asset);
-    SFX.playSuccess();
-    showToast('تم حفظ الصورة المحسّنة بالخزنة!', 'success');
-  }
-
-  async function saveAudioToVault() {
-    if (!STATE.voice.lastAudioBlob) return;
-    const asset = {
-      id: 'aud_' + Date.now(),
-      type: 'audio',
-      title: document.getElementById('voice-text-input')?.value.slice(0, 35) || 'تعليق صوتي WAV',
-      url: STATE.voice.lastAudioUrl,
-      prompt: 'صوت: ' + document.getElementById('voice-dialect-select')?.selectedOptions?.[0]?.textContent + ' · ' + document.getElementById('voice-performance-select')?.selectedOptions?.[0]?.textContent,
-      timestamp: Date.now()
-    };
-    await saveAssetToDB(asset);
-    SFX.playSuccess();
-    showToast('تم حفظ التعليق الصوتي بالخزنة!', 'success');
-  }
-
-  async function renderVaultGallery() {
-    const grid = document.getElementById('vault-items-grid');
-    const emptyView = document.getElementById('vault-empty-view');
-    if (!grid) return;
-
-    const assets = await getAllAssetsFromDB();
-    const filter = STATE.vault.currentFilter;
-    const query = STATE.vault.searchQuery.toLowerCase();
-
-    let filtered = assets.filter(a => {
-      if (filter !== 'all' && a.type !== filter) return false;
-      if (query && !a.title.toLowerCase().includes(query) && !a.prompt.toLowerCase().includes(query)) return false;
-      return true;
-    });
-
-    filtered.sort((a, b) => b.timestamp - a.timestamp);
-
-    grid.innerHTML = '';
-    if (filtered.length === 0) {
-      grid.classList.add('hidden');
-      emptyView.classList.remove('hidden');
-      return;
-    }
-
-    grid.classList.remove('hidden');
-    emptyView.classList.add('hidden');
-
-    filtered.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'studio-card p-3 flex flex-col justify-between space-y-3 group border border-white/5 hover:border-white/20 transition-all rounded-xl bg-zinc-900/60';
-      
-      let previewHtml = '';
-      if (item.type === 'image') {
-        previewHtml = `<div class="w-full h-40 rounded-lg overflow-hidden bg-black/60 cursor-pointer" onclick="MickeyStudio.openLightbox('${item.url}')"><img src="${item.url}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform"></div>`;
-      } else if (item.type === 'video') {
-        previewHtml = `<div class="w-full h-40 rounded-lg overflow-hidden bg-black/80 flex items-center justify-center"><video src="${item.url}" controls class="w-full h-full object-cover"></video></div>`;
-      } else if (item.type === 'audio') {
-        previewHtml = `<div class="w-full h-40 rounded-lg bg-black/60 p-3 flex flex-col items-center justify-center space-y-2"><i class="fa-solid fa-microphone-lines text-emerald-400 text-3xl"></i><audio src="${item.url}" controls class="w-full"></audio></div>`;
-      } else if (item.type === 'transcribe') {
-        const snippet = (item.transcript || item.prompt || '').slice(0, 140);
-        previewHtml = `
-          <div class="w-full h-40 rounded-lg bg-zinc-950/80 border border-white/5 p-3 flex flex-col justify-between overflow-hidden">
-            <div class="flex items-center justify-between text-indigo-400 text-[11px] font-semibold">
-              <span class="flex items-center gap-1.5"><i class="fa-solid fa-file-audio text-xs"></i> تفريغ صوتي</span>
-              <span class="text-[10px] text-zinc-500 font-mono">${(item.transcript || '').split(/\s+/).filter(Boolean).length} كلمة</span>
-            </div>
-            <p class="text-[11px] text-zinc-300 leading-relaxed overflow-hidden line-clamp-3 select-text font-sans">${snippet}...</p>
-            ${item.url ? `<audio src="${item.url}" controls class="w-full h-7 mt-1"></audio>` : '<div class="text-[10px] text-zinc-500 font-mono">ملف نصي مفرغ</div>'}
-          </div>
-        `;
-      }
-
-      const actionBtnHtml = item.type === 'transcribe'
-        ? `<button onclick="navigator.clipboard.writeText(decodeURIComponent('${encodeURIComponent(item.transcript || '')}')); showToast('تم نسخ النص المفرغ!', 'success');" class="text-xs text-zinc-300 hover:text-white flex items-center gap-1 font-semibold"><i class="fa-regular fa-copy"></i> <span>نسخ النص</span></button>`
-        : `<a href="${item.url}" download="vault_${item.id}" class="text-xs text-zinc-300 hover:text-white flex items-center gap-1 font-semibold"><i class="fa-solid fa-download"></i> <span>تحميل</span></a>`;
-
-      card.innerHTML = `
-        ${previewHtml}
-        <div>
-          <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono mb-1">
-            <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 uppercase font-mono">${item.type}</span>
-            <span>${new Date(item.timestamp).toLocaleDateString('ar-EG')}</span>
-          </div>
-          <h4 class="text-xs font-bold text-white truncate" title="${item.title}">${item.title}</h4>
-          <p class="text-[11px] text-slate-500 truncate" title="${item.prompt}">${item.prompt}</p>
-        </div>
-        <div class="flex items-center justify-between pt-2 border-t border-white/10">
-          ${actionBtnHtml}
-          <button onclick="MickeyStudio.deleteVaultItem('${item.id}')" class="text-xs text-red-400 hover:text-red-300 p-1" title="حذف">
-            <i class="fa-solid fa-trash-can"></i>
-          </button>
-        </div>
-      `;
-      grid.appendChild(card);
-    });
-  }
-
-  function filterVault(filterKey) {
-    STATE.vault.currentFilter = filterKey;
-    document.querySelectorAll('.vault-filter-btn').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    const activeBtn = document.getElementById('vault-filter-' + filterKey);
-    if (activeBtn) {
-      activeBtn.classList.add('active');
-    }
-    SFX.playClick();
-    renderVaultGallery();
-  }
-
-  function searchVault(query) {
-    STATE.vault.searchQuery = query;
-    renderVaultGallery();
-  }
-
-  async function deleteVaultItem(id) {
-    SFX.playClick();
-    await deleteAssetFromDB(id);
-    renderVaultGallery();
-    showToast('تم حذف العنصر من الخزنة', 'info');
-  }
-
-  async function clearVaultConfirm() {
-    if (confirm('هل أنت متأكد من رغبتك في مسح كافة العناصر المحفوظة في الخزنة؟')) {
-      SFX.playClick();
-      await clearAllAssetsFromDB();
-      renderVaultGallery();
-      showToast('تم تفريغ الخزنة بالكامل', 'info');
-    }
-  }
-
-  async function exportVaultBackup() {
-    SFX.playClick();
-    const assets = await getAllAssetsFromDB();
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(assets, null, 2));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute('href', dataStr);
-    dlAnchor.setAttribute('download', `mickey_vault_backup_${Date.now()}.json`);
-    document.body.appendChild(dlAnchor);
-    dlAnchor.click();
-    dlAnchor.remove();
-    showToast('تم تصدير النسخة الاحتياطية بنجاح!', 'success');
-  }
-
-  // -----------------------------------------------------------------
   // 12. TAB SWITCHER & LIGHTBOX
   // -----------------------------------------------------------------
   function switchTab(tabId) {
+    if (!tabId) tabId = 'landing';
+    if (tabId === 'dashboard') {
+      if (!STATE.user) {
+        showToast('لوحة التحكم مخصصة للمستخدمين المسجلين. يرجى تسجيل الدخول أولاً.', 'warning');
+        openAccountModal();
+        if (STATE.activeTab && STATE.activeTab !== 'dashboard') return;
+        tabId = 'landing';
+      } else if (!isDashboardAllowed(STATE.user)) {
+        showToast('لوحة التحكم متاحة فقط للإيميل المحدد المسجل في فاير بيز.', 'warning');
+        if (STATE.activeTab && STATE.activeTab !== 'dashboard') return;
+        tabId = 'landing';
+      }
+    }
     STATE.activeTab = tabId;
     SFX.playClick();
 
-    // Hide all sections
-    document.querySelectorAll('.studio-section').forEach(sec => sec.classList.add('hidden'));
+    if (window.location.hash !== '#' + tabId) {
+      window.history.pushState(null, '', '#' + tabId);
+    }
+
+    // Hide all web views and studio sections
+    document.querySelectorAll('.web-view, .studio-section').forEach(sec => sec.classList.add('hidden'));
 
     // Show target section
     const targetSection = document.getElementById('section-' + tabId);
-    if (targetSection) targetSection.classList.remove('hidden');
+    if (targetSection) {
+      targetSection.classList.remove('hidden');
+    }
 
-    // Update navigation button active state
-    document.querySelectorAll('.sidebar-nav-item, .nav-tab-btn').forEach(btn => btn.classList.remove('active'));
-    const targetBtn = document.getElementById('tab-btn-' + tabId);
-    if (targetBtn) targetBtn.classList.add('active');
+    // Update navigation active states
+    document.querySelectorAll('.top-nav-link').forEach(link => link.classList.remove('active'));
+    const targetNavLink = document.getElementById('nav-btn-' + tabId);
+    if (targetNavLink) targetNavLink.classList.add('active');
 
-    // If Vault tab, refresh assets
+    // Update universal studio subnav visibility & active state
+    const subNav = document.getElementById('mickey-studio-subnav');
+    if (subNav) {
+      if (tabId === 'landing' || tabId === 'dashboard') {
+        subNav.classList.add('hidden');
+      } else {
+        subNav.classList.remove('hidden');
+        const label = document.getElementById('studio-current-label');
+        if (label) {
+          const titles = {
+            'image-studio': '🎨 استوديو توليد الصور',
+            'video-studio': '🎬 استوديو الفيديو',
+            'voice-studio': '🎙️ التعليق الصوتي',
+            'motion-builder': '✨ محرر الموشن',
+            'photo-lab': '🔬 معمل الصور',
+            'transcribe-studio': '📝 تفريغ وتحليل الصوت',
+            'podcast-studio': '🎙️ استوديو البودكاست',
+            'audiobook-studio': '📖 الكتب والروايات',
+            'autocut-suite': '✂️ قص السكتات والزووم',
+            'vault-gallery': '📁 معرض أعمالي',
+            'developer-api': '💻 بوابة المطورين'
+          };
+          label.textContent = titles[tabId] || 'استوديو نشط';
+        }
+      }
+    }
+
+    // Scroll smoothly to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Close mobile drawer if open
+    const mobileDrawer = document.getElementById('mobile-nav-drawer');
+    if (mobileDrawer && !mobileDrawer.classList.contains('hidden')) {
+      mobileDrawer.classList.add('hidden');
+    }
+
+    // Tab-specific lifecycle actions
+    if (tabId === 'dashboard') {
+      renderDashboardProjects('all');
+      updateDashboardMeters();
+    }
     if (tabId === 'vault-gallery') {
       renderVaultGallery();
     }
-
-    // If Developer API tab, initialize docs & playground
     if (tabId === 'developer-api') {
       initDeveloperApiSection();
     }
@@ -3546,6 +791,364 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       initMotionEditorControls();
       if (motionEditorScene) motionEditorRender();
     }
+  }
+
+  // -----------------------------------------------------------------
+  // 12.5 UNIFIED TOOLS REGISTRY RENDERER
+  // -----------------------------------------------------------------
+  async function loadAndRenderToolsGrid() {
+    const container = document.getElementById('studios-registry-grid');
+    if (!container) return;
+
+    let registry = (typeof window !== 'undefined' && window.MickeyToolsRegistry) ? window.MickeyToolsRegistry : null;
+    if (!registry) {
+      try {
+        const res = await fetch('shared/tools-registry.json?v=' + Date.now());
+        if (res.ok) {
+          registry = await res.json();
+        }
+      } catch (err) {
+        console.warn('Could not fetch tools-registry.json, checking fallback:', err);
+      }
+    }
+
+    if (!registry || !Array.isArray(registry.tools)) {
+      container.innerHTML = '<div class="p-6 text-center text-zinc-400 text-xs">تعذر تحميل سجل الأدوات المشترك.</div>';
+      return;
+    }
+
+    const groups = registry.groups || [
+      'المونتاج',
+      'النص والمحتوى',
+      'الصوت',
+      'الصور والفيديو',
+      'الموشن والمنصات',
+      'أدوات المشروع'
+    ];
+
+    const groupDescriptions = {
+      'المونتاج': 'أدوات المونتاج الذكي وقص المشاهد وتعديل الإيقاع الزمني',
+      'النص والمحتوى': 'استخراج وتعديل النصوص والكابشنز وصناعة المقاطع الفيروسية',
+      'الصوت': 'توليد الأصوات الطبيعية وتفريغ التسجيلات وتنقية الصوت',
+      'الصور والفيديو': 'توليد وتحريك الصور وتعديلها بنماذج الذكاء الاصطناعي',
+      'الموشن والمنصات': 'تصميم مشاهد الموشن جرافيك والمقاسات الآمنة للشبكات',
+      'أدوات المشروع': 'إدارة وتنظيم ملفات المشروع والنسخ الاحتياطي وبوابة المطورين'
+    };
+
+    const groupColors = {
+      'المونتاج': 'emerald',
+      'النص والمحتوى': 'cyan',
+      'الصوت': 'violet',
+      'الصور والفيديو': 'indigo',
+      'الموشن والمنصات': 'amber',
+      'أدوات المشروع': 'rose'
+    };
+
+    const iconMap = {
+      'scissors': '<i class="fa-solid fa-scissors"></i>',
+      'zoom-in': '<i class="fa-solid fa-magnifying-glass-plus"></i>',
+      'file-text': '<i class="fa-regular fa-file-lines"></i>',
+      'file-audio': '<i class="fa-solid fa-file-audio"></i>',
+      'captions': '<i class="fa-solid fa-closed-captioning"></i>',
+      'volume-x': '<i class="fa-solid fa-volume-xmark"></i>',
+      'flame': '<i class="fa-solid fa-fire"></i>',
+      'bookmark': '<i class="fa-regular fa-bookmark"></i>',
+      'sparkles': '<i class="fa-solid fa-wand-magic-sparkles"></i>',
+      'mic': '<i class="fa-solid fa-microphone"></i>',
+      'podcast': '<i class="fa-solid fa-podcast"></i>',
+      'book-open': '<i class="fa-solid fa-book-open"></i>',
+      'image': '<i class="fa-regular fa-image"></i>',
+      'wand-sparkles': '<i class="fa-solid fa-wand-sparkles"></i>',
+      'film': '<i class="fa-solid fa-film"></i>',
+      'layers': '<i class="fa-solid fa-layer-group"></i>',
+      'smartphone': '<i class="fa-solid fa-mobile-screen"></i>',
+      'star': '<i class="fa-regular fa-star"></i>',
+      'folder-tree': '<i class="fa-solid fa-folder-tree"></i>',
+      'folder-archive': '<i class="fa-regular fa-folder"></i>',
+      'activity': '<i class="fa-solid fa-chart-line"></i>',
+      'code': '<i class="fa-solid fa-code"></i>',
+      'list-todo': '<i class="fa-solid fa-list-check"></i>'
+    };
+
+    let html = '';
+    let groupIndex = 1;
+
+    for (const groupName of groups) {
+      const toolsInGroup = registry.tools.filter(t => t.group === groupName && !t.deprecated && !t.hideFromGrid);
+      if (toolsInGroup.length === 0) continue;
+
+      toolsInGroup.sort((a, b) => (a.order || 99) - (b.order || 99));
+
+      const color = groupColors[groupName] || 'indigo';
+      const desc = groupDescriptions[groupName] || 'أدوات احترافية متكاملة';
+
+      html += `
+        <div class="space-y-6 pt-4">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-${color}-500/10 border border-${color}-500/20 text-${color}-400 flex items-center justify-center font-bold text-sm">${groupIndex}</div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-lg font-bold text-white">${groupName}</h3>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-400">${toolsInGroup.length} أدوات</span>
+              </div>
+              <p class="text-xs text-zinc-400 mt-0.5">${desc}</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      `;
+
+      for (const tool of toolsInGroup) {
+        const targetTab = tool.target?.site ? tool.target.site.replace('section-', '') : null;
+        const targetSection = targetTab ? document.getElementById('section-' + targetTab) : null;
+        const isWeb = (tool.availableIn === 'site' || tool.availableIn === 'both') && targetSection !== null;
+        const iconHtml = iconMap[tool.icon] || '<i class="fa-solid fa-cube"></i>';
+
+        if (isWeb) {
+          const badgeHtml = tool.badge
+            ? `<span class="mega-badge text-emerald-300 bg-emerald-500/10 border border-emerald-500/20">${tool.badge}</span>`
+            : '';
+
+          html += `
+            <div class="feature-card group cursor-pointer" onclick="MickeyStudio.switchTab('${targetTab}')">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="w-10 h-10 rounded-xl bg-${color}-500/10 border border-${color}-500/20 text-${color}-400 flex items-center justify-center text-lg">
+                    ${iconHtml}
+                  </div>
+                  ${badgeHtml}
+                </div>
+                <div>
+                  <h4 class="text-sm font-bold text-white group-hover:text-${color}-300 transition-colors">${tool.arabicName}</h4>
+                  <p class="text-xs text-zinc-400 mt-1 leading-relaxed">${tool.shortBenefit}</p>
+                </div>
+              </div>
+              <div class="pt-4 border-t border-white/5 mt-4 flex items-center justify-between">
+                <span class="text-[10px] font-mono text-zinc-500">متاح أونلاين</span>
+                <button type="button" class="btn-secondary text-xs py-1 px-3 pointer-events-none group-hover:bg-zinc-800 group-hover:text-white transition-colors">افتح الاستوديو ↗</button>
+              </div>
+            </div>
+          `;
+        } else {
+          html += `
+            <div class="feature-card tool-card-disabled opacity-60 cursor-not-allowed">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="w-10 h-10 rounded-xl bg-zinc-800/80 border border-white/10 text-zinc-400 flex items-center justify-center text-lg">
+                    ${iconHtml}
+                  </div>
+                  <span class="badge-premiere-only">متاح في بريمير</span>
+                </div>
+                <div>
+                  <h4 class="text-sm font-bold text-zinc-300">${tool.arabicName}</h4>
+                  <p class="text-xs text-zinc-500 mt-1 leading-relaxed">${tool.shortBenefit}</p>
+                </div>
+              </div>
+              <div class="pt-4 border-t border-white/5 mt-4 flex items-center justify-between text-zinc-500">
+                <span class="text-[10px] font-mono">Adobe Premiere Pro CEP</span>
+                <span class="text-xs text-zinc-500">حصري للإضافة 🔒</span>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      html += `
+          </div>
+        </div>
+      `;
+
+      groupIndex++;
+    }
+
+    container.innerHTML = html;
+  }
+
+  let dashboardCurrentFilter = 'all';
+  async function renderDashboardProjects(filter = 'all') {
+    dashboardCurrentFilter = filter;
+    const grid = document.getElementById('dashboard-projects-grid');
+    if (!grid) return;
+
+    ['all', 'image', 'video', 'audio'].forEach(f => {
+      const btn = document.getElementById('dash-filter-' + f);
+      if (btn) {
+        if (f === filter) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
+
+    try {
+      const allAssets = await getAllAssetsFromDB();
+      const filtered = filter === 'all' ? allAssets : allAssets.filter(item => item.type === filter);
+
+      if (!filtered.length) {
+        grid.innerHTML = `
+          <div class="col-span-full p-12 text-center text-zinc-500 bg-zinc-900/30 rounded-2xl border border-dashed border-white/10 space-y-3">
+            <i class="fa-regular fa-folder-open text-3xl text-zinc-600"></i>
+            <p class="text-sm text-zinc-400">لا توجد ملفات أو مشاريع محفوظة في هذا القسم بعد.</p>
+            <button type="button" onclick="MickeyStudio.switchTab('image-studio')" class="btn-primary text-xs py-2 px-4">ابدأ بإنشاء أول مشروع ↗</button>
+          </div>
+        `;
+        return;
+      }
+
+      const sorted = filtered.sort((a, b) => (b.timestamp || b.createdAt || 0) - (a.timestamp || a.createdAt || 0)).slice(0, 12);
+      grid.innerHTML = '';
+      sorted.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'studio-card p-3 flex flex-col justify-between space-y-3 group border border-white/5 hover:border-white/20 transition-all rounded-xl bg-zinc-900/60';
+
+        let previewHtml = '';
+        const thumbUrl = item.thumbUrl || item.thumbnailUrl || item.url;
+        const typeBadge = item.type === 'image' ? 'صورة' : item.type === 'video' ? 'فيديو' : item.type === 'audio' ? 'صوت' : 'تفريغ';
+
+        if (item.type === 'image') {
+          previewHtml = `
+            <div class="w-full h-36 rounded-lg overflow-hidden bg-black/60 cursor-pointer relative" onclick="MickeyStudio.openLightbox('${item.url}')">
+              <img src="${thumbUrl}" alt="صورة" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
+              <span class="absolute bottom-1.5 left-1.5 bg-black/70 backdrop-blur-md text-[9px] font-mono text-zinc-300 px-1.5 py-0.5 rounded">${typeBadge}</span>
+            </div>
+          `;
+        } else if (item.type === 'video') {
+          previewHtml = `
+            <div class="w-full h-36 rounded-lg overflow-hidden bg-black/80 flex items-center justify-center relative">
+              <video src="${item.url}" preload="metadata" controls class="w-full h-full object-cover"></video>
+              <span class="absolute top-1.5 right-1.5 bg-cyan-500/20 text-cyan-300 text-[9px] font-bold px-1.5 py-0.5 rounded">${typeBadge}</span>
+            </div>
+          `;
+        } else if (item.type === 'audio') {
+          previewHtml = `
+            <div class="w-full h-36 rounded-lg bg-black/60 p-3 flex flex-col items-center justify-center space-y-2">
+              <i class="fa-solid fa-microphone-lines text-emerald-400 text-2xl"></i>
+              <audio src="${item.url}" preload="none" controls class="w-full"></audio>
+            </div>
+          `;
+        } else {
+          previewHtml = `
+            <div class="w-full h-36 rounded-lg bg-zinc-950/80 border border-white/5 p-3 flex flex-col justify-between overflow-hidden">
+              <span class="text-[10px] text-indigo-400 font-semibold"><i class="fa-solid fa-file-audio text-xs"></i> تفريغ صوتي</span>
+              <p class="text-[11px] text-zinc-300 line-clamp-3 leading-relaxed">${(item.transcript || item.prompt || '').slice(0, 100)}...</p>
+            </div>
+          `;
+        }
+
+        const dateStr = item.timestamp ? new Date(item.timestamp).toLocaleDateString('ar-EG') : '';
+
+        card.innerHTML = `
+          ${previewHtml}
+          <div class="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-white/5">
+            <span>${dateStr}</span>
+            <div class="flex items-center gap-2">
+              ${item.url ? `<a href="${item.url}" download="project_${item.id}" class="text-zinc-300 hover:text-white" title="تنزيل"><i class="fa-solid fa-download text-xs"></i></a>` : ''}
+              <button type="button" class="text-zinc-500 hover:text-red-400" title="حذف" onclick="MickeyStudio.deleteDashboardProject('${item.id}')"><i class="fa-regular fa-trash-can text-xs"></i></button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      console.warn('Dashboard projects render error:', e);
+    }
+  }
+
+  function filterDashboardProjects(filter) {
+    SFX.playClick();
+    renderDashboardProjects(filter);
+  }
+
+  async function deleteDashboardProject(id) {
+    if (!confirm('هل تريد بالتأكيد حذف هذا الملف من المعرض؟')) return;
+    SFX.playClick();
+    await deleteAssetFromDB(id);
+    renderDashboardProjects(dashboardCurrentFilter);
+    updateDashboardMeters();
+    showToast('تم حذف الملف من المعرض بنجاح.', 'info');
+  }
+
+  async function updateDashboardMeters() {
+    try {
+      const allAssets = await getAllAssetsFromDB();
+      const assetsCountEl = document.getElementById('dashboard-meter-assets');
+      if (assetsCountEl) assetsCountEl.textContent = allAssets.length;
+
+      const user = STATE.user || (window.firebase && firebase.auth ? firebase.auth().currentUser : null);
+      const meterGenEl = document.getElementById('dashboard-meter-generations');
+      const meterSubtextEl = document.getElementById('dashboard-meter-subtext');
+      const meterBarEl = document.getElementById('dashboard-meter-bar');
+      const planEl = document.getElementById('dashboard-meter-plan');
+
+      if (user) {
+        if (meterGenEl) meterGenEl.textContent = 'غير محدود';
+        if (meterSubtextEl) meterSubtextEl.textContent = 'حسابك مفعل بالكامل';
+        if (meterBarEl) meterBarEl.style.width = '100%';
+        if (planEl) planEl.textContent = 'حساب مجاني بالكامل';
+
+        const nameEl = document.getElementById('dashboard-user-name');
+        if (nameEl) nameEl.textContent = `مرحباً، ${user.displayName || user.email || 'المبدع'}`;
+        const emailEl = document.getElementById('dashboard-user-email');
+        if (emailEl) emailEl.textContent = user.email || user.phoneNumber || '';
+        const avatarEl = document.getElementById('dashboard-user-avatar');
+        if (avatarEl) {
+          avatarEl.innerHTML = user.photoURL
+            ? `<img src="${user.photoURL}" class="w-full h-full rounded-2xl object-cover">`
+            : `<i class="fa-solid fa-user"></i>`;
+        }
+      } else {
+        const used = Number(localStorage.getItem('mickey_guest_generations') || 0);
+        const remaining = Math.max(0, 5 - used);
+        if (meterGenEl) meterGenEl.textContent = `${remaining} تجريبية`;
+        if (meterSubtextEl) meterSubtextEl.textContent = 'أنشئ حساباً مجانياً للاستخدام غير المحدود';
+        if (meterBarEl) meterBarEl.style.width = `${(remaining / 5) * 100}%`;
+        if (planEl) planEl.textContent = 'زائر (تجريبي)';
+      }
+    } catch (e) {
+      console.warn('updateDashboardMeters error:', e);
+    }
+  }
+
+  function toggleMobileMenu() {
+    SFX.playClick();
+    const drawer = document.getElementById('mobile-nav-drawer');
+    if (drawer) drawer.classList.toggle('hidden');
+  }
+
+  function initBeforeAfterSlider() {
+    const container = document.getElementById('landing-before-after');
+    const overlay = document.getElementById('before-after-overlay');
+    const handle = document.getElementById('before-after-handle');
+    if (!container || !overlay || !handle) return;
+
+    let isDragging = false;
+    function updatePosition(clientX) {
+      const rect = container.getBoundingClientRect();
+      const offsetX = clientX - rect.left;
+      let pct = (offsetX / rect.width) * 100;
+      pct = Math.max(5, Math.min(95, pct));
+      const rightPct = 100 - pct;
+      overlay.style.width = rightPct + '%';
+      handle.style.left = pct + '%';
+    }
+
+    container.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      updatePosition(e.clientX);
+      container.setPointerCapture(e.pointerId);
+    });
+
+    container.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      updatePosition(e.clientX);
+    });
+
+    container.addEventListener('pointerup', (e) => {
+      isDragging = false;
+      try { container.releasePointerCapture(e.pointerId); } catch (_) {}
+    });
+
+    container.addEventListener('pointercancel', () => {
+      isDragging = false;
+    });
   }
 
   function openLightbox(url) {
@@ -3577,466 +1180,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   // -----------------------------------------------------------------
-  // 14. DEVELOPER REST API GATEWAY & CODE GENERATOR
-  // -----------------------------------------------------------------
-  const DEV_API_DOCS = {
-    transcribe_audio: {
-      name: 'تفريغ وتحليل الصوت العربي (STT)',
-      method: 'POST',
-      action: 'transcribe_audio',
-      tag: 'Audio AI',
-      description: 'تفريغ دقيق للكلام العربي المنطوق وتحويله لنصوص مكتوبة، مع استخراج علامات الترقيم، وتوليد ملفات الترجمة لبريمير (SRT)، وتحليل نبرة الصوت والمشاعر والملخص التنفيذي.',
-      headers: {
-        'Authorization': 'Bearer mk_live_YOUR_KEY',
-        'Content-Type': 'application/json'
-      },
-      params: [
-        { name: 'action', type: 'string', req: 'مطلوب', desc: 'اسم العملية: transcribe_audio' },
-        { name: 'audio_base64', type: 'string (base64)', req: 'مطلوب', desc: 'تشفير Base64 لملف الصوت (MP3, WAV, WEBM, M4A)' },
-        { name: 'mime_type', type: 'string', req: 'اختياري', desc: 'نوع MIME مثل audio/mp3 أو audio/webm (الافتراضي: audio/webm)' },
-        { name: 'dialect', type: 'string', req: 'اختياري', desc: 'اللهجة المستهدفة: auto, fusha, egyptian, gulf, levantine, maghrebi' }
-      ],
-      sampleBody: {
-        action: 'transcribe_audio',
-        audio_base64: 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=',
-        mime_type: 'audio/wav',
-        dialect: 'fusha'
-      },
-      sampleResponse: {
-        success: true,
-        provider: 'Google Gemini 2.5 Flash Multimodal',
-        data: {
-          transcript: 'مرحباً بكم في استوديو ميكي للذكاء الاصطناعي. نقدم لكم اليوم تجربة متكاملة لتحويل الصوت إلى نص.',
-          srt: "1\n00:00:00,000 --> 00:00:03,000\nمرحباً بكم في استوديو ميكي.\n",
-          dialect: 'فصحى معاصرة',
-          tone: 'حماسية ورسمية',
-          summary: 'مقدمة تعريفية عن المنصة والخدمات الذكية.',
-          key_points: ['تحويل الصوت إلى نص', 'دعم ملفات SRT لبريمير'],
-          words_count: 16,
-          estimated_speed: '~125 كلمة/دقيقة'
-        }
-      }
-    },
-    generate_image: {
-      name: 'توليد الصور الواقعية (Image Generation)',
-      method: 'POST',
-      action: 'generate_image',
-      tag: 'Visual AI',
-      description: 'توليد صور فوتوغرافية وسينمائية فائقة الدقة عبر Google Nano Banana 2.1 أو FLUX مباشرة بجودة تصل إلى 2K.',
-      headers: {
-        'Authorization': 'Bearer mk_live_YOUR_KEY',
-        'Content-Type': 'application/json'
-      },
-      params: [
-        { name: 'action', type: 'string', req: 'مطلوب', desc: 'اسم العملية: generate_image' },
-        { name: 'prompt', type: 'string', req: 'مطلوب', desc: 'وصف المشهد الفني أو الفوتوغرافي بالعربية أو الإنجليزية' },
-        { name: 'aspectRatio', type: 'string', req: 'اختياري', desc: 'أبعاد الصورة: 1:1, 16:9, 9:16, 4:3, 3:4' }
-      ],
-      sampleBody: {
-        action: 'generate_image',
-        prompt: 'صقر عربي مهيب على قمة صخرية وقت الغروب، إضاءة سينمائية ذهبية، تصوير احترافي بدقة 8k',
-        aspectRatio: '16:9'
-      },
-      sampleResponse: {
-        success: true,
-        provider: 'Google Nano Banana 2.1 (2K)',
-        mime_type: 'image/jpeg',
-        image_base64: '...[base64_jpeg_bytes]...'
-      }
-    },
-    generate_tts: {
-      name: 'التعليق الصوتي الفوري (Text to Speech)',
-      method: 'POST / GET',
-      action: 'generate_tts',
-      tag: 'Voice AI',
-      description: 'تحويل النص العربي إلى ملف WAV عبر Gemini TTS مع توجيه اللهجة والشخصية والأداء.',
-      headers: {
-        'Authorization': 'Bearer mk_live_YOUR_KEY',
-        'Content-Type': 'application/json'
-      },
-      params: [
-        { name: 'action', type: 'string', req: 'مطلوب', desc: 'اسم العملية: generate_tts' },
-        { name: 'text', type: 'string', req: 'مطلوب', desc: 'النص العربي المراد قراءته' },
-        { name: 'voice', type: 'string', req: 'اختياري', desc: 'اسم المعلق: Tariq, Zeina, Maged, Laila' }
-      ],
-      sampleBody: {
-        action: 'generate_tts',
-        text: 'مرحباً بكم في استوديو ميكي، الأفق الجديد للذكاء الاصطناعي.',
-        voice: 'Tariq'
-      },
-      sampleResponse: 'Audio stream binary data (audio/mpeg)'
-    },
-    enhance_prompt: {
-      name: 'تحسين البرومبت للواقعية (Prompt Architect)',
-      method: 'POST',
-      action: 'enhance_prompt',
-      tag: 'NLP AI',
-      description: 'ترجمة النص تلقائياً للإنجليزية وتزويده بتفاصيل الكاميرات السينمائية والعدسات والإضاءة وخامات الجلد الحقيقية.',
-      headers: {
-        'Authorization': 'Bearer mk_live_YOUR_KEY',
-        'Content-Type': 'application/json'
-      },
-      params: [
-        { name: 'action', type: 'string', req: 'مطلوب', desc: 'اسم العملية: enhance_prompt' },
-        { name: 'prompt', type: 'string', req: 'مطلوب', desc: 'النص الأولي البسيط بالعربية' }
-      ],
-      sampleBody: {
-        action: 'enhance_prompt',
-        prompt: 'شاب في مقهى قديم يقرأ كتاباً'
-      },
-      sampleResponse: {
-        success: true,
-        provider: 'studio-photorealistic',
-        original: 'شاب في مقهى قديم يقرأ كتاباً',
-        enhanced: 'A young man in a vintage aesthetic cafe reading an old leather-bound book, award-winning RAW candid photography, natural lighting...'
-      }
-    },
-    status: {
-      name: 'فحص جاهزية الخادم والمحركات (Health Check)',
-      method: 'GET',
-      action: 'status',
-      tag: 'System',
-      description: 'استعلام سريع عن حالة البوابة ومحركات الذكاء الاصطناعي النشطة وإصدار النظام.',
-      headers: {},
-      params: [
-        { name: 'action', type: 'اختياري', req: 'اختياري', desc: 'status (الافتراضي)' }
-      ],
-      sampleBody: { action: 'status' },
-      sampleResponse: {
-        status: 'online',
-        system: 'Mickey Studio Nano Banana AI Gateway',
-        version: '3.7.0',
-        engines: {
-          nano_banana: 'gemini-nano-banana-2.1',
-          flux_natural: 'pollinations flux-realism (external service)'
-        }
-      }
-    }
-  };
-
-  function getApiBaseUrl() {
-    if (window.MICKEY_API_BASE_URL) return window.MICKEY_API_BASE_URL;
-    const loc = window.location;
-    const path = loc.pathname.replace(/\/[^/]*$/, '');
-    return `${loc.protocol}//${loc.host}${path}/api.php`;
-  }
-
-  function ensureDeveloperApiKey() {
-    if (!STATE.devApi.activeKey) {
-      const generated = 'mk_live_' + Array.from(crypto.getRandomValues(new Uint8Array(16)))
-        .map(b => b.toString(16).padStart(2, '0')).join('');
-      STATE.devApi.activeKey = generated;
-      CryptoVault.encrypt(generated).then(enc => localStorage.setItem('mickey_dev_api_key', enc));
-    }
-    return STATE.devApi.activeKey;
-  }
-
-  function initDeveloperApiSection() {
-    ensureDeveloperApiKey();
-
-    const baseUrlCode = document.getElementById('dev-api-base-url');
-    if (baseUrlCode) baseUrlCode.textContent = getApiBaseUrl();
-
-    updateApiKeyDisplay();
-    selectApiDocEndpoint(STATE.devApi.selectedEndpoint || 'generate_tts');
-    setApiSnippetLang(STATE.devApi.selectedLang || 'curl');
-  }
-
-  function openDeveloperApiModal() {
-    switchTab('developer-api');
-  }
-
-  function closeDeveloperApiModal() {
-    const modal = document.getElementById('modal-developer-api');
-    if (modal) modal.classList.add('hidden');
-  }
-
-  function updateApiKeyDisplay() {
-    const keyInput = document.getElementById('dev-api-key-input');
-    const eyeIcon = document.getElementById('dev-api-key-eye-icon');
-    if (!keyInput) return;
-
-    if (STATE.devApi.keyVisible) {
-      keyInput.type = 'text';
-      keyInput.value = STATE.devApi.activeKey;
-      if (eyeIcon) eyeIcon.className = 'fa-solid fa-eye-slash text-xs';
-    } else {
-      keyInput.type = 'password';
-      keyInput.value = STATE.devApi.activeKey;
-      if (eyeIcon) eyeIcon.className = 'fa-solid fa-eye text-xs';
-    }
-  }
-
-  function toggleApiKeyVisibility() {
-    STATE.devApi.keyVisible = !STATE.devApi.keyVisible;
-    SFX.playClick();
-    updateApiKeyDisplay();
-  }
-
-  function copyDeveloperApiKey() {
-    ensureDeveloperApiKey();
-    navigator.clipboard.writeText(STATE.devApi.activeKey)
-      .then(() => {
-        SFX.playSuccess();
-        showToast('تم نسخ مفتاح الـ API بنجاح!', 'success');
-      })
-      .catch(() => showToast('تعذر نسخ المفتاح', 'error'));
-  }
-
-  function regenerateDeveloperApiKey() {
-    if (!confirm('هل تريد توليد مفتاح API جديد؟ سيتطلب ذلك تحديث المفتاح في تطبيقاتك.')) return;
-    SFX.playClick();
-    const newKey = 'mk_live_' + Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-    STATE.devApi.activeKey = newKey;
-    CryptoVault.encrypt(newKey).then(enc => localStorage.setItem('mickey_dev_api_key', enc));
-    updateApiKeyDisplay();
-    renderApiCodeSnippet();
-    SFX.playSuccess();
-    showToast('تم توليد وتحديث مفتاح API جديد بنجاح!', 'success');
-  }
-
-  function copyApiBaseUrl() {
-    navigator.clipboard.writeText(getApiBaseUrl())
-      .then(() => {
-        SFX.playClick();
-        showToast('تم نسخ رابط الـ API الأساسي (Base URL)!', 'success');
-      });
-  }
-
-  function selectApiDocEndpoint(endpointKey) {
-    STATE.devApi.selectedEndpoint = endpointKey;
-
-    document.querySelectorAll('#dev-api-endpoint-tabs .pill-option').forEach(tab => {
-      tab.classList.remove('active');
-    });
-    const activeTab = document.getElementById('doc-tab-' + endpointKey);
-    if (activeTab) activeTab.classList.add('active');
-
-    renderApiEndpointDetails();
-    setApiSnippetLang(STATE.devApi.selectedLang || 'curl');
-  }
-
-  function setApiSnippetLang(langKey) {
-    STATE.devApi.selectedLang = langKey;
-
-    document.querySelectorAll('#dev-api-lang-tabs .pill-option').forEach(tab => {
-      tab.classList.remove('active');
-    });
-    const activeTab = document.getElementById('snippet-tab-' + langKey);
-    if (activeTab) activeTab.classList.add('active');
-
-    renderApiCodeSnippet();
-  }
-
-  function renderApiEndpointDetails() {
-    const container = document.getElementById('dev-api-doc-details');
-    const doc = DEV_API_DOCS[STATE.devApi.selectedEndpoint];
-    if (!container || !doc) return;
-
-    const baseUrl = getApiBaseUrl();
-    const endpointUrl = `${baseUrl}?action=${doc.action}`;
-
-    let paramsHtml = '';
-    if (doc.params && doc.params.length > 0) {
-      paramsHtml = `
-        <div class="space-y-1.5 pt-2 border-t border-white/5">
-          <span class="text-zinc-400 font-semibold text-[11px] block">معاملات الطلب (Parameters):</span>
-          <div class="overflow-x-auto">
-            <table class="w-full text-[11px] text-right font-sans">
-              <thead>
-                <tr class="text-zinc-500 border-b border-white/5">
-                  <th class="py-1">المعامل</th>
-                  <th class="py-1">النوع</th>
-                  <th class="py-1">الحالة</th>
-                  <th class="py-1">الوصف</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-white/5 text-zinc-300">
-                ${doc.params.map(p => `
-                  <tr>
-                    <td class="py-1.5 font-mono text-indigo-300">${p.name}</td>
-                    <td class="py-1.5 font-mono text-zinc-400 text-[10px]">${p.type}</td>
-                    <td class="py-1.5"><span class="px-1.5 py-0.5 rounded text-[9px] ${p.req === 'مطلوب' ? 'bg-red-500/10 text-red-300' : 'bg-zinc-800 text-zinc-400'}">${p.req}</span></td>
-                    <td class="py-1.5 text-zinc-400">${p.desc}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    }
-
-    container.innerHTML = `
-      <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-white/5">
-        <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] ${doc.method.includes('POST') ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">${doc.method}</span>
-          <code class="font-mono text-white text-[11px] select-all">${endpointUrl}</code>
-        </div>
-        <span class="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">${doc.tag}</span>
-      </div>
-
-      <p class="text-xs text-zinc-300 leading-relaxed">${doc.description}</p>
-      ${paramsHtml}
-    `;
-
-    const testBodyEl = document.getElementById('dev-api-test-body');
-    if (testBodyEl) {
-      testBodyEl.value = JSON.stringify(doc.sampleBody, null, 2);
-    }
-  }
-
-  function renderApiCodeSnippet() {
-    const snippetCode = document.getElementById('dev-api-code-snippet');
-    const doc = DEV_API_DOCS[STATE.devApi.selectedEndpoint];
-    if (!snippetCode || !doc) return;
-
-    const baseUrl = getApiBaseUrl();
-    const apiKey = STATE.devApi.activeKey || 'mk_live_YOUR_API_KEY';
-    const lang = STATE.devApi.selectedLang || 'curl';
-    const endpointUrl = `${baseUrl}?action=${doc.action}`;
-
-    let code = '';
-    if (lang === 'curl') {
-      if (doc.method === 'GET') {
-        code = `curl -X GET "${endpointUrl}" \\\n  -H "Authorization: Bearer ${apiKey}"`;
-      } else {
-        code = `curl -X POST "${endpointUrl}" \\\n  -H "Authorization: Bearer ${apiKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(doc.sampleBody)}'`;
-      }
-    } else if (lang === 'python') {
-      if (doc.method === 'GET') {
-        code = `import requests\n\nurl = "${endpointUrl}"\nheaders = {\n    "Authorization": "Bearer ${apiKey}"\n}\n\nresponse = requests.get(url, headers=headers)\nprint(response.json())`;
-      } else {
-        code = `import requests\n\nurl = "${endpointUrl}"\nheaders = {\n    "Authorization": "Bearer ${apiKey}",\n    "Content-Type": "application/json"\n}\npayload = ${JSON.stringify(doc.sampleBody, null, 4)}\n\nresponse = requests.post(url, headers=headers, json=payload)\ndata = response.json()\nprint("Mickey Studio Response:", data)`;
-      }
-    } else if (lang === 'javascript') {
-      if (doc.method === 'GET') {
-        code = `// JavaScript / Node.js\nconst response = await fetch("${endpointUrl}", {\n  method: "GET",\n  headers: {\n    "Authorization": "Bearer ${apiKey}"\n  }\n});\nconst data = await response.json();\nconsole.log(data);`;
-      } else {
-        code = `// JavaScript / Node.js\nconst response = await fetch("${endpointUrl}", {\n  method: "POST",\n  headers: {\n    "Authorization": "Bearer ${apiKey}",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(${JSON.stringify(doc.sampleBody, null, 2)})\n});\nconst data = await response.json();\nconsole.log("Mickey Studio AI Result:", data);`;
-      }
-    } else if (lang === 'premiere') {
-      code = `// ============================================================\n// Adobe Premiere Pro CEP / ExtendScript Integration Snippet\n// ============================================================\nasync function callMickeyStudioAI() {\n  const apiKey = "${apiKey}";\n  const endpoint = "${endpointUrl}";\n  const payload = ${JSON.stringify(doc.sampleBody, null, 2)};\n\n  try {\n    const res = await fetch(endpoint, {\n      method: "${doc.method.split(' ')[0]}",\n      headers: {\n        "Authorization": "Bearer " + apiKey,\n        "Content-Type": "application/json"\n      },\n      body: JSON.stringify(payload)\n    });\n\n    const result = await res.json();\n    if (result.success && result.data && result.data.srt) {\n      // Subtitles are ready for Premiere Timeline insertion!\n      alert("تم استلام ملف الترجمة بنجاح! جاهز للإدراج في المسار الزمني لبريمير.");\n    }\n    return result;\n  } catch (err) {\n    alert("خطأ في استدعاء الـ API: " + err.message);\n  }\n}`;
-    }
-
-    snippetCode.textContent = code;
-  }
-
-  function copyCurrentCodeSnippet() {
-    const snippetCode = document.getElementById('dev-api-code-snippet');
-    if (!snippetCode || !snippetCode.textContent) return;
-    navigator.clipboard.writeText(snippetCode.textContent)
-      .then(() => {
-        SFX.playSuccess();
-        showToast('تم نسخ الكود البرمجي إلى الحافظة بنجاح!', 'success');
-      });
-  }
-
-  async function executeLiveApiTest() {
-    const doc = DEV_API_DOCS[STATE.devApi.selectedEndpoint];
-    if (!doc) return;
-
-    const testBodyEl = document.getElementById('dev-api-test-body');
-    const resultBox = document.getElementById('dev-api-test-result-box');
-    const responseCode = document.getElementById('dev-api-response-code');
-    const statusPill = document.getElementById('dev-api-response-status');
-    const timePill = document.getElementById('dev-api-response-time');
-    const testBadge = document.getElementById('dev-api-test-badge');
-    const btnExecute = document.getElementById('btn-execute-api-test');
-
-    let bodyData = {};
-    if (doc.method !== 'GET') {
-      try {
-        bodyData = JSON.parse(testBodyEl.value);
-      } catch (e) {
-        showToast('صيغة JSON غير صالحة في حقل الطلب التجريبي!', 'error');
-        return;
-      }
-    }
-
-    SFX.playLaser();
-    if (testBadge) testBadge.textContent = 'جاري إرسال الطلب...';
-    if (btnExecute) btnExecute.disabled = true;
-
-    const startTime = performance.now();
-    const baseUrl = getApiBaseUrl();
-    const endpointUrl = `${baseUrl}?action=${doc.action}`;
-    const apiKey = STATE.devApi.activeKey || 'mk_live_tester';
-
-    try {
-      let res = null;
-      if (doc.method === 'GET') {
-        res = await fetch(endpointUrl, {
-          method: 'GET',
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-      } else {
-        res = await fetch(endpointUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(bodyData)
-        });
-      }
-
-      const elapsed = Math.round(performance.now() - startTime);
-      if (timePill) timePill.textContent = `${elapsed}ms`;
-
-      let outputText = '';
-      if (res.ok) {
-        const json = await res.json();
-        outputText = JSON.stringify(json, null, 2);
-        if (statusPill) {
-          statusPill.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-          statusPill.textContent = `${res.status} ${res.statusText || 'OK'}`;
-        }
-      } else {
-        const errText = await res.text();
-        outputText = errText;
-        if (statusPill) {
-          statusPill.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20';
-          statusPill.textContent = `${res.status} Response`;
-        }
-      }
-
-      if (responseCode) responseCode.textContent = outputText;
-      if (resultBox) resultBox.classList.remove('hidden');
-      if (testBadge) testBadge.textContent = 'اكتمل الاختبار ✓';
-      SFX.playSuccess();
-      showToast('تم تنفيذ الاختبار التجريبي بنجاح!', 'success');
-
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startTime);
-      if (timePill) timePill.textContent = `${elapsed}ms`;
-      if (statusPill) {
-        statusPill.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-        statusPill.textContent = '200 OK (Simulation)';
-      }
-      const simResponse = doc.sampleResponse || { success: true, message: 'Simulated API Response' };
-      if (responseCode) responseCode.textContent = JSON.stringify(simResponse, null, 2);
-      if (resultBox) resultBox.classList.remove('hidden');
-      if (testBadge) testBadge.textContent = 'تم الاختبار (Simulated)';
-      SFX.playSuccess();
-      showToast('تم اختبار استجابة الـ API بنجاح!', 'success');
-    } finally {
-      if (btnExecute) btnExecute.disabled = false;
-    }
-  }
-
-  function copyApiTestResponse() {
-    const responseCode = document.getElementById('dev-api-response-code');
-    if (!responseCode || !responseCode.textContent) return;
-    navigator.clipboard.writeText(responseCode.textContent)
-      .then(() => {
-        SFX.playClick();
-        showToast('تم نسخ استجابة الـ JSON بنجاح!', 'success');
-      });
-  }
-
-  // -----------------------------------------------------------------
   // 15. FIREBASE AUTH & FIRESTORE CLOUD VAULT
   // -----------------------------------------------------------------
   const DEFAULT_FIREBASE_CONFIG = {
@@ -4052,7 +1195,33 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   function getActiveFirebaseConfig() { return DEFAULT_FIREBASE_CONFIG; }
 
   const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
-  const API_BASE_URL = window.MICKEY_API_BASE_URL || new URL('api.php', window.location.href).href;
+  const SPECIFIC_DASHBOARD_EMAILS = [
+    ADMIN_EMAIL.toLowerCase()
+  ];
+
+  function isAdminUser(user = STATE.user) {
+    return String(user?.email || '').toLowerCase().trim() === ADMIN_EMAIL.toLowerCase();
+  }
+
+  function isDashboardAllowed(user = STATE.user) {
+    if (!user) return false;
+    const email = String(user.email || '').toLowerCase().trim();
+    if (!email) return false;
+    if (SPECIFIC_DASHBOARD_EMAILS.includes(email)) return true;
+    if (email === ADMIN_EMAIL.toLowerCase()) return true;
+    if (STATE.userProfile?.role === 'admin' || STATE.userProfile?.is_admin === true) return true;
+    const custom = (localStorage.getItem('mickey_specific_dashboard_email') || '').toLowerCase().trim();
+    if (custom && email === custom) return true;
+    return false;
+  }
+
+  const API_BASE_URL = window.MICKEY_API_BASE_URL || (function() {
+    try {
+      return new URL('api.php', window.location.href).href;
+    } catch (_) {
+      return 'api.php';
+    }
+  })();
   const MOTION_SCENE_API_URL = 'https://mickey-studio-api.kma279500.workers.dev';
   let phoneConfirmation = null;
   let phoneRecaptcha = null;
@@ -4066,6 +1235,85 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       localStorage.setItem('mickey_anonymous_id', id);
     }
     return id;
+  }
+
+  function updateQuotaBadge(tool, remaining, limit) {
+    const normalizedTool = ({
+      image: 'images',
+      images: 'images',
+      voice: 'voice',
+      voiceover: 'voice',
+      tts: 'voice',
+      transcription: 'transcription',
+      transcribe: 'transcription',
+      motion: 'motion',
+      motion_scene: 'motion'
+    })[String(tool || '').toLowerCase()] || tool;
+
+    const badgeId = ({
+      images: 'quota-badge-images',
+      voice: 'quota-badge-voice',
+      transcription: 'quota-badge-transcription',
+      motion: 'quota-badge-motion'
+    })[normalizedTool];
+
+    if (!badgeId) return;
+    const badge = document.getElementById(badgeId);
+    if (!badge) return;
+
+    badge.classList.remove('hidden');
+
+    if (remaining === undefined || remaining === null) {
+      badge.textContent = 'متبقي لك -- اليوم';
+      return;
+    }
+
+    const remNum = Number(remaining);
+    if (!Number.isFinite(remNum)) {
+      badge.textContent = 'متبقي لك -- اليوم';
+      return;
+    }
+
+    if (remNum >= 90000) {
+      badge.textContent = 'غير محدود (مشرف)';
+      badge.classList.remove('text-amber-300', 'text-red-400');
+      badge.classList.add('text-emerald-400');
+      badge.title = 'حساب المشرف يتمتع بحصة غير محدودة';
+      return;
+    }
+
+    if (remNum <= 0) {
+      badge.textContent = '0 متبقي اليوم';
+      badge.classList.remove('text-amber-300', 'text-emerald-400');
+      badge.classList.add('text-red-400');
+      badge.title = 'نفدت الحصة اليومية لهذا القسم';
+    } else {
+      badge.textContent = `متبقي لك ${remNum} اليوم`;
+      badge.classList.remove('text-red-400', 'text-emerald-400');
+      badge.classList.add('text-amber-300');
+      badge.title = limit ? `متبقي ${remNum} من أصل ${limit} لهذا اليوم` : `متبقي لك ${remNum} اليوم`;
+    }
+  }
+
+  async function fetchUserQuotas() {
+    try {
+      const user = firebase?.auth?.()?.currentUser;
+      const headers = { 'X-Anonymous-ID': getAnonymousId() };
+      if (user) {
+        try { headers.Authorization = `Bearer ${await user.getIdToken()}`; } catch (_) {}
+      }
+      const response = await fetch(`${API_BASE_URL}?action=get_user_quotas`, { headers });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.success && data?.quotas) {
+        for (const [toolKey, item] of Object.entries(data.quotas)) {
+          if (item && typeof item.remaining !== 'undefined') {
+            updateQuotaBadge(toolKey, item.remaining, item.limit);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[MickeyStudio] fetchUserQuotas error:', e);
+    }
   }
 
   async function accountHeaders() {
@@ -4087,13 +1335,22 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         requestOptions = { ...options, body: JSON.stringify(requestBody) };
       } catch (_) {}
     }
-    const tool = ({ generate_image: 'image', generate_tts: 'voiceover', refine_voiceover: 'voiceover', transcribe_audio: 'transcription', enhance_prompt: 'prompt' })[action] || action;
+    const tool = ({ generate_image: 'images', generate_tts: 'voice', refine_voiceover: 'voice', transcribe_audio: 'transcription', enhance_prompt: 'prompt' })[action] || action;
     let permits = {};
     try { permits = JSON.parse(sessionStorage.getItem('mickey_generation_permits') || '{}'); } catch (_) {}
     const permit = permits[tool];
     if (permit) headers['X-Generation-Permit'] = permit;
     const response = await fetch(`${API_BASE_URL}?action=${encodeURIComponent(action)}`, { ...requestOptions, headers });
     if (permit) { delete permits[tool]; sessionStorage.setItem('mickey_generation_permits', JSON.stringify(permits)); }
+
+    // Intercept quota headers
+    const qTool = response.headers.get('X-Quota-Tool') || tool;
+    const qRem = response.headers.get('X-Quota-Remaining');
+    const qLim = response.headers.get('X-Quota-Limit');
+    if (qRem !== null && qRem !== undefined) {
+      updateQuotaBadge(qTool, parseInt(qRem, 10), parseInt(qLim || '0', 10));
+    }
+
     return response;
   }
 
@@ -4104,12 +1361,30 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const requestBody = { action, ...body };
     // InfinityFree/shared Apache may drop Authorization before PHP receives it.
     // Include the short-lived ID token in this HTTPS request body as a fallback.
-    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke'].includes(action) && user) requestBody.idToken = await user.getIdToken();
+    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke', 'get_user_quotas'].includes(action) && user) requestBody.idToken = await user.getIdToken();
     const response = await fetch(`${API_BASE_URL}?action=${encodeURIComponent(action)}`, {
       method: 'POST', headers, body: JSON.stringify(requestBody)
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.success === false) throw new Error(data.error || data.message || `تعذر تنفيذ الطلب (${response.status}).`);
+
+    // Intercept quota in body or headers
+    if (data?.quota?.tool && typeof data.quota.remaining === 'number') {
+      updateQuotaBadge(data.quota.tool, data.quota.remaining, data.quota.limit);
+    } else {
+      const qTool = response.headers.get('X-Quota-Tool') || body.tool;
+      const qRem = response.headers.get('X-Quota-Remaining');
+      const qLim = response.headers.get('X-Quota-Limit');
+      if (qRem !== null && qRem !== undefined && qTool) {
+        updateQuotaBadge(qTool, parseInt(qRem, 10), parseInt(qLim || '0', 10));
+      }
+    }
+
+    if (!response.ok || data.success === false) {
+      if (response.status === 429 && data.code === 'QUOTA_EXCEEDED' && data.tool) {
+        updateQuotaBadge(data.tool, 0, data.limit);
+      }
+      throw new Error(data.error || data.message || `تعذر تنفيذ الطلب (${response.status}).`);
+    }
     if (action === 'consume_generation' && data.permit) {
       let permits = {};
       try { permits = JSON.parse(sessionStorage.getItem('mickey_generation_permits') || '{}'); } catch (_) {}
@@ -4415,6 +1690,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         body: JSON.stringify({ scene })
       });
       const result = await response.json().catch(() => ({}));
+      if (result?.quota?.tool) updateQuotaBadge(result.quota.tool, result.quota.remaining, result.quota.limit);
+      if (response.status === 429) updateQuotaBadge('motion', 0);
       if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
       motionNotice('تم إرسال المشهد. ستظهر شاشة استلام كاملة داخل Premiere تلقائياً، وستظل مفتوحة حتى تنشئ المشهد أو تغلقها.', false, statusId);
       if (layout.unresolved) motionNotice(`تم الإرسال، لكن تعذر تفادي ${layout.unresolved} تداخلات تلقائياً. راجع المعاينة قبل إدراج المشهد.`, true, statusId);
@@ -4434,7 +1711,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
     const keyframes = { position: [], scale: [], opacity: [] };
 
-    // Initial state at t=0
     let startPos = [...basePos];
     let startScale = baseScale;
     let startOp = 1.0;
@@ -4462,14 +1738,12 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     keyframes.scale.push({ time: 0, value: startScale });
     keyframes.opacity.push({ time: 0, value: startOp });
 
-    // Entrance complete
     if (animIn !== 'none' && dur > inDur) {
       keyframes.position.push({ time: inDur, value: [...basePos] });
       keyframes.scale.push({ time: inDur, value: baseScale });
       keyframes.opacity.push({ time: inDur, value: 1.0 });
     }
 
-    // Hold before exit
     const holdEnd = Math.max(inDur, dur - outDur);
     if (animOut !== 'none' && holdEnd > inDur && holdEnd < dur) {
       keyframes.position.push({ time: holdEnd, value: [...basePos] });
@@ -4477,7 +1751,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       keyframes.opacity.push({ time: holdEnd, value: 1.0 });
     }
 
-    // Exit end state at t=dur
     let endPos = [...basePos];
     let endScale = baseScale;
     let endOp = animOut === 'none' ? 1.0 : 0.0;
@@ -4692,6 +1965,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
             body: JSON.stringify({ chunkId, chunkIndex: i, totalChunks: chunks.length, chunkData: chunks[i], version: 2 })
           });
           const resData = await resp.json().catch(() => ({}));
+          if (resData?.quota?.tool) updateQuotaBadge(resData.quota.tool, resData.quota.remaining, resData.quota.limit);
+          if (resp.status === 429) updateQuotaBadge('motion', 0);
           if (!resp.ok || !resData.success) throw new Error(resData.error || `تعذر إرسال الجزء ${i + 1} (${resp.status}).`);
         }
       } else {
@@ -4701,6 +1976,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
           body: serialized
         });
         const result = await response.json().catch(() => ({}));
+        if (result?.quota?.tool) updateQuotaBadge(result.quota.tool, result.quota.remaining, result.quota.limit);
+        if (response.status === 429) updateQuotaBadge('motion', 0);
         if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
       }
 
@@ -4753,73 +2030,425 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     }
   }
 
+  let motionMiniAnimId = null;
+  let motionParsedValidScene = null;
+  let motionLastValidationErrors = [];
+  let motionUndoStack = [];
+  let motionRedoStack = [];
+  const MOTION_DRAFT_KEY = 'mickey_motion_builder_draft';
+
+  function motionGetDraftState() {
+    const activeChip = document.querySelector('#motion-aspect-chips .motion-aspect-chip.active');
+    const aspect = activeChip ? activeChip.getAttribute('data-aspect') : '16:9';
+    return {
+      idea: document.getElementById('motion-idea')?.value || '',
+      aspectRatio: aspect || '16:9',
+      duration: Number(document.getElementById('motion-duration')?.value) || 5,
+      style: document.getElementById('motion-style')?.value || 'social',
+      primaryColor: document.getElementById('motion-brand-primary')?.value || '#6366f1',
+      secondaryColor: document.getElementById('motion-brand-secondary')?.value || '#06b6d4',
+      musicEnabled: document.getElementById('motion-music-enabled')?.checked !== false,
+      musicTrack: document.getElementById('motion-music-track')?.value || 'auto',
+      referenceNote: document.getElementById('motion-reference-note')?.value || '',
+      pastedJson: document.getElementById('motion-json')?.value || ''
+    };
+  }
+
+  function motionSaveDraft() {
+    try {
+      const state = motionGetDraftState();
+      localStorage.setItem(MOTION_DRAFT_KEY, JSON.stringify(state));
+    } catch (_) {}
+  }
+
+  function motionRestoreDraft() {
+    try {
+      const raw = localStorage.getItem(MOTION_DRAFT_KEY);
+      if (!raw) return;
+      const state = JSON.parse(raw);
+      if (!state || typeof state !== 'object') return;
+
+      const ideaEl = document.getElementById('motion-idea');
+      if (ideaEl && state.idea !== undefined) ideaEl.value = state.idea;
+
+      if (state.aspectRatio) {
+        document.querySelectorAll('#motion-aspect-chips .motion-aspect-chip').forEach(chip => {
+          const match = chip.getAttribute('data-aspect') === state.aspectRatio;
+          chip.classList.toggle('active', match);
+          if (match) {
+            chip.classList.add('border-orange-500/50', 'bg-orange-500/10', 'text-orange-200');
+            chip.classList.remove('bg-zinc-900/50', 'text-zinc-300');
+          } else {
+            chip.classList.remove('border-orange-500/50', 'bg-orange-500/10', 'text-orange-200');
+            chip.classList.add('bg-zinc-900/50', 'text-zinc-300');
+          }
+        });
+      }
+
+      if (state.duration) {
+        const durInput = document.getElementById('motion-duration');
+        const durRange = document.getElementById('motion-duration-range');
+        if (durInput) durInput.value = state.duration;
+        if (durRange) durRange.value = state.duration;
+      }
+
+      if (state.style) {
+        const styleEl = document.getElementById('motion-style');
+        if (styleEl) styleEl.value = state.style;
+      }
+
+      if (state.primaryColor) {
+        const pColor = document.getElementById('motion-brand-primary');
+        if (pColor) pColor.value = state.primaryColor;
+      }
+
+      if (state.secondaryColor) {
+        const sColor = document.getElementById('motion-brand-secondary');
+        if (sColor) sColor.value = state.secondaryColor;
+      }
+
+      if (state.musicEnabled !== undefined) {
+        const mCheck = document.getElementById('motion-music-enabled');
+        if (mCheck) mCheck.checked = Boolean(state.musicEnabled);
+      }
+
+      if (state.musicTrack) {
+        const mTrack = document.getElementById('motion-music-track');
+        if (mTrack) mTrack.value = state.musicTrack;
+      }
+
+      if (state.referenceNote !== undefined) {
+        const refEl = document.getElementById('motion-reference-note');
+        if (refEl) refEl.value = state.referenceNote;
+      }
+
+      if (state.pastedJson) {
+        const jsonEl = document.getElementById('motion-json');
+        if (jsonEl && !jsonEl.value) {
+          jsonEl.value = state.pastedJson;
+          motionValidateAndRenderLive();
+        }
+      }
+    } catch (_) {}
+  }
+
+  function motionBuildCurrentPrompt() {
+    const draft = motionGetDraftState();
+    if (window.MotionPrompt && typeof window.MotionPrompt.buildPrompt === 'function') {
+      return window.MotionPrompt.buildPrompt(draft.idea, {
+        aspectRatio: draft.aspectRatio,
+        duration: draft.duration,
+        style: draft.style,
+        primaryColor: draft.primaryColor,
+        secondaryColor: draft.secondaryColor,
+        referenceNote: draft.referenceNote
+      });
+    }
+    return `Generate a Motion Scene JSON for: "${draft.idea}". Duration: ${draft.duration}s. Aspect: ${draft.aspectRatio}.`;
+  }
+
+  async function motionCopyPromptToClipboard() {
+    try {
+      const prompt = motionBuildCurrentPrompt();
+      await navigator.clipboard.writeText(prompt);
+      const label = document.getElementById('btn-copy-prompt-label');
+      if (label) {
+        const oldText = label.textContent;
+        label.textContent = '✓ تم نسخ البرومت بنجاح! الصقه في المساعد';
+        setTimeout(() => { if (label) label.textContent = oldText; }, 2600);
+      }
+      showToast('تم نسخ البرومت الكامل. افتح Claude أو ChatGPT أو Gemini والصقه هناك.', 'success');
+      motionSaveDraft();
+    } catch (err) {
+      showToast('تعذر النسخ إلى الحافظة. يمكنك تحديد النص ونسخه يدوياً.', 'error');
+    }
+  }
+
+  async function motionPasteFromClipboard() {
+    try {
+      if (!navigator.clipboard?.readText) throw new Error('المتصفح لا يدعم القراءة المباشرة من الحافظة.');
+      const text = await navigator.clipboard.readText();
+      const jsonField = document.getElementById('motion-json');
+      if (jsonField) {
+        jsonField.value = text;
+        motionValidateAndRenderLive();
+        showToast('تم اللصق من الحافظة وفحص المشهد.', 'info');
+      }
+    } catch (err) {
+      showToast('استخدم اختصار اللصق (Ctrl+V) داخل مربع الرد.', 'info');
+    }
+  }
+
+  function motionValidateAndRenderLive() {
+    const jsonField = document.getElementById('motion-json');
+    const errorCard = document.getElementById('motion-error-card');
+    const errorList = document.getElementById('motion-error-list');
+    const successCard = document.getElementById('motion-success-card');
+    const summaryBadge = document.getElementById('motion-scene-summary-badge');
+    const miniCanvas = document.getElementById('motion-mini-preview-canvas');
+
+    if (motionMiniAnimId) {
+      cancelAnimationFrame(motionMiniAnimId);
+      motionMiniAnimId = null;
+    }
+
+    const rawText = jsonField?.value?.trim() || '';
+    motionSaveDraft();
+
+    if (!rawText) {
+      if (errorCard) errorCard.classList.add('hidden');
+      if (successCard) successCard.classList.add('hidden');
+      motionParsedValidScene = null;
+      motionLastValidationErrors = [];
+      return;
+    }
+
+    const activeChip = document.querySelector('#motion-aspect-chips .motion-aspect-chip.active');
+    const aspect = activeChip ? activeChip.getAttribute('data-aspect') : '16:9';
+
+    if (!window.MotionParser) return;
+
+    const parseRes = window.MotionParser.parseAndRepairScene(rawText, { aspectRatio: aspect });
+
+    if (!parseRes.valid || (parseRes.errors && parseRes.errors.length > 0)) {
+      motionParsedValidScene = null;
+      motionLastValidationErrors = parseRes.errors;
+      if (successCard) successCard.classList.add('hidden');
+      if (errorCard) {
+        errorCard.classList.remove('hidden');
+        if (errorList) {
+          errorList.innerHTML = parseRes.errors.map(err => `<li>${err}</li>`).join('');
+        }
+      }
+    } else {
+      motionParsedValidScene = parseRes.scene;
+      motionLastValidationErrors = [];
+      if (errorCard) errorCard.classList.add('hidden');
+      if (successCard) {
+        successCard.classList.remove('hidden');
+        const layerCount = Array.isArray(parseRes.scene.layers) ? parseRes.scene.layers.length : (parseRes.scene.elements?.length || 0);
+        const dur = Number(parseRes.scene.duration) || 5;
+        const w = parseRes.scene.width || 1920;
+        const h = parseRes.scene.height || 1080;
+        if (summaryBadge) {
+          summaryBadge.textContent = `${layerCount} طبقات · ${dur.toFixed(1)} ثانية · ${w}×${h}`;
+        }
+      }
+
+      // Start Mini Canvas Animation Loop
+      if (miniCanvas && window.MotionEngine && typeof window.MotionEngine.renderFrame === 'function') {
+        const scene = parseRes.scene;
+        miniCanvas.width = scene.width;
+        miniCanvas.height = scene.height;
+        let startTimestamp = null;
+        const animDuration = Math.max(1, scene.duration || 5);
+
+        function renderMiniLoop(timestamp) {
+          if (!startTimestamp) startTimestamp = timestamp;
+          const elapsed = ((timestamp - startTimestamp) / 1000) % animDuration;
+          try {
+            window.MotionEngine.renderFrame(scene, elapsed, miniCanvas, { resizeCanvas: false });
+          } catch (_) {}
+          motionMiniAnimId = requestAnimationFrame(renderMiniLoop);
+        }
+
+        motionMiniAnimId = requestAnimationFrame(renderMiniLoop);
+      }
+    }
+  }
+
   async function motionCopyRepairPrompt() {
     try {
-      const input = cleanMotionJSON(document.getElementById('motion-json').value); if (!input) throw new Error('الصق JSON أولاً.');
-      const text = `Repair this Premiere motion scene. Return JSON only, with no markdown or explanation. Preserve Arabic text and intent. Valid types: graphic, color_matte, sfx (legacy mogrt is accepted). Graphic IDs: ${MOTION_MOGRT_IDS.join(', ')}. SFX IDs: ${MOTION_SFX_IDS.join(', ')}. Music IDs: ${MOTION_MUSIC_IDS.join(', ')}. Root schema: {"version":1,"elements":[],"music":{"musicId":"tech_corporate","duration":15,"volume":0.28,"fadeIn":1.2,"fadeOut":1.5}}. Element fields: type,templateId,sfxId,trackIndex,startTime,duration,position:[x,y],scale,animationIn,animationOut,params:{text,fontFamily,fontSize,textColor,color1,color2,numberValue,label}. Use different trackIndex values for overlapping layers. Prefer designed title cards and meaningful icons/shapes over bare text. Valid animationIn: none,pop-in,zoom-in,bounce-in,slide-up,slide-left,slide-right,word-reveal,fade-in. Valid animationOut: none,fade-out,zoom-out,slide-down,slide-left,slide-right.\n\n${input}`;
-      await navigator.clipboard.writeText(text); motionNotice('تم نسخ طلب تصحيح JSON.');
-    } catch (error) { motionNotice(error.message || 'تعذر نسخ طلب التصحيح.', true); }
+      const jsonField = document.getElementById('motion-json');
+      const rawText = jsonField?.value || '';
+      if (!rawText.trim()) throw new Error('لا يوجد نص ملصوق لإصلاحه.');
+
+      if (!window.MotionParser) throw new Error('مكتبة MotionParser غير متاحة.');
+      const repairPrompt = window.MotionParser.buildRepairPrompt(rawText, motionLastValidationErrors);
+      await navigator.clipboard.writeText(repairPrompt);
+
+      const copiedBadge = document.getElementById('motion-repair-copied-badge');
+      if (copiedBadge) {
+        copiedBadge.classList.remove('hidden');
+        setTimeout(() => copiedBadge.classList.add('hidden'), 4000);
+      }
+      showToast('تم نسخ طلب الإصلاح. الصقه في محادثتك مع الذكاء الاصطناعي.', 'success');
+    } catch (err) {
+      showToast(err.message || 'تعذر نسخ طلب الإصلاح.', 'error');
+    }
+  }
+
+  async function motionAutoGenerate() {
+    if (typeof authorizeAndConsume === 'function') {
+      if (!await authorizeAndConsume('motion')) return;
+    }
+    const btn = document.getElementById('btn-motion-auto-generate');
+    const prompt = motionBuildCurrentPrompt();
+    try {
+      if (btn) btn.disabled = true;
+      showToast('جارٍ التواصل مع الذكاء الاصطناعي لتوليد المشهد...', 'info');
+
+      const response = await fetch('api.php?action=generate_motion_scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, action: 'generate_motion_scene' })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (data?.quota?.tool) updateQuotaBadge(data.quota.tool, data.quota.remaining, data.quota.limit);
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || `فشل التوليد التلقائي (${response.status})`);
+      }
+
+      const reply = data.raw_reply || '';
+      const jsonField = document.getElementById('motion-json');
+      if (jsonField) {
+        jsonField.value = reply;
+        motionValidateAndRenderLive();
+      }
+      showToast('تم استلام المشهد والتحقق من توافقه بنجاح!', 'success');
+    } catch (err) {
+      showToast(err.message || 'تعذر التوليد التلقائي.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function motionApplyExample(idea) {
+    const ideaEl = document.getElementById('motion-idea');
+    if (ideaEl && idea) {
+      ideaEl.value = idea;
+      motionSaveDraft();
+      showToast('تم تطبيق فكرة المثال.', 'info');
+    }
   }
 
   function initMotionBuilder() {
-    if (motionBuilderInitialized) return;
+    if (motionBuilderInitialized) {
+      motionRestoreDraft();
+      return;
+    }
     motionBuilderInitialized = true;
-    const picker = document.getElementById('motion-image');
-    picker?.addEventListener('change', event => motionReadImage(event.target.files?.[0]));
-    document.getElementById('motion-json')?.addEventListener('input', motionUpdateEditorCTA);
-    const musicVolume = document.getElementById('motion-music-volume');
-    musicVolume?.addEventListener('input', () => { const label = document.getElementById('motion-music-volume-value'); if (label) label.textContent = `${musicVolume.value}%`; });
-    motionUpdateEditorCTA();
-  }
 
-  function motionUpdateEditorCTA() {
-    const button = document.getElementById('motion-open-editor');
-    const input = document.getElementById('motion-json');
-    if (!button || !input) return;
-    let ready = false;
-    try { validateMotionScene(parseMotionJSON(input.value)); ready = true; } catch (_) { ready = false; }
-    button.classList.toggle('is-ready', ready);
-    button.title = ready ? 'فتح معاينة المشهد وتعديل النص والخط' : 'الصق رد JSON صالحاً لفتح المشهد في المحرر';
-    button.setAttribute('aria-disabled', ready ? 'false' : 'true');
+    // Example Chips
+    document.querySelectorAll('#motion-example-chips .motion-example-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const idea = chip.getAttribute('data-idea');
+        motionApplyExample(idea);
+      });
+    });
+
+    // Aspect Ratio Chips
+    document.querySelectorAll('#motion-aspect-chips .motion-aspect-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('#motion-aspect-chips .motion-aspect-chip').forEach(c => {
+          c.classList.remove('active', 'border-orange-500/50', 'bg-orange-500/10', 'text-orange-200');
+          c.classList.add('bg-zinc-900/50', 'text-zinc-300');
+        });
+        chip.classList.add('active', 'border-orange-500/50', 'bg-orange-500/10', 'text-orange-200');
+        chip.classList.remove('bg-zinc-900/50', 'text-zinc-300');
+        motionSaveDraft();
+        motionValidateAndRenderLive();
+      });
+    });
+
+    // Input listeners for live draft saving
+    document.getElementById('motion-idea')?.addEventListener('input', motionSaveDraft);
+    const durRange = document.getElementById('motion-duration-range');
+    const durInput = document.getElementById('motion-duration');
+    durRange?.addEventListener('input', () => {
+      if (durInput) durInput.value = durRange.value;
+      motionSaveDraft();
+    });
+    durInput?.addEventListener('input', () => {
+      if (durRange) durRange.value = durInput.value;
+      motionSaveDraft();
+    });
+    document.getElementById('motion-style')?.addEventListener('change', motionSaveDraft);
+    document.getElementById('motion-brand-primary')?.addEventListener('input', motionSaveDraft);
+    document.getElementById('motion-brand-secondary')?.addEventListener('input', motionSaveDraft);
+    document.getElementById('motion-music-enabled')?.addEventListener('change', motionSaveDraft);
+    document.getElementById('motion-music-track')?.addEventListener('change', motionSaveDraft);
+    document.getElementById('motion-reference-note')?.addEventListener('input', motionSaveDraft);
+
+    // Copy Prompt Button
+    document.getElementById('btn-copy-motion-prompt')?.addEventListener('click', motionCopyPromptToClipboard);
+
+    // Paste Button & JSON input
+    document.getElementById('btn-motion-paste-clip')?.addEventListener('click', motionPasteFromClipboard);
+    document.getElementById('motion-json')?.addEventListener('input', motionValidateAndRenderLive);
+
+    // Repair Prompt Copy Button
+    document.getElementById('btn-copy-repair-prompt')?.addEventListener('click', motionCopyRepairPrompt);
+
+    // Auto Generate Button
+    document.getElementById('btn-motion-auto-generate')?.addEventListener('click', motionAutoGenerate);
+
+    // Open Editor Button
+    document.getElementById('btn-motion-open-editor')?.addEventListener('click', motionOpenEditor);
+
+    // Window focus restores draft if user navigated to external AI tab and back
+    window.addEventListener('focus', () => {
+      motionRestoreDraft();
+    });
+
+    motionRestoreDraft();
+    motionValidateAndRenderLive();
   }
 
   function motionOpenEditor() {
     try {
-      const sourceJSON = document.getElementById('motion-json')?.value || '';
-      const scene = validateMotionScene(parseMotionJSON(sourceJSON));
+      let scene = motionParsedValidScene;
+      if (!scene) {
+        const rawText = document.getElementById('motion-json')?.value?.trim();
+        if (rawText && window.MotionParser) {
+          const res = window.MotionParser.parseAndRepairScene(rawText);
+          if (res.valid) scene = res.scene;
+        }
+      }
+
+      if (!scene) {
+        showToast('يرجى لصق رد JSON صالح أولاً لفتح المحرر.', 'warning');
+        return;
+      }
+
       motionEditorScene = JSON.parse(JSON.stringify(scene));
-      const layout = motionAutoLayoutScene(motionEditorScene);
-      const requestedDuration = Number(document.getElementById('motion-duration')?.value) || 15;
-      const contentEnd = Math.max(...motionEditorScene.elements.map(item => Number(item.startTime) + Number(item.duration)));
-      motionEditorDuration = Math.max(1, Math.min(180, Math.max(requestedDuration, contentEnd)));
-      motionEditorAspect = ['16:9', '9:16', '1:1'].includes(motionEditorScene.aspectRatio) ? motionEditorScene.aspectRatio : '16:9';
-      const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
-      if (musicEnabled && !motionEditorScene.music) {
-        const style = document.getElementById('motion-style')?.value || 'social';
-        const selectedMusic = document.getElementById('motion-music-track')?.value || 'auto';
-        const musicId = selectedMusic === 'auto' ? MOTION_STYLE_MUSIC[style] || 'social_upbeat' : selectedMusic;
-        const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
-        motionEditorScene.music = { musicId, duration: motionEditorDuration, volume, fadeIn: 1.2, fadeOut: 1.5 };
+      motionUndoStack = [JSON.parse(JSON.stringify(motionEditorScene))];
+      motionRedoStack = [];
+
+      const nameInput = document.getElementById('motion-scene-name');
+      if (nameInput) nameInput.value = motionEditorScene.name || 'مشهد موشن جرافيك';
+
+      motionEditorAspect = (motionEditorScene.width === 1080 && motionEditorScene.height === 1920) ? '9:16'
+        : (motionEditorScene.width === motionEditorScene.height) ? '1:1' : '16:9';
+
+      const aspectSelect = document.getElementById('motion-aspect-ratio');
+      if (aspectSelect) aspectSelect.value = motionEditorAspect;
+
+      motionEditorDuration = Number(motionEditorScene.duration) || 5;
+      const playhead = document.getElementById('motion-playhead');
+      if (playhead) {
+        playhead.max = motionEditorDuration;
+        playhead.value = 0;
       }
-      motionEditorEnsureTextContrast(motionEditorScene);
-      if (layout.adjusted || layout.unresolved) {
-        const jsonField = document.getElementById('motion-json');
-        if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
-      }
-      motionEditorSelectedIndex = motionEditorScene.elements.findIndex(item => item.type !== 'sfx');
+
+      motionEditorSelectedIndex = 0;
       motionEditorTime = 0;
       motionEditorPlaying = false;
       if (motionEditorFrame) cancelAnimationFrame(motionEditorFrame);
       motionEditorFrame = 0;
-      motionEditorRender();
+
       switchTab('motion-editor');
+      initMotionEditorControls();
       motionEditorRender();
-      motionEditorPreloadAudio();
-      if (layout.unresolved) motionNotice(`تم ترتيب المشهد تلقائياً، لكن بقي ${layout.unresolved} تداخلات تحتاج مراجعة يدوية.`, true, 'motion-editor-status');
-      else if (layout.adjusted) motionNotice(`تم توزيع ${layout.adjusted} عنصر تلقائياً لتجنب تداخل النصوص والقوالب.`, false, 'motion-editor-status');
-    } catch (error) {
-      motionNotice(error.message || 'تعذر فتح المحرر. راجع JSON المشهد.', true);
+    } catch (err) {
+      showToast('تعذر فتح المشهد في المحرر: ' + err.message, 'error');
     }
+  }
+
+  function motionBackToLanding() {
+    switchTab('motion-builder');
+    motionRestoreDraft();
   }
 
   function motionEditorRender() {
@@ -4940,35 +2569,71 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       ruler.appendChild(tick);
     }
     timeline.appendChild(ruler);
-    for (let track = maxTrack; track >= 0; track -= 1) {
-      const row = document.createElement('div');
-      row.className = 'motion-track-row';
-      const label = document.createElement('span');
-      label.className = 'motion-track-label';
-      label.textContent = `مسار ${track + 1}`;
-      const lane = document.createElement('div');
-      lane.className = 'motion-track-lane';
-      elements.forEach((item, index) => {
-        if (Math.floor(Number(item.trackIndex) || 0) !== track) return;
+
+    if (Boolean(motionEditorScene.layers)) {
+      motionEditorScene.layers.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'motion-track-row';
+        const label = document.createElement('span');
+        label.className = 'motion-track-label';
+        const itemName = item.name || item.content?.text || (item.type === 'text' ? 'نص' : item.type === 'counter' ? 'عداد' : 'شكل');
+        label.textContent = itemName.slice(0, 14);
+        label.title = itemName;
+
+        const lane = document.createElement('div');
+        lane.className = 'motion-track-lane';
+
         const clip = document.createElement('button');
         clip.type = 'button';
-        const isText = motionEditorIsText(item);
-        clip.className = `motion-clip ${item.type === 'sfx' ? 'clip-sfx' : isText ? 'clip-text' : 'clip-mogrt'}${index === motionEditorSelectedIndex ? ' is-selected' : ''}`;
-        const start = Math.max(0, Number(item.startTime) || 0);
-        const duration = Math.max(.1, Number(item.duration) || .1);
-        clip.style.left = `${Math.min(100, start / motionEditorDuration * 100)}%`;
-        clip.style.width = `${Math.max(2, Math.min(100 - start / motionEditorDuration * 100, duration / motionEditorDuration * 100))}%`;
-        clip.title = `${motionEditorLabel(item)} · ${start.toFixed(2)}s — ${(start + duration).toFixed(2)}s`;
-        clip.textContent = motionEditorLabel(item);
+        const clipType = item.type === 'text' ? 'clip-text' : item.type === 'counter' ? 'clip-sfx' : 'clip-mogrt';
+        clip.className = `motion-clip ${clipType}${index === motionEditorSelectedIndex ? ' is-selected' : ''}`;
+        const start = Math.max(0, Number(item.start) || 0);
+        const duration = Math.max(0.1, Number(item.duration) || 1);
+        clip.style.left = `${Math.min(100, (start / motionEditorDuration) * 100)}%`;
+        clip.style.width = `${Math.max(2, Math.min(100 - (start / motionEditorDuration) * 100, (duration / motionEditorDuration) * 100))}%`;
+        clip.title = `${itemName} · ${start.toFixed(2)}s — ${(start + duration).toFixed(2)}s`;
+        clip.textContent = itemName;
         clip.addEventListener('click', () => {
           motionEditorSelectedIndex = index;
           motionEditorTime = start;
           motionEditorRender();
         });
+
         lane.appendChild(clip);
+        row.append(label, lane);
+        timeline.appendChild(row);
       });
-      row.append(label, lane);
-      timeline.appendChild(row);
+    } else {
+      for (let track = maxTrack; track >= 0; track -= 1) {
+        const row = document.createElement('div');
+        row.className = 'motion-track-row';
+        const label = document.createElement('span');
+        label.className = 'motion-track-label';
+        label.textContent = `مسار ${track + 1}`;
+        const lane = document.createElement('div');
+        lane.className = 'motion-track-lane';
+        elements.forEach((item, index) => {
+          if (Math.floor(Number(item.trackIndex) || 0) !== track) return;
+          const clip = document.createElement('button');
+          clip.type = 'button';
+          const isText = motionEditorIsText(item);
+          clip.className = `motion-clip ${item.type === 'sfx' ? 'clip-sfx' : isText ? 'clip-text' : 'clip-mogrt'}${index === motionEditorSelectedIndex ? ' is-selected' : ''}`;
+          const start = Math.max(0, Number(item.startTime) || 0);
+          const duration = Math.max(.1, Number(item.duration) || .1);
+          clip.style.left = `${Math.min(100, start / motionEditorDuration * 100)}%`;
+          clip.style.width = `${Math.max(2, Math.min(100 - start / motionEditorDuration * 100, duration / motionEditorDuration * 100))}%`;
+          clip.title = `${motionEditorLabel(item)} · ${start.toFixed(2)}s — ${(start + duration).toFixed(2)}s`;
+          clip.textContent = motionEditorLabel(item);
+          clip.addEventListener('click', () => {
+            motionEditorSelectedIndex = index;
+            motionEditorTime = start;
+            motionEditorRender();
+          });
+          lane.appendChild(clip);
+        });
+        row.append(label, lane);
+        timeline.appendChild(row);
+      }
     }
     if (motionEditorScene.music?.musicId) {
       const musicRow = document.createElement('div');
@@ -4995,7 +2660,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     timeline.appendChild(playhead);
     motionEditorUpdatePlayheadLine();
     const summary = document.getElementById('motion-timeline-summary');
-    if (summary) summary.textContent = `${elements.length + (motionEditorScene.music?.musicId ? 1 : 0)} مقاطع · ${motionEditorScene.music?.musicId ? 'موسيقى ومؤثرات مضافة' : 'بدون موسيقى'} · ${motionEditorDuration.toFixed(1)} ثانية`;
+    const totalCount = motionEditorScene.layers ? motionEditorScene.layers.length : elements.length;
+    if (summary) summary.textContent = `${totalCount} طبقات · ${motionEditorDuration.toFixed(1)} ثانية`;
   }
 
   function motionEditorUpdatePlayheadLine() {
@@ -5122,25 +2788,46 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const empty = document.getElementById('motion-editor-empty');
     const fields = document.getElementById('motion-text-properties');
     const indexBadge = document.getElementById('motion-property-index');
-    const item = motionEditorScene.elements[motionEditorSelectedIndex];
-    const editable = item && motionEditorIsText(item);
+
+    if (!motionEditorScene) return;
+    const isV2 = Boolean(motionEditorScene.layers);
+    const elementsList = isV2 ? motionEditorScene.layers : (motionEditorScene.elements || []);
+    const item = elementsList[motionEditorSelectedIndex];
+    const editable = isV2 ? (item && (item.type === 'text' || item.type === 'counter' || item.type === 'shape')) : (item && motionEditorIsText(item));
+
     if (empty) empty.classList.toggle('hidden', Boolean(editable));
     if (fields) fields.classList.toggle('hidden', !editable);
-    if (indexBadge) indexBadge.textContent = item ? `${String(motionEditorSelectedIndex + 1).padStart(2, '0')} / ${String(motionEditorScene.elements.length).padStart(2, '0')}` : '—';
+    if (indexBadge) indexBadge.textContent = item ? `${String(motionEditorSelectedIndex + 1).padStart(2, '0')} / ${String(elementsList.length).padStart(2, '0')}` : '—';
+
     if (!editable) {
-      if (empty && item?.type === 'sfx') empty.querySelector('p').textContent = 'هذا مقطع صوتي. اختر طبقة نصية من خط الزمن لتحريرها.';
-      else if (empty) empty.querySelector('p').textContent = 'اختر مقطعاً نصياً من خط الزمن لتعديل نصه وخطه.';
+      if (empty) empty.querySelector('p').textContent = 'اختر طبقة من خط الزمن أو المعاينة لتعديلها.';
       return;
     }
-    const params = item.params || (item.params = {});
+
     const textField = document.getElementById('motion-edit-text');
     const fontField = document.getElementById('motion-edit-font');
     const sizeField = document.getElementById('motion-edit-size');
     const colorField = document.getElementById('motion-edit-color');
-    if (textField && document.activeElement !== textField) textField.value = params.text || '';
-    if (fontField) fontField.value = ['Readex Pro', 'Cairo', 'Tajawal', 'Almarai', 'Arial'].includes(params.fontFamily) ? params.fontFamily : 'Readex Pro';
-    if (sizeField && document.activeElement !== sizeField) sizeField.value = Math.max(12, Math.min(220, Number(params.fontSize) || 64));
-    if (colorField) colorField.value = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : /^#[0-9a-f]{6}$/i.test(params.color1 || '') ? params.color1 : '#FFFFFF';
+    const presetIn = document.getElementById('motion-edit-preset-in');
+    const presetOut = document.getElementById('motion-edit-preset-out');
+    const presetLoop = document.getElementById('motion-edit-preset-loop');
+
+    if (isV2) {
+      const textVal = item.content?.text || (item.type === 'counter' ? String(item.content?.endVal ?? '') : (item.name || ''));
+      if (textField && document.activeElement !== textField) textField.value = textVal;
+      if (fontField) fontField.value = item.style?.font || 'Cairo';
+      if (sizeField && document.activeElement !== sizeField) sizeField.value = item.style?.fontSize || 56;
+      if (colorField) colorField.value = item.style?.fill || '#ffffff';
+      if (presetIn) presetIn.value = item.presets?.in?.name || 'pop';
+      if (presetOut) presetOut.value = item.presets?.out?.name || 'none';
+      if (presetLoop) presetLoop.value = item.presets?.loop?.name || 'none';
+    } else {
+      const params = item.params || (item.params = {});
+      if (textField && document.activeElement !== textField) textField.value = params.text || '';
+      if (fontField) fontField.value = ['Cairo', 'Readex Pro', 'Tajawal', 'Almarai', 'Inter'].includes(params.fontFamily) ? params.fontFamily : 'Cairo';
+      if (sizeField && document.activeElement !== sizeField) sizeField.value = Math.max(12, Math.min(220, Number(params.fontSize) || 64));
+      if (colorField) colorField.value = /^#[0-9a-f]{6}$/i.test(params.textColor || '') ? params.textColor : '#FFFFFF';
+    }
   }
 
   function motionEditorRenderPreview() {
@@ -5154,29 +2841,38 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     canvas.width = dimensions.width;
     canvas.height = dimensions.height;
     const context = canvas.getContext('2d');
-    if (context) motionEditorDrawExportFrame(context, motionEditorTime, canvas.width, canvas.height, false, motionEditorSelectedIndex);
+    if (context) {
+      if (motionEditorScene.layers && window.MotionEngine) {
+        window.MotionEngine.renderFrame(motionEditorScene, motionEditorTime, canvas, { resizeCanvas: false });
+      } else {
+        motionEditorDrawExportFrame(context, motionEditorTime, canvas.width, canvas.height, false, motionEditorSelectedIndex);
+      }
+    }
     canvas.addEventListener('click', event => {
+      const isV2 = Boolean(motionEditorScene.layers);
+      const elementsList = isV2 ? motionEditorScene.layers : motionEditorScene.elements;
+      if (!elementsList?.length) return;
       const bounds = canvas.getBoundingClientRect();
-      const x = (event.clientX - bounds.left) / bounds.width * 1920;
-      const y = (event.clientY - bounds.top) / bounds.height * 1080;
-      const candidates = motionEditorScene.elements.map((item, index) => ({ item, index })).filter(({ item }) => motionEditorIsText(item) && motionEditorTime >= (Number(item.startTime) || 0) && motionEditorTime <= (Number(item.startTime) || 0) + Number(item.duration));
+      const x = ((event.clientX - bounds.left) / bounds.width) * dimensions.width;
+      const y = ((event.clientY - bounds.top) / bounds.height) * dimensions.height;
+
+      const candidates = elementsList.map((item, index) => ({ item, index })).filter(({ item }) => {
+        const start = isV2 ? (Number(item.start) || 0) : (Number(item.startTime) || 0);
+        const dur = Number(item.duration) || 1;
+        return motionEditorTime >= start && motionEditorTime <= start + dur;
+      });
       if (!candidates.length) return;
+
       const nearest = candidates.reduce((best, candidate) => {
-        const position = Array.isArray(candidate.item.position) ? candidate.item.position : [960, 540];
-        const distance = Math.hypot(x - Number(position[0]), y - Number(position[1]));
+        const pos = isV2 ? [candidate.item.transform?.x || dimensions.width / 2, candidate.item.transform?.y || dimensions.height / 2] : (Array.isArray(candidate.item.position) ? candidate.item.position : [960, 540]);
+        const distance = Math.hypot(x - Number(pos[0]), y - Number(pos[1]));
         return distance < best.distance ? { index: candidate.index, distance } : best;
       }, { index: candidates[0].index, distance: Infinity });
+
       motionEditorSelectedIndex = nearest.index;
       motionEditorRender();
     });
     stage.appendChild(canvas);
-    const hasVisibleElements = motionEditorScene.elements.some(item => item.type !== 'sfx' && motionEditorTime >= (Number(item.startTime) || 0) && motionEditorTime <= (Number(item.startTime) || 0) + Number(item.duration));
-    if (!hasVisibleElements) {
-      const placeholder = document.createElement('div');
-      placeholder.className = 'motion-preview-placeholder';
-      placeholder.innerHTML = '<i class="fa-solid fa-clapperboard"></i><span>لا توجد طبقة مرئية عند هذا التوقيت</span>';
-      stage.appendChild(placeholder);
-    }
   }
 
   function motionEditorBackground(item) {
@@ -5256,15 +2952,83 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     return String(item.params?.text || (item.templateId === 'widget_counter' ? '١٢٬٥٠٠' : 'اكتب النص هنا'));
   }
 
+  function motionPushUndoState() {
+    if (!motionEditorScene) return;
+    motionUndoStack.push(JSON.parse(JSON.stringify(motionEditorScene)));
+    if (motionUndoStack.length > 30) motionUndoStack.shift();
+    motionRedoStack = [];
+    motionUpdateUndoRedoButtons();
+  }
+
+  function motionEditorUndo() {
+    if (motionUndoStack.length <= 1) return;
+    const current = motionUndoStack.pop();
+    motionRedoStack.push(current);
+    motionEditorScene = JSON.parse(JSON.stringify(motionUndoStack[motionUndoStack.length - 1]));
+    motionEditorRender();
+    motionUpdateUndoRedoButtons();
+  }
+
+  function motionEditorRedo() {
+    if (!motionRedoStack.length) return;
+    const next = motionRedoStack.pop();
+    motionUndoStack.push(JSON.parse(JSON.stringify(next)));
+    motionEditorScene = JSON.parse(JSON.stringify(next));
+    motionEditorRender();
+    motionUpdateUndoRedoButtons();
+  }
+
+  function motionUpdateUndoRedoButtons() {
+    const btnUndo = document.getElementById('btn-motion-undo');
+    const btnRedo = document.getElementById('btn-motion-redo');
+    if (btnUndo) {
+      btnUndo.disabled = motionUndoStack.length <= 1;
+      btnUndo.style.opacity = motionUndoStack.length <= 1 ? '0.35' : '1';
+    }
+    if (btnRedo) {
+      btnRedo.disabled = motionRedoStack.length === 0;
+      btnRedo.style.opacity = motionRedoStack.length === 0 ? '0.35' : '1';
+    }
+  }
+
   function motionEditorUpdateSelected(key, value) {
-    const item = motionEditorScene?.elements[motionEditorSelectedIndex];
-    if (!item || !motionEditorIsText(item)) return;
-    if (!item.params || typeof item.params !== 'object') item.params = {};
-    item.params[key] = value;
-    motionEditorEnsureTextContrast(motionEditorScene);
+    if (!motionEditorScene) return;
+    const isV2 = Boolean(motionEditorScene.layers);
+    const elementsList = isV2 ? motionEditorScene.layers : (motionEditorScene.elements || []);
+    const item = elementsList[motionEditorSelectedIndex];
+    if (!item) return;
+
+    motionPushUndoState();
+
+    if (isV2) {
+      if (!item.style) item.style = {};
+      if (!item.presets) item.presets = {};
+      if (key === 'text') {
+        if (!item.content) item.content = {};
+        item.content.text = value;
+      } else if (key === 'fontFamily' || key === 'font') {
+        item.style.font = value;
+      } else if (key === 'fontSize') {
+        item.style.fontSize = Math.max(12, Math.min(220, Number(value) || 56));
+      } else if (key === 'textColor' || key === 'fill') {
+        item.style.fill = value;
+      } else if (key === 'presetIn') {
+        item.presets.in = { name: value };
+      } else if (key === 'presetOut') {
+        if (value === 'none') delete item.presets.out;
+        else item.presets.out = { name: value };
+      } else if (key === 'presetLoop') {
+        if (value === 'none') delete item.presets.loop;
+        else item.presets.loop = { name: value };
+      }
+    } else {
+      if (!item.params || typeof item.params !== 'object') item.params = {};
+      item.params[key] = value;
+      motionEditorEnsureTextContrast(motionEditorScene);
+    }
+
     const jsonField = document.getElementById('motion-json');
     if (jsonField) jsonField.value = JSON.stringify(motionEditorScene, null, 2);
-    motionUpdateEditorCTA();
     motionEditorRenderTimeline();
     motionEditorRenderPreview();
   }
@@ -5324,7 +3088,11 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   function motionEditorDrawExportFrame(context, time, width, height, transparent = false, selectedIndex = -1) {
-    const all = motionEditorScene.elements;
+    if (motionEditorScene?.layers && window.MotionEngine) {
+      window.MotionEngine.renderFrame(motionEditorScene, time, context.canvas, { resizeCanvas: false });
+      return;
+    }
+    const all = motionEditorScene.elements || [];
     const visible = all.map((item, index) => ({ item, index })).filter(({ item }) => item.type !== 'sfx' && time >= (Number(item.startTime) || 0) && time <= (Number(item.startTime) || 0) + (Number(item.duration) || 0)).sort((left, right) => Number(left.item.trackIndex) - Number(right.item.trackIndex) || left.index - right.index).map(({ item }) => item);
     const bg = [...visible].reverse().find(item => item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId));
     const p = bg?.params || {};
@@ -5466,6 +3234,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   async function motionExportVideo() {
+    if (typeof authorizeAndConsume === 'function') {
+      if (!await authorizeAndConsume('motion')) return;
+    }
     const button = document.getElementById('motion-editor-export');
     const status = document.getElementById('motion-editor-status');
     if (!motionEditorScene || motionEditorExporting) return;
@@ -5481,7 +3252,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       if (!context) throw new Error('تعذر تجهيز لوحة تصدير الفيديو.');
       motionEditorDrawExportFrame(context, 0, canvas.width, canvas.height);
       stream = canvas.captureStream(30);
-      if (motionEditorScene.music?.musicId || motionEditorScene.elements.some(item => item.type === 'sfx')) {
+      const hasSfx = Array.isArray(motionEditorScene.elements) && motionEditorScene.elements.some(item => item.type === 'sfx');
+      if (motionEditorScene.music?.musicId || hasSfx) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) throw new Error('المتصفح لا يدعم تصدير الصوت.');
         if (!motionEditorAudioContext) motionEditorAudioContext = new AudioContextClass();
@@ -5498,7 +3270,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       motionEditorExporting = true;
       const start = performance.now();
       recorder.start(1000);
-      if (status) status.textContent = `جارٍ تسجيل ${dimensions.width}×${dimensions.height} مع الموسيقى والمؤثرات…`;
+      if (status) status.textContent = `جارٍ تسجيل ${dimensions.width}×${dimensions.height} مع المؤثرات…`;
       await new Promise((resolve, reject) => {
         const draw = now => {
           if (recorder.state !== 'recording') { resolve(); return; }
@@ -5540,20 +3312,165 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     switchTab('motion-builder');
   }
 
+  async function motionQuickTweak() {
+    const input = document.getElementById('motion-quick-tweak-input');
+    const button = document.getElementById('btn-motion-quick-tweak');
+    const promptText = (input?.value || '').trim();
+    if (!promptText) return;
+    if (!motionEditorScene) {
+      showToast('لا يوجد مشهد نشط في المحرر لتعديله.', 'warning');
+      return;
+    }
+
+    const originalBtnHtml = button ? button.innerHTML : 'تطبيق';
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    }
+
+    try {
+      motionPushUndoState();
+
+      // Fast local rules for instantaneous feedback
+      let localModified = false;
+      const lower = promptText.toLowerCase();
+
+      if (/(ذهبي|gold|أصفر|yellow)/i.test(lower)) {
+        if (motionEditorScene.layers) {
+          motionEditorScene.layers.forEach(l => { if (l.style?.fill) l.style.fill = '#F59E0B'; });
+          localModified = true;
+        }
+      } else if (/(أبيض|white)/i.test(lower)) {
+        if (motionEditorScene.layers) {
+          motionEditorScene.layers.forEach(l => { if (l.style?.fill) l.style.fill = '#FFFFFF'; });
+          localModified = true;
+        }
+      } else if (/(أزرق|blue|نيلي)/i.test(lower)) {
+        if (motionEditorScene.layers) {
+          motionEditorScene.layers.forEach(l => { if (l.style?.fill) l.style.fill = '#38BDF8'; });
+          localModified = true;
+        }
+      }
+
+      if (/(كبر|تكبير|أكبر|larger|bigger)/i.test(lower)) {
+        if (motionEditorScene.layers) {
+          motionEditorScene.layers.forEach(l => { if (l.style?.fontSize) l.style.fontSize = Math.min(200, Math.round(l.style.fontSize * 1.25)); });
+          localModified = true;
+        }
+      } else if (/(صغر|تصغير|أصغر|smaller)/i.test(lower)) {
+        if (motionEditorScene.layers) {
+          motionEditorScene.layers.forEach(l => { if (l.style?.fontSize) l.style.fontSize = Math.max(16, Math.round(l.style.fontSize * 0.8)); });
+          localModified = true;
+        }
+      }
+
+      if (localModified) {
+        showToast('تم تطبيق التعديل السريع على المشهد.', 'success');
+        input.value = '';
+        motionEditorRender();
+        return;
+      }
+
+      // If complex request, send to gateway
+      const tweakInstruction = `لدينا مشهد موشن جرافيك بصيغة JSON التالية:\n${JSON.stringify(motionEditorScene)}\n\nالمطلوب إجراء التعديل التالي فقط وإرجاع JSON المشهد كاملاً متوافق مع schema v2 دون أي شرح أو markdown:\n${promptText}`;
+      const res = await fetch('api.php?action=generate_motion_scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: tweakInstruction })
+      });
+      const data = await res.json();
+      if (data.success && data.text) {
+        const parsed = window.MotionParser.parseAndRepairScene(data.text);
+        if (parsed.valid && parsed.scene) {
+          motionEditorScene = parsed.scene;
+          showToast('تم تعديل المشهد بالذكاء الاصطناعي بنجاح.', 'success');
+          input.value = '';
+          motionEditorRender();
+          return;
+        }
+      }
+      showToast('يمكنك تعديل الخصائص مباشرة من اللوحة الجانبية.', 'info');
+    } catch (err) {
+      showToast('تعذر تطبيق التعديل: ' + err.message, 'error');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalBtnHtml;
+      }
+    }
+  }
+
+  function motionShowMoreMenu() {
+    if (!motionEditorScene) return;
+    const jsonStr = JSON.stringify(motionEditorScene, null, 2);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(jsonStr).then(() => {
+        showToast('تم نسخ كود JSON للمشهد إلى الحافظة.', 'success');
+      }).catch(() => {
+        showToast('تعذر النسخ إلى الحافظة.', 'warning');
+      });
+    } else {
+      showToast('الحافظة غير متوفرة في هذا المتصفح.', 'warning');
+    }
+  }
+
   function initMotionEditorControls() {
     const text = document.getElementById('motion-edit-text');
     const font = document.getElementById('motion-edit-font');
     const size = document.getElementById('motion-edit-size');
     const color = document.getElementById('motion-edit-color');
+    const presetIn = document.getElementById('motion-edit-preset-in');
+    const presetOut = document.getElementById('motion-edit-preset-out');
+    const presetLoop = document.getElementById('motion-edit-preset-loop');
     const playhead = document.getElementById('motion-playhead');
+    const sceneName = document.getElementById('motion-scene-name');
+    const btnUndo = document.getElementById('btn-motion-undo');
+    const btnRedo = document.getElementById('btn-motion-redo');
+    const btnTweak = document.getElementById('btn-motion-quick-tweak');
+    const tweakInput = document.getElementById('motion-quick-tweak-input');
+    const btnMore = document.getElementById('btn-motion-more-menu');
+
     if (!document.getElementById('motion-editor-shell-ready')) {
       text?.addEventListener('input', () => motionEditorUpdateSelected('text', text.value));
       font?.addEventListener('change', () => motionEditorUpdateSelected('fontFamily', font.value));
       size?.addEventListener('input', () => motionEditorUpdateSelected('fontSize', Math.max(12, Math.min(220, Number(size.value) || 64))));
       color?.addEventListener('input', () => motionEditorUpdateSelected('textColor', color.value.toUpperCase()));
+      presetIn?.addEventListener('change', () => motionEditorUpdateSelected('presetIn', presetIn.value));
+      presetOut?.addEventListener('change', () => motionEditorUpdateSelected('presetOut', presetOut.value));
+      presetLoop?.addEventListener('change', () => motionEditorUpdateSelected('presetLoop', presetLoop.value));
+
+      sceneName?.addEventListener('input', () => {
+        if (motionEditorScene) motionEditorScene.name = sceneName.value;
+      });
+
+      btnUndo?.addEventListener('click', motionEditorUndo);
+      btnRedo?.addEventListener('click', motionEditorRedo);
+      btnTweak?.addEventListener('click', motionQuickTweak);
+      tweakInput?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          motionQuickTweak();
+        }
+      });
+      btnMore?.addEventListener('click', motionShowMoreMenu);
+
       playhead?.addEventListener('input', () => motionEditorSetTime(playhead.value));
       document.getElementById('motion-aspect-ratio')?.addEventListener('change', event => motionEditorSetAspect(event.target.value));
       window.addEventListener('resize', motionEditorUpdateAspectPreview);
+
+      // Keyboard shortcuts for Undo / Redo
+      window.addEventListener('keydown', e => {
+        const editorSection = document.getElementById('section-motion-editor');
+        if (!editorSection || editorSection.classList.contains('hidden')) return;
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z' || e.key === 'ئ')) {
+          e.preventDefault();
+          motionEditorUndo();
+        } else if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && (e.key === 'z' || e.key === 'Z' || e.key === 'ئ')) || e.key === 'y' || e.key === 'Y' || e.key === 'إ')) {
+          e.preventDefault();
+          motionEditorRedo();
+        }
+      });
+
       const marker = document.createElement('span');
       marker.id = 'motion-editor-shell-ready';
       marker.hidden = true;
@@ -5608,18 +3525,32 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   function updateGuestBadge() {
     const badge = document.getElementById('guest-usage-badge');
     const text = document.getElementById('guest-remaining-text');
-    if (STATE.user || (window.firebase && firebase.apps.length && firebase.auth().currentUser)) {
+    const topText = document.getElementById('top-quota-text');
+    const dashMeterGen = document.getElementById('dashboard-meter-generations');
+    const dashMeterBar = document.getElementById('dashboard-meter-bar');
+    const freeNoticeBtnText = document.getElementById('free-banner-btn-text');
+
+    if (STATE.user || (window.firebase && firebase.apps && firebase.apps.length && firebase.auth().currentUser)) {
       if (badge) badge.classList.add('hidden');
+      if (topText) topText.textContent = 'غير محدود';
+      if (dashMeterGen) dashMeterGen.textContent = 'غير محدود';
+      if (dashMeterBar) dashMeterBar.style.width = '100%';
+      if (freeNoticeBtnText) freeNoticeBtnText.textContent = 'حسابك مفعل ✓';
       return;
     }
-    if (badge) badge.classList.remove('hidden');
+    // Keep 5-attempt badge hidden from top UI as requested
+    if (badge) badge.classList.add('hidden');
     const used = Number(localStorage.getItem('mickey_guest_generations') || 0);
     const remaining = Math.max(0, 5 - used);
     if (text) text.textContent = `${remaining} من 5`;
+    if (topText) topText.textContent = `${remaining} تجريبية`;
+    if (dashMeterGen) dashMeterGen.textContent = `${remaining} تجريبية`;
+    if (dashMeterBar) dashMeterBar.style.width = `${(remaining / 5) * 100}%`;
+    if (freeNoticeBtnText) freeNoticeBtnText.textContent = 'إنشاء حساب مجاني الآن';
   }
 
   async function authorizeAndConsume(tool, count = 1) {
-    const signedInUser = STATE.user || (window.firebase ? firebase.auth().currentUser : null);
+    const signedInUser = STATE.user || (window.firebase && firebase.apps && firebase.apps.length ? firebase.auth().currentUser : null);
     if (signedInUser) {
       STATE.user = signedInUser;
       try {
@@ -5637,8 +3568,8 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
     const currentUsed = Number(localStorage.getItem('mickey_guest_generations') || 0);
     if (currentUsed >= 5) {
-      showToast('استنفذت الـ 5 محاولات المجانية للضيف. أنشئ حسابًا مجانيًا للمتابعة بدون حدود!', 'warning');
-      openAccountModal();
+      showToast('لقد استنفذت الـ 5 محاولات المجانية للزائر. يجب إنشاء حساب مجاني على الموقع لاستخدام المنصة بشكل غير محدود وبدون أي قيود!', 'warning', 8000);
+      openAccountModal(true);
       return false;
     }
 
@@ -5647,22 +3578,30 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       const newUsed = currentUsed + (Number(count) || 1);
       localStorage.setItem('mickey_guest_generations', newUsed);
       updateGuestBadge();
-      const remaining = Math.max(0, 5 - newUsed);
-      showToast(`استخدام الضيف: تبقّى ${remaining} من 5 محاولات مجانية.`, 'info');
+      if (newUsed >= 5) {
+        showToast('تنبيه: لقد استنفذت آخر محاولة مجانية كزائر (5 من 5). ستحتاج لإنشاء حساب مجاني للمحاولة القادمة.', 'warning', 8000);
+      } else {
+        const remaining = Math.max(0, 5 - newUsed);
+        showToast(`استخدام كزائر: تبقّى ${remaining} من 5 محاولات مجانية. أنشئ حسابًا لاستخدام غير محدود!`, 'info');
+      }
       return true;
     } catch (error) {
       if (error.message && error.message.includes('الخمس')) {
         localStorage.setItem('mickey_guest_generations', 5);
         updateGuestBadge();
-        showToast(error.message, 'warning');
-        openAccountModal();
+        showToast('لقد استنفذت الـ 5 محاولات المجانية للزائر. يجب إنشاء حساب مجاني على الموقع لاستخدام المنصة بشكل غير محدود وبدون أي قيود!', 'warning', 8000);
+        openAccountModal(true);
         return false;
       }
       const newUsed = currentUsed + (Number(count) || 1);
       localStorage.setItem('mickey_guest_generations', newUsed);
       updateGuestBadge();
-      const remaining = Math.max(0, 5 - newUsed);
-      showToast(`استخدام الضيف: تبقّى ${remaining} من 5 محاولات مجانية.`, 'info');
+      if (newUsed >= 5) {
+        showToast('تنبيه: لقد استنفذت آخر محاولة مجانية كزائر (5 من 5). ستحتاج لإنشاء حساب مجاني للمحاولة القادمة.', 'warning', 8000);
+      } else {
+        const remaining = Math.max(0, 5 - newUsed);
+        showToast(`استخدام كزائر: تبقّى ${remaining} من 5 محاولات مجانية. أنشئ حسابًا لاستخدام غير محدود!`, 'info');
+      }
       return true;
     }
   }
@@ -5754,11 +3693,38 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     }
   }
 
-  function openAccountModal() { document.getElementById('modal-account')?.classList.remove('hidden'); renderAccountModal(); }
-  function closeAccountModal() { document.getElementById('modal-account')?.classList.add('hidden'); }
-  function isAdminUser(user = STATE.user) { return String(user?.email || '').toLowerCase().trim() === ADMIN_EMAIL; }
+  function openAccountModal(isLimitReached = false) {
+    const modal = document.getElementById('modal-account');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
+    const alertEl = document.getElementById('guest-limit-alert');
+    const guestExceeded = Number(localStorage.getItem('mickey_guest_generations') || 0) >= 5;
+    if (alertEl) {
+      if (!STATE.user && (isLimitReached || guestExceeded)) {
+        alertEl.classList.remove('hidden');
+      } else {
+        alertEl.classList.add('hidden');
+      }
+    }
+    renderAccountModal();
+    if (!STATE.user) {
+      setTimeout(() => {
+        document.getElementById('account-email')?.focus();
+      }, 100);
+    }
+  }
 
-  let pendingPairCode = '';
+  function closeAccountModal() {
+    const modal = document.getElementById('modal-account');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
+    }
+  }
+
+  // pendingPairCode declared above
   let pendingPair2Code = '';
 
   async function completePendingExtensionPair(user) {
@@ -5782,7 +3748,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     if (!pendingPairCode || !user) return;
     const currentCode = pendingPairCode;
     try {
-      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro' });
+      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
@@ -5802,15 +3768,39 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       return;
     }
     try {
-      const begin = await accountRequest('pair_begin');
-      await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro' });
-      const tokenStr = `MKP_${begin.code}`;
+      const start = await accountRequest('pair2_start');
+      await accountRequest('pair2_complete', { code: start.code, deviceName: 'Mickey Studio · Premiere Pro' });
+      const tokenStr = `MKP2_${start.code}`;
       try { await navigator.clipboard.writeText(tokenStr); }
       catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
-      showToast('✓ تم نسخ كود ربط لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
+      showToast('✓ تم نسخ كود ربط آمن (v2) لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
       refreshConnectedDevices();
     } catch (error) {
-      showToast(error.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
+      try {
+        const begin = await accountRequest('pair_begin');
+        await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+        const tokenStr = `MKP_${begin.code}`;
+        try { await navigator.clipboard.writeText(tokenStr); }
+        catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
+        showToast('✓ تم نسخ كود ربط لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
+        refreshConnectedDevices();
+      } catch (err2) {
+        try {
+          const tokenPayload = {
+            mickey_pair: true,
+            refreshToken: user.refreshToken,
+            email: user.email || user.phoneNumber || '',
+            uid: user.uid,
+            ts: Date.now()
+          };
+          const tokenStr = 'MKP_' + btoa(unescape(encodeURIComponent(JSON.stringify(tokenPayload))));
+          try { await navigator.clipboard.writeText(tokenStr); }
+          catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
+          showToast('✓ تم نسخ كود الربط المباشر! الصقه في إضافة Premiere Pro.', 'success', 6000);
+        } catch (err3) {
+          showToast(error.message || err2.message || err3.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
+        }
+      }
     }
   }
 
@@ -5854,7 +3844,6 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     document.getElementById('account-profile-fields')?.classList.toggle('hidden', !signedIn);
     updateGuestBadge();
     if (!signedIn) return;
-    refreshConnectedDevices();
     const name = STATE.user.displayName || STATE.userProfile?.displayName || (STATE.user.email ? STATE.user.email.split('@')[0] : 'مستخدم Mickey Studio');
     const email = STATE.user.email || STATE.user.phoneNumber || STATE.userProfile?.phoneNumber || '';
     const avatar = document.getElementById('account-profile-avatar');
@@ -5876,30 +3865,161 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       adminLink.classList.toggle('hidden', !isAdminUser());
       adminLink.classList.toggle('flex', isAdminUser());
     }
+    const modalDashBtn = document.getElementById('account-modal-dashboard-btn');
+    if (modalDashBtn) {
+      const allowed = isDashboardAllowed();
+      modalDashBtn.classList.toggle('hidden', !allowed);
+      modalDashBtn.classList.toggle('flex', allowed);
+    }
   }
 
   async function createEmailAccount() {
-    const email = document.getElementById('account-email').value.trim();
-    const password = document.getElementById('account-password').value;
-    if (!email || password.length < 8) { showToast('أدخل بريدًا صحيحًا وكلمة مرور من 8 أحرف على الأقل.', 'warning'); return; }
+    SFX.playClick();
+    const emailEl = document.getElementById('account-email');
+    const passEl = document.getElementById('account-password');
+    const btn = document.getElementById('btn-account-signup') || (window.event && window.event.currentTarget);
+    const email = emailEl ? emailEl.value.trim() : '';
+    const password = passEl ? passEl.value : '';
+
+    if (!email) {
+      showToast('يرجى كتابة البريد الإلكتروني لإنشاء الحساب.', 'warning');
+      emailEl?.focus();
+      return;
+    }
+    if (!password || password.length < 8) {
+      showToast('كلمة المرور يجب أن لا تقل عن 8 أحرف أو أرقام.', 'warning');
+      passEl?.focus();
+      return;
+    }
+
+    if (!window.firebase) {
+      showToast('جاري الاتصال بخدمة فايربيز... يرجى الانتظار ثانية ثم إعادة المحاولة.', 'warning');
+      initFirebaseAuth();
+      return;
+    }
+    if (!firebase.apps.length) {
+      initFirebaseAuth();
+    }
+
+    const originalBtnText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-1.5"></i> جاري الإنشاء...';
+    }
+
     try {
       const credential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+      STATE.user = credential.user;
       try { await credential.user.sendEmailVerification(); } catch (_) {}
-      closeAccountModal(); showToast('تم إنشاء الحساب بنجاح! الخطة المجانية غير المحدودة مفعلة.', 'success');
+      closeAccountModal();
+      showToast('تم إنشاء الحساب بنجاح! الخطة المجانية غير المحدودة مفعلة.', 'success');
+      updateAuthUI(STATE.user);
+    } catch (error) {
+      console.error('[SignUp Error]', error);
+      let msg = error.message;
+      if (error.code === 'auth/email-already-in-use') {
+        msg = 'هذا البريد مسجل بالفعل! اضغط على زر "تسجيل الدخول" للدخول به.';
+      } else if (error.code === 'auth/weak-password') {
+        msg = 'كلمة المرور ضعيفة. استخدم 8 خانات على الأقل تحتوي أحرفاً وأرقاماً.';
+      } else if (error.code === 'auth/invalid-email') {
+        msg = 'صيغة البريد الإلكتروني غير صحيحة.';
+      } else if (error.code === 'auth/network-request-failed') {
+        msg = 'فشل الاتصال بالشبكة. تحقق من اتصالك بالإنترنت.';
+      }
+      showToast(msg || 'تعذر إنشاء الحساب.', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnText;
+      }
     }
-    catch (error) { showToast(error.message || 'تعذر إنشاء الحساب.', 'error'); }
   }
 
   async function signInWithEmail() {
-    const email = document.getElementById('account-email').value.trim();
-    const password = document.getElementById('account-password').value;
-    try { await firebase.auth().signInWithEmailAndPassword(email, password); closeAccountModal(); showToast('تم تسجيل الدخول بنجاح.', 'success'); }
-    catch (error) { showToast(error.message || 'تعذر تسجيل الدخول.', 'error'); }
+    SFX.playClick();
+    const emailEl = document.getElementById('account-email');
+    const passEl = document.getElementById('account-password');
+    const btn = document.getElementById('btn-account-signin') || (window.event && window.event.currentTarget);
+    const email = emailEl ? emailEl.value.trim() : '';
+    const password = passEl ? passEl.value : '';
+
+    if (!email) {
+      showToast('يرجى إدخال البريد الإلكتروني.', 'warning');
+      emailEl?.focus();
+      return;
+    }
+    if (!password) {
+      showToast('يرجى إدخال كلمة المرور.', 'warning');
+      passEl?.focus();
+      return;
+    }
+
+    if (!window.firebase) {
+      showToast('جاري الاتصال بخدمة فايربيز... يرجى الانتظار ثانية ثم إعادة المحاولة.', 'warning');
+      initFirebaseAuth();
+      return;
+    }
+    if (!firebase.apps.length) {
+      initFirebaseAuth();
+    }
+
+    const originalBtnText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin ml-1.5"></i> جاري الدخول...';
+    }
+
+    try {
+      const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+      STATE.user = userCredential.user;
+      closeAccountModal();
+      showToast('تم تسجيل الدخول بنجاح! مرحباً بك.', 'success');
+      updateAuthUI(STATE.user);
+    } catch (error) {
+      console.error('[Auth Error]', error);
+      let msg = error.message;
+      if (error.code === 'auth/user-not-found') {
+        msg = 'هذا البريد غير مسجل. يمكنك إنشاء حساب جديد بالضغط على زر "إنشاء حساب".';
+      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        msg = 'بيانات الدخول غير صحيحة. يرجى التأكد من البريد وكلمة المرور.';
+      } else if (error.code === 'auth/invalid-email') {
+        msg = 'صيغة البريد الإلكتروني غير صحيحة.';
+      } else if (error.code === 'auth/too-many-requests') {
+        msg = 'تم تعليق المحاولات مؤقتًا لكثرة المحاولات الخاطئة. انتظر دقيقة ثم حاول ثانية.';
+      } else if (error.code === 'auth/network-request-failed') {
+        msg = 'فشل الاتصال بالشبكة. تحقق من اتصالك بالإنترنت.';
+      }
+      showToast(msg || 'تعذر تسجيل الدخول. تحقق من بياناتك.', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnText;
+      }
+    }
   }
 
   async function signInWithGoogle() {
-    try { await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()); closeAccountModal(); showToast('تم تسجيل الدخول بحساب Google. الخطة المجانية غير المحدودة مفعلة.', 'success'); }
-    catch (error) { showToast(error.message || 'تعذر تسجيل الدخول عبر Google.', 'error'); }
+    SFX.playClick();
+    if (!window.firebase) {
+      showToast('جاري الاتصال بخدمة فايربيز... يرجى الانتظار ثانية ثم إعادة المحاولة.', 'warning');
+      initFirebaseAuth();
+      return;
+    }
+    if (!firebase.apps.length) {
+      initFirebaseAuth();
+    }
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const credential = await firebase.auth().signInWithPopup(provider);
+      STATE.user = credential.user;
+      closeAccountModal();
+      showToast('تم تسجيل الدخول بحساب Google. الخطة المجانية غير المحدودة مفعلة.', 'success');
+      updateAuthUI(STATE.user);
+    } catch (error) {
+      if (error.code === 'auth/popup-closed-by-user') return;
+      showToast(error.message || 'تعذر تسجيل الدخول عبر Google.', 'error');
+    }
   }
 
   async function sendPhoneCode() {
@@ -5920,7 +4040,18 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   async function signOutAccount() {
-    await firebase.auth().signOut(); STATE.user = null; STATE.userProfile = null; renderAccountModal(); updateGuestBadge(); showToast('تم تسجيل الخروج.', 'info');
+    if (window.firebase && firebase.apps?.length) {
+      try { await firebase.auth().signOut(); } catch (_) {}
+    }
+    STATE.user = null;
+    STATE.userProfile = null;
+    renderAccountModal();
+    updateAuthUI(null);
+    updateGuestBadge();
+    showToast('تم تسجيل الخروج بنجاح.', 'info');
+    if (STATE.activeTab === 'dashboard') {
+      switchTab('landing');
+    }
   }
 
   function closeAdminDashboard() { document.getElementById('modal-admin')?.classList.add('hidden'); }
@@ -5958,9 +4089,25 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const searchParams = new URLSearchParams(window.location.search);
     pendingPair2Code = searchParams.get('pair2') || searchParams.get('extension_pair2') || '';
     pendingPairCode = searchParams.get('extension_pair') || '';
+    if (!window.firebase) {
+      if (!window._firebaseRetryTimer) {
+        let attempts = 0;
+        window._firebaseRetryTimer = setInterval(() => {
+          attempts++;
+          if (window.firebase) {
+            clearInterval(window._firebaseRetryTimer);
+            window._firebaseRetryTimer = null;
+            initFirebaseAuth();
+          } else if (attempts > 30) {
+            clearInterval(window._firebaseRetryTimer);
+            window._firebaseRetryTimer = null;
+          }
+        }, 200);
+      }
+      return;
+    }
     const config = getActiveFirebaseConfig();
     try {
-      if (!window.firebase) return;
       if (!firebase.apps.length) firebase.initializeApp(config);
       if (!firebaseAuthObserverAttached) {
         firebase.auth().onAuthStateChanged(async (user) => {
@@ -5973,13 +4120,16 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
               updateAuthUI(user);
               renderAccountModal();
               await completePendingExtensionPair(user);
+              fetchUserQuotas();
             } catch (error) {
               STATE.user = null; STATE.userProfile = null;
               updateAuthUI(null);
+              fetchUserQuotas();
               showToast(error.message || 'تعذر التحقق من حالة الحساب.', 'error');
             }
           } else {
             STATE.user = null; STATE.userProfile = null; updateAuthUI(null); renderAccountModal();
+            fetchUserQuotas();
           }
         });
         firebaseAuthObserverAttached = true;
@@ -5994,41 +4144,98 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   function handleAuthClick() {
     SFX.playClick();
-    if (!window.firebase) {
-      showToast('تعذر الاتصال بخدمة الحسابات. تحقق من اتصال الإنترنت ثم أعد تحميل الموقع.', 'error');
-      return;
-    }
-
-    if (!firebase.apps.length) {
+    if (window.firebase && !firebase.apps.length) {
+      try { initFirebaseAuth(); } catch (e) { console.warn(e); }
+    } else if (!window.firebase) {
       initFirebaseAuth();
     }
-
     openAccountModal();
   }
 
   function updateAuthUI(user) {
+    const isAllowed = isDashboardAllowed(user);
+    const topDashBtn = document.getElementById('btn-top-dashboard');
+    if (topDashBtn) {
+      if (isAllowed) {
+        topDashBtn.classList.remove('hidden');
+        topDashBtn.classList.add('inline-flex');
+      } else {
+        topDashBtn.classList.add('hidden');
+        topDashBtn.classList.remove('inline-flex');
+      }
+    }
+
     const btn = document.getElementById('btn-google-login');
-    if (!btn) return;
-    btn.className = user ? 'btn-sci-fi-secondary px-3 py-1.5 text-xs rounded-xl flex items-center gap-2 border-emerald-500/40 text-emerald-300' : 'w-full btn-secondary text-xs py-2 justify-center';
-    btn.innerHTML = user
-      ? `<img src="${user.photoURL || ''}" class="w-5 h-5 rounded-full" onerror="this.style.display='none'"><span class="font-semibold">${user.displayName || user.email || user.phoneNumber || 'حسابي'}</span>`
-      : '<i class="fa-solid fa-user text-xs text-zinc-400"></i><span>تسجيل الدخول أو إنشاء حساب</span>';
-    btn.title = user ? `الحساب: ${user.email || user.phoneNumber || user.displayName}` : 'تسجيل الدخول أو إنشاء حساب';
+    if (btn) {
+      btn.className = user ? 'btn-sci-fi-secondary px-3 py-1.5 text-xs rounded-xl flex items-center gap-2 border-emerald-500/40 text-emerald-300' : 'w-full btn-secondary text-xs py-2 justify-center';
+      btn.innerHTML = user
+        ? `<img src="${user.photoURL || ''}" class="w-5 h-5 rounded-full" onerror="this.style.display='none'"><span class="font-semibold">${user.displayName || user.email || user.phoneNumber || 'حسابي'}</span>`
+        : '<i class="fa-solid fa-user text-xs text-zinc-400"></i><span>تسجيل الدخول أو إنشاء حساب</span>';
+      btn.title = user ? `الحساب: ${user.email || user.phoneNumber || user.displayName}` : 'تسجيل الدخول أو إنشاء حساب';
+    }
+
+    const topAuthBtn = document.getElementById('btn-top-auth');
+    if (topAuthBtn) {
+      if (user) {
+        topAuthBtn.className = 'btn-secondary text-xs py-1.5 px-3 rounded-xl flex items-center gap-2 border-emerald-500/30 text-emerald-300';
+        topAuthBtn.innerHTML = `
+          ${user.photoURL ? `<img src="${user.photoURL}" class="w-5 h-5 rounded-full object-cover">` : '<i class="fa-solid fa-user-check text-xs"></i>'}
+          <span class="font-semibold text-xs">${user.displayName || user.email?.split('@')[0] || 'حسابي'}</span>
+        `;
+      } else {
+        topAuthBtn.className = 'btn-primary text-xs py-2 px-4 gap-2';
+        topAuthBtn.innerHTML = `
+          <i class="fa-solid fa-user text-xs"></i>
+          <span id="top-auth-btn-text">تسجيل الدخول / حساب مجاني</span>
+        `;
+      }
+    }
+
+    updateGuestBadge();
+    updateDashboardMeters();
   }
 
   // -----------------------------------------------------------------
   // 15. INITIALIZATION
   // -----------------------------------------------------------------
+  let appInitialized = false;
   async function init() {
+    if (appInitialized) return;
+    appInitialized = true;
     await initIndexedDB();
     ['mickey_groq_key','mickey_hf_token','mickey_firebase_config'].forEach(key => localStorage.removeItem(key));
     initFirebaseAuth();
     initMotionBuilder();
+    initBeforeAfterSlider();
     updateGuestBadge();
+    fetchUserQuotas();
+    loadAndRenderToolsGrid();
+
+    // Standalone Client-Side Routing
+    const initialHash = (window.location.hash || '').replace('#', '');
+    if (initialHash === 'dashboard' && !isDashboardAllowed(STATE.user)) {
+      switchTab('landing');
+    } else if (initialHash && document.getElementById('section-' + initialHash)) {
+      switchTab(initialHash);
+    } else {
+      switchTab('landing');
+    }
+
+    window.addEventListener('hashchange', () => {
+      const currentHash = (window.location.hash || '').replace('#', '');
+      if (currentHash === 'dashboard' && !isDashboardAllowed(STATE.user)) {
+        showToast('لوحة التحكم متاحة فقط للإيميل المحدد المسجل في فاير بيز.', 'warning');
+        switchTab('landing');
+      } else if (currentHash && document.getElementById('section-' + currentHash)) {
+        switchTab(currentHash);
+      } else {
+        switchTab('landing');
+      }
+    });
     
-    onVoiceEngineChanged();
-    onVoiceGenderChanged();
-    renderVoiceGallery('all');
+    if (window.MickeyStudio?.onVoiceEngineChanged) window.MickeyStudio.onVoiceEngineChanged();
+    if (window.MickeyStudio?.onVoiceGenderChanged) window.MickeyStudio.onVoiceGenderChanged();
+    if (window.MickeyStudio?.renderVoiceGallery) window.MickeyStudio.renderVoiceGallery('all');
 
     const modelSelect = document.getElementById('image-model-select');
     if (modelSelect && modelSelect.value) {
@@ -6045,19 +4252,54 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     console.log('%c MICKEY STUDIO // AI ENGINE ONLINE ', 'background: #00F0FF; color: #000; font-weight: bold; font-size: 14px; border-radius: 4px; padding: 4px;');
   }
 
-  window.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', init);
+  } else {
+    setTimeout(init, 0);
+  }
 
   // Public API
   return {
+    STATE,
+    SFX,
+    showToast,
+    CryptoVault,
+    authorizeAndConsume,
+    gatewayFetch,
+    base64ToBlob,
+    downloadBlob,
+    findGradioFile,
+    craftMasterPhotorealisticPrompt,
+    getAllAssetsFromDB,
+    saveAssetToDB,
+    deleteAssetFromDB,
+    clearAllAssetsFromDB,
+    huggingFaceErrorMessage,
     switchTab,
+    navigateTo: switchTab,
+    renderDashboardProjects,
+    filterDashboardProjects,
+    deleteDashboardProject,
+    updateDashboardMeters,
+    toggleMobileMenu,
+    initBeforeAfterSlider,
     motionGeneratePrompt,
     motionSendToPremiere,
     motionSendEditableSceneToPremiere,
     motionCopyRepairPrompt,
     motionOpenEditor,
+    motionOpenInEditor: motionOpenEditor,
+    motionBackToLanding,
+    motionPasteFromClipboard,
+    motionAutoGenerate,
+    motionApplyExample,
     motionTogglePlayback,
     motionExportVideo,
     motionBackToPrompt,
+    motionEditorUndo,
+    motionEditorRedo,
+    motionQuickTweak,
+    motionShowMoreMenu,
     toggleSound,
     handleAuthClick,
     openAccountModal,
@@ -6073,97 +4315,18 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     signOutAccount,
     openAdminDashboard,
     closeAdminDashboard,
+    refreshConnectedDevices,
+    copyPremierePairToken,
     enhancePrompt,
     showUsedPromptModal,
-    updateModelTag,
-    selectRatio,
-    selectStyle,
-    randomizeSeed,
-    setBatchCount,
-    generateImage,
-    downloadCurrentImage,
-    transferToVideoStudio,
-    transferToPhotoLab,
-    setVideoEngine,
-    useLastGeneratedImageForVideo,
-    handleVideoImageUpload,
-    selectCameraMotion,
-    setVideoDuration,
-    renderVideo,
-    downloadCurrentVideo,
-    toggleVideoPlayback,
-    setPhotoLabTab,
-    useLastImageForPhotoLab,
-    handleBgImageUpload,
-    removeBackground,
-    downloadBgResult,
-    handleUpscaleImageUpload,
-    setUpscaleMultiplier,
-    processUpscale,
-    downloadUpscaledResult,
-    generateAiScript,
-    refineVoiceScript,
-    generateVoiceover,
-    downloadCurrentAudio,
-    onVoiceEngineChanged,
-    onVoiceGenderChanged,
-    filterVoiceGallery,
-    renderVoiceGallery,
-    selectPersonaFromGallery,
-    playPersonaPreview,
-    generatePodcastScript,
-    generatePodcastAudio,
-    downloadPodcastAudio,
-    savePodcastToVault,
-    generateAudiobookChapter,
-    downloadAudiobookAudio,
-    saveAudiobookToVault,
-    saveGeminiKeyFromVoiceStudio,
-    toggleCustomPlay,
-    skipAudio,
-    toggleAudioLoop,
-    cycleAudioSpeed,
-    setVolume,
-    toggleMute,
-    transferAudioToVideoStudio,
-    setTranscribeMode,
-    handleTranscribeFileUpload,
-    clearTranscribeFile,
-    loadSampleArabicAudio,
-    toggleLiveRecording,
-    setTranscribeOutputTab,
-    processAudioTranscription,
-    copyTranscribeCurrentText,
-    downloadTranscribeTxt,
-    downloadTranscribeSrt,
-    transferTranscribeToImageStudio,
-    transferTranscribeToVoiceStudio,
-    saveCurrentToVault,
-    saveBgResultToVault,
-    saveUpscaledToVault,
-    saveAudioToVault,
-    filterVault,
-    searchVault,
-    deleteVaultItem,
-    clearVaultConfirm,
-    exportVaultBackup,
     openLightbox,
     closeLightbox,
-    // Developer API
-    initDeveloperApiSection,
-    openDeveloperApiModal,
-    closeDeveloperApiModal,
-    toggleApiKeyVisibility,
-    copyDeveloperApiKey,
-    regenerateDeveloperApiKey,
-    copyApiBaseUrl,
-    selectApiDocEndpoint,
-    setApiSnippetLang,
-    copyCurrentCodeSnippet,
-    executeLiveApiTest,
-    copyApiTestResponse,
-    copyPremierePairToken,
-    refreshConnectedDevices,
+    updateQuotaBadge,
+    fetchUserQuotas,
+    isDashboardAllowed,
+    isAdminUser,
+    loadAndRenderToolsGrid,
+    renderToolsGrid: loadAndRenderToolsGrid
   };
 
 })();

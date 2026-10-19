@@ -1,0 +1,101 @@
+{
+  "version": 2,
+  "id": "social_reels_promo",
+  "name": "كارت ريلز وشورتس 9:16 (Reels Promo)",
+  "nameEn": "Vertical Reels Promo Card",
+  "category": "social_cards",
+  "description": "قالب طولي مخصص لريلز إنستغرام وتيك توك ويوتيوب شورتس.",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "color",
+    "color": "#090a12"
+  },
+  "layers": [
+    {
+      "id": "reels_headline",
+      "type": "text",
+      "name": "عنوان الريلز",
+      "start": 0.3,
+      "duration": 4.7,
+      "transform": {
+        "x": 540,
+        "y": 680,
+        "w": 900,
+        "h": 180,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 80,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl",
+        "backgroundBox": {
+          "fill": "brand.dark",
+          "padding": 18,
+          "radius": 16
+        }
+      },
+      "content": {
+        "text": "سر المونتاج السريع في دقيقة ⚡",
+        "textEn": "Speed Editing Secrets in 1 Min ⚡"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.6,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "reels_badge",
+      "type": "counter",
+      "name": "عداد المتابعين",
+      "start": 0.8,
+      "duration": 4.2,
+      "transform": {
+        "x": 540,
+        "y": 1100,
+        "w": 600,
+        "h": 120,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "Inter",
+        "fontSize": 90,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "ltr"
+      },
+      "content": {
+        "startVal": 0,
+        "endVal": 250000,
+        "prefix": "+",
+        "separator": ","
+      },
+      "presets": {
+        "in": {
+          "name": "counter_rollup",
+          "dur": 2,
+          "sfx": "click"
+        }
+      }
+    }
+  ]
+}

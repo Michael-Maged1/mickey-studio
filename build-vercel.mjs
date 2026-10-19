@@ -1,11 +1,19 @@
-import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 
 const output = new URL('./dist/', import.meta.url);
+await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
-for (const file of ['index.html', 'admin.html', 'app.js', 'style.css']) {
+for (const file of [
+  'index.html', 'admin.html', 'app.js', 'style.css',
+  'motion-editor.html', 'motion-editor.js', 'motion-editor.css',
+  'privacy.html', 'terms.html', 'ui-strings.js',
+  'mickey-job-queue.js', 'mickey-telemetry.js', 'mickey-tooltip.js'
+]) {
   await cp(new URL(`./${file}`, import.meta.url), new URL(`./dist/${file}`, import.meta.url));
 }
-await cp(new URL('./assets/', import.meta.url), new URL('./dist/assets/', import.meta.url), { recursive: true });
+for (const directory of ['assets', 'shared', 'studios']) {
+  await cp(new URL(`./${directory}/`, import.meta.url), new URL(`./dist/${directory}/`, import.meta.url), { recursive: true });
+}
 
 const configuredApi = (process.env.MICKEY_API_BASE_URL || '').trim();
 let apiBase = '';

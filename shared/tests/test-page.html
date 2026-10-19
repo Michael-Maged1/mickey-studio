@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mickey Studio - Motion Engine (v2) Interactive Test Suite</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <style>
+    :root {
+      --bg-dark: #0a0c14;
+      --panel-bg: #141724;
+      --panel-border: #23273c;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --accent-cyan: #06b6d4;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --font-ui: 'Cairo', system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-cyan));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 18px;
+      color: #fff;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-badge {
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+      padding: 24px;
+      flex: 1;
+      max-width: 1600px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 1100px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .viewport-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 480px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    canvas#motionCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+
+    .controls-bar {
+      padding: 16px 20px;
+      background: #111420;
+      border-top: 1px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .scrubber-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .time-readout {
+      font-family: 'Inter', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      min-width: 110px;
+      direction: ltr;
+      text-align: center;
+      background: rgba(6, 182, 212, 0.1);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    input[type="range"] {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      background: #252a3d;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--accent);
+      transition: transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+
+    .playback-buttons {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      background: #202538;
+      color: var(--text-main);
+      border: 1px solid var(--panel-border);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #2d334d;
+      border-color: #3b4263;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 2px 10px var(--accent-glow);
+    }
+
+    button.primary:hover {
+      background: #4f46e5;
+    }
+
+    select {
+      background: #202538;
+      color: var(--text-main);
+      border: 1px solid var(--panel-border);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Side Panel */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 10px;
+    }
+
+    .font-status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .font-item {
+      background: #0f121d;
+      border: 1px solid #1f2438;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .status-dot.loaded {
+      background: var(--success);
+      box-shadow: 0 0 6px var(--success);
+    }
+
+    .test-suite-results {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 380px;
+      overflow-y: auto;
+      padding-left: 4px;
+    }
+
+    .test-result-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      padding: 6px 8px;
+      background: #0f121d;
+      border-radius: 6px;
+      border-right: 3px solid var(--success);
+    }
+
+    .test-result-row.fail {
+      border-right-color: var(--danger);
+      color: #fca5a5;
+    }
+
+    .test-result-row .icon {
+      font-weight: 700;
+    }
+
+    .test-result-row.pass .icon {
+      color: var(--success);
+    }
+
+    .test-result-row.fail .icon {
+      color: var(--danger);
+    }
+
+    .scene-meta-table {
+      width: 100%;
+      font-size: 12px;
+      border-collapse: collapse;
+    }
+
+    .scene-meta-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #1a1e2f;
+    }
+
+    .scene-meta-table td:first-child {
+      color: var(--text-muted);
+      width: 40%;
+    }
+
+    .scene-meta-table td:last-child {
+      font-family: 'Inter', monospace;
+      color: var(--text-main);
+      direction: ltr;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-logo">M</div>
+      <div>
+        <div class="brand-title">Mickey Studio — محرك الرسوم والمؤثرات (v2)</div>
+      </div>
+      <span class="brand-badge">Engine v2.0 • Deterministic</span>
+    </div>
+    <div style="display:flex; gap: 10px;">
+      <button id="btnRunTests" class="primary">
+        <span>⚡ تشغيل الفحص الشامل (Tests)</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Left: Canvas & Playback -->
+    <div class="viewport-card">
+      <div class="canvas-container">
+        <canvas id="motionCanvas" width="1920" height="1080"></canvas>
+      </div>
+
+      <div class="controls-bar">
+        <div class="scrubber-row">
+          <input type="range" id="timeScrubber" min="0" max="6.0" step="0.01" value="0">
+          <div class="time-readout" id="timeDisplay">00:00.00 / 06.00s</div>
+        </div>
+
+        <div class="playback-buttons">
+          <div class="btn-group">
+            <button id="btnPlayPause" class="primary">
+              <span id="playIcon">▶ تشغيل</span>
+            </button>
+            <button id="btnRestart">↺ البداية</button>
+            <button id="btnPrevFrame">⏮ -1 إطار</button>
+            <button id="btnNextFrame">+1 إطار ⏭</button>
+          </div>
+
+          <div class="btn-group">
+            <label style="font-size: 12px; color: var(--text-muted);">المشهد:</label>
+            <select id="sceneSelector">
+              <option value="promo">عرض ترويجي عربي متكامل (Multi-font & Charts)</option>
+              <option value="counters">عدادات تفاعلية وأشكال هندسية</option>
+              <option value="typewriter">مؤثر الآلة الكاتبة والتلاشي (Typewriter & Pop)</option>
+            </select>
+
+            <label style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">السرعة:</label>
+            <select id="speedSelector">
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="1" selected>1.0x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2.0x</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Status & Inspections -->
+    <div class="side-panel">
+      <!-- Fonts Status -->
+      <div class="panel-card">
+        <h3>
+          <span>🔤 حالة الخطوط المدمجة (OFL Fonts)</span>
+        </h3>
+        <div class="font-status-grid" id="fontGrid">
+          <div class="font-item" id="font-Cairo">
+            <span style="font-family: 'Cairo'">Cairo (القاهرة)</span>
+            <div class="status-dot"></div>
+          </div>
+          <div class="font-item" id="font-Tajawal">
+            <span style="font-family: 'Tajawal'">Tajawal (تجوال)</span>
+            <div class="status-dot"></div>
+          </div>
+          <div class="font-item" id="font-Almarai">
+            <span style="font-family: 'Almarai'">Almarai (المراعي)</span>
+            <div class="status-dot"></div>
+          </div>
+          <div class="font-item" id="font-NotoKufi">
+            <span style="font-family: 'Noto Kufi Arabic'">Noto Kufi</span>
+            <div class="status-dot"></div>
+          </div>
+          <div class="font-item" id="font-Readex">
+            <span style="font-family: 'Readex Pro'">Readex Pro</span>
+            <div class="status-dot"></div>
+          </div>
+          <div class="font-item" id="font-Inter">
+            <span style="font-family: 'Inter'">Inter (English)</span>
+            <div class="status-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scene Metadata -->
+      <div class="panel-card">
+        <h3>
+          <span>⚙ تفاصيل المشهد النشط</span>
+        </h3>
+        <table class="scene-meta-table">
+          <tbody>
+            <tr><td>الاسم</td><td id="metaName">العرض الترويجي</td></tr>
+            <tr><td>الأبعاد</td><td id="metaDimensions">1920 × 1080</td></tr>
+            <tr><td>معدل الإطارات</td><td id="metaFps">30 fps</td></tr>
+            <tr><td>المدة الإجمالية</td><td id="metaDuration">6.0 ثانية</td></tr>
+            <tr><td>عدد الطبقات</td><td id="metaLayers">6 طبقات</td></tr>
+            <tr><td>الإطار الحالي</td><td id="metaCurrentFrame">#0 (0.00s)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Test Suite Output -->
+      <div class="panel-card" style="flex: 1;">
+        <h3>
+          <span>🧪 تقرير الاختبارات الآلية</span>
+          <span id="testSummaryBadge" style="font-size: 11px; margin-right: auto; color: var(--accent-cyan);">جاهز</span>
+        </h3>
+        <div class="test-suite-results" id="testResultsBox">
+          <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 20px 0;">
+            اضغط على زر <strong>⚡ تشغيل الفحص الشامل</strong> لتنفيذ جميع اختبارات المحرك وتأكيد المطابقة 100%.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../motion-engine.js"></script>
+  <script>
+    // -----------------------------------------------------------------
+    // SAMPLE SCENES
+    // -----------------------------------------------------------------
+    const SCENES = {
+      promo: {
+        version: 2,
+        id: 'scene_promo_01',
+        name: 'العرض الترويجي لـ Mickey Studio',
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        duration: 6.0,
+        background: {
+          type: 'gradient',
+          gradient: {
+            type: 'radial',
+            x0: 960, y0: 540, r0: 0,
+            x1: 960, y1: 540, r1: 1080,
+            stops: [
+              { offset: 0, color: '#16192b' },
+              { offset: 1, color: '#090a10' }
+            ]
+          }
+        },
+        layers: [
+          // Background accent donut
+          {
+            id: 'bg_donut',
+            type: 'shape',
+            name: 'حلقة ديكور دائرية',
+            start: 0,
+            duration: 6.0,
+            transform: { x: 1650, y: 220, w: 260, h: 260, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 0.25 },
+            style: { fill: '#6366f1', stroke: '#06b6d4', strokeWidth: 4, radius: 130 },
+            content: { shape: 'donut', innerRadius: 90 },
+            presets: {
+              loop: { name: 'spin', speed: 0.2 }
+            }
+          },
+          // Main Headline
+          {
+            id: 'main_title',
+            type: 'text',
+            name: 'العنوان الرئيسي',
+            start: 0.3,
+            duration: 5.7,
+            transform: { x: 960, y: 280, w: 1400, h: 120, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: {
+              fill: '#ffffff',
+              font: 'Cairo',
+              fontSize: 72,
+              fontWeight: '900',
+              align: 'center',
+              direction: 'rtl',
+              shadow: { color: 'rgba(99, 102, 241, 0.6)', blur: 24, x: 0, y: 6 }
+            },
+            content: { text: 'استوديو ميكي • أسرع محرك موشن في بريمير' },
+            presets: {
+              in: { name: 'pop', dur: 0.8, ease: 'easeOutBack' },
+              loop: { name: 'float', period: 3.5, params: { amplitude: 12 } }
+            }
+          },
+          // Sub-headline (Tajawal font)
+          {
+            id: 'sub_title',
+            type: 'text',
+            name: 'العنوان الفرعي',
+            start: 0.9,
+            duration: 5.1,
+            transform: { x: 960, y: 410, w: 1100, h: 80, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: {
+              fill: '#94a3b8',
+              font: 'Tajawal',
+              fontSize: 34,
+              fontWeight: '500',
+              align: 'center',
+              direction: 'rtl'
+            },
+            content: { text: 'صناعة المشاهد التفاعلية، عدادات الأرقام، والرسوم البيانية بدقة متناهية' },
+            presets: {
+              in: { name: 'slideUp', dur: 0.6, ease: 'easeOutCubic' }
+            }
+          },
+          // Metric Counter Box
+          {
+            id: 'metric_box',
+            type: 'shape',
+            name: 'خلفية كارت الإحصائيات',
+            start: 1.2,
+            duration: 4.8,
+            transform: { x: 550, y: 680, w: 420, h: 220, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 0.9 },
+            style: {
+              fill: '#151929',
+              stroke: '#282f4d',
+              strokeWidth: 2,
+              radius: 16,
+              shadow: { color: 'rgba(0,0,0,0.5)', blur: 20, x: 0, y: 10 }
+            },
+            content: { shape: 'rounded-rect' },
+            presets: {
+              in: { name: 'pop', dur: 0.6, ease: 'easeOutBack' }
+            }
+          },
+          // Counter Layer inside Metric Box
+          {
+            id: 'metric_num',
+            type: 'counter',
+            name: 'عداد المشاهدات',
+            start: 1.5,
+            duration: 4.5,
+            transform: { x: 550, y: 660, w: 380, h: 90, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: {
+              fill: '#06b6d4',
+              font: 'Inter',
+              fontSize: 60,
+              fontWeight: '800',
+              align: 'center',
+              direction: 'ltr'
+            },
+            content: {
+              startVal: 0,
+              endVal: 125000,
+              prefix: '+',
+              suffix: '',
+              decimals: 0,
+              separator: ','
+            },
+            keyframes: {
+              'content.value': [
+                { t: 0, v: 0, ease: 'easeOutCubic' },
+                { t: 2.2, v: 125000, ease: 'easeOutCubic' }
+              ]
+            }
+          },
+          // Counter Label (Almarai font)
+          {
+            id: 'metric_lbl',
+            type: 'text',
+            name: 'تسمية العداد',
+            start: 1.6,
+            duration: 4.4,
+            transform: { x: 550, y: 735, w: 380, h: 40, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: {
+              fill: '#94a3b8',
+              font: 'Almarai',
+              fontSize: 22,
+              fontWeight: '700',
+              align: 'center',
+              direction: 'rtl'
+            },
+            content: { text: 'مشهد تم تصديره بنجاح' }
+          },
+          // Bar Chart Layer
+          {
+            id: 'chart_box',
+            type: 'shape',
+            name: 'خلفية الرسم البياني',
+            start: 1.4,
+            duration: 4.6,
+            transform: { x: 1250, y: 680, w: 560, h: 220, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 0.9 },
+            style: {
+              fill: '#151929',
+              stroke: '#282f4d',
+              strokeWidth: 2,
+              radius: 16,
+              shadow: { color: 'rgba(0,0,0,0.5)', blur: 20, x: 0, y: 10 }
+            },
+            content: { shape: 'rounded-rect' },
+            presets: {
+              in: { name: 'pop', dur: 0.6, ease: 'easeOutBack' }
+            }
+          },
+          {
+            id: 'main_chart',
+            type: 'chart',
+            name: 'مخطط بياني تصاعدي',
+            start: 1.8,
+            duration: 4.2,
+            transform: { x: 1250, y: 680, w: 480, h: 140, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: {
+              fill: '#6366f1',
+              stroke: '#818cf8',
+              strokeWidth: 2,
+              font: 'Readex Pro',
+              fontSize: 16
+            },
+            content: {
+              chartType: 'bar',
+              data: [
+                { label: 'السبت', value: 45, color: '#6366f1' },
+                { label: 'الأحد', value: 72, color: '#8b5cf6' },
+                { label: 'الإثنين', value: 90, color: '#06b6d4' },
+                { label: 'الثلاثاء', value: 110, color: '#10b981' }
+              ]
+            },
+            keyframes: {
+              'style.progress': [
+                { t: 0, v: 0, ease: 'easeOutCubic' },
+                { t: 1.8, v: 1, ease: 'easeOutCubic' }
+              ]
+            }
+          }
+        ]
+      },
+
+      counters: {
+        version: 2,
+        id: 'scene_counters_02',
+        name: 'عرض العدادات والأشكال التفاعلية',
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        duration: 5.0,
+        background: { type: 'color', color: '#0c0e18' },
+        layers: [
+          {
+            id: 'c_title',
+            type: 'text',
+            name: 'العنوان',
+            start: 0.2,
+            duration: 4.8,
+            transform: { x: 960, y: 300, w: 1000, h: 100, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: { fill: '#ffffff', font: 'Cairo', fontSize: 64, fontWeight: '800', align: 'center', direction: 'rtl' },
+            content: { text: 'عدادات رقمية سلسة قابلة للتخصيص' },
+            presets: { in: { name: 'slideDown', dur: 0.6 } }
+          },
+          {
+            id: 'counter_currency',
+            type: 'counter',
+            name: 'عداد العملة',
+            start: 0.6,
+            duration: 4.4,
+            transform: { x: 960, y: 550, w: 800, h: 150, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: { fill: '#10b981', font: 'Inter', fontSize: 100, fontWeight: '900', align: 'center', direction: 'ltr' },
+            content: { startVal: 0, endVal: 98500.50, prefix: '$', decimals: 2, separator: ',' },
+            keyframes: {
+              'content.value': [
+                { t: 0, v: 0, ease: 'easeOutExpo' },
+                { t: 2.5, v: 98500.50, ease: 'easeOutExpo' }
+              ]
+            },
+            presets: {
+              loop: { name: 'pulse', period: 2.0, params: { scale: 1.05 } }
+            }
+          }
+        ]
+      },
+
+      typewriter: {
+        version: 2,
+        id: 'scene_tw_03',
+        name: 'مؤثر الكتابة المتدرجة (Typewriter)',
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        duration: 5.0,
+        background: { type: 'color', color: '#090b12' },
+        layers: [
+          {
+            id: 'tw_text',
+            type: 'text',
+            name: 'نص الآلة الكاتبة',
+            start: 0.5,
+            duration: 4.5,
+            transform: { x: 960, y: 500, w: 1200, h: 200, rotation: 0, scaleX: 1, scaleY: 1, anchorX: 0.5, anchorY: 0.5, opacity: 1 },
+            style: {
+              fill: '#38bdf8',
+              font: 'Noto Kufi Arabic',
+              fontSize: 54,
+              fontWeight: '700',
+              align: 'center',
+              direction: 'rtl',
+              lineHeight: 1.4
+            },
+            content: { text: 'الذكاء الاصطناعي يصنع الفارق في كل تفصيلة من مونتاجك.' },
+            presets: {
+              in: { name: 'typewriter', dur: 2.5, ease: 'linear' }
+            }
+          }
+        ]
+      }
+    };
+
+    // -----------------------------------------------------------------
+    // STATE & CONTROLS
+    // -----------------------------------------------------------------
+    let currentScene = SCENES.promo;
+    let currentTime = 0;
+    let isPlaying = false;
+    let playbackSpeed = 1.0;
+    let animFrameId = null;
+    let lastTimestamp = 0;
+
+    const canvas = document.getElementById('motionCanvas');
+    const timeScrubber = document.getElementById('timeScrubber');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const btnPlayPause = document.getElementById('btnPlayPause');
+    const playIcon = document.getElementById('playIcon');
+    const btnRestart = document.getElementById('btnRestart');
+    const btnPrevFrame = document.getElementById('btnPrevFrame');
+    const btnNextFrame = document.getElementById('btnNextFrame');
+    const sceneSelector = document.getElementById('sceneSelector');
+    const speedSelector = document.getElementById('speedSelector');
+    const btnRunTests = document.getElementById('btnRunTests');
+    const testResultsBox = document.getElementById('testResultsBox');
+    const testSummaryBadge = document.getElementById('testSummaryBadge');
+
+    function updateSceneMetadata() {
+      document.getElementById('metaName').textContent = currentScene.name;
+      document.getElementById('metaDimensions').textContent = `${currentScene.width} × ${currentScene.height}`;
+      document.getElementById('metaFps').textContent = `${currentScene.fps} fps`;
+      document.getElementById('metaDuration').textContent = `${currentScene.duration.toFixed(1)} ثانية`;
+      document.getElementById('metaLayers').textContent = `${currentScene.layers ? currentScene.layers.length : 0} طبقات`;
+      timeScrubber.max = currentScene.duration;
+    }
+
+    function render() {
+      MotionEngine.renderFrame(currentScene, currentTime, canvas);
+
+      // Scrubber and time readout update
+      timeScrubber.value = currentTime;
+      const frameNum = Math.floor(currentTime * currentScene.fps);
+      timeDisplay.textContent = `${currentTime.toFixed(2)}s / ${currentScene.duration.toFixed(2)}s (#${frameNum})`;
+      document.getElementById('metaCurrentFrame').textContent = `#${frameNum} (${currentTime.toFixed(2)}s)`;
+    }
+
+    function tick(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const deltaSec = (timestamp - lastTimestamp) / 1000 * playbackSpeed;
+      lastTimestamp = timestamp;
+
+      if (isPlaying) {
+        currentTime += deltaSec;
+        if (currentTime >= currentScene.duration) {
+          currentTime = currentScene.duration;
+          pause();
+        }
+        render();
+        animFrameId = requestAnimationFrame(tick);
+      }
+    }
+
+    function play() {
+      if (currentTime >= currentScene.duration) currentTime = 0;
+      isPlaying = true;
+      playIcon.textContent = '⏸ إيقاف مؤقت';
+      lastTimestamp = performance.now();
+      animFrameId = requestAnimationFrame(tick);
+    }
+
+    function pause() {
+      isPlaying = false;
+      playIcon.textContent = '▶ تشغيل';
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+    }
+
+    btnPlayPause.addEventListener('click', () => {
+      if (isPlaying) pause();
+      else play();
+    });
+
+    btnRestart.addEventListener('click', () => {
+      pause();
+      currentTime = 0;
+      render();
+    });
+
+    btnPrevFrame.addEventListener('click', () => {
+      pause();
+      const frameDur = 1 / currentScene.fps;
+      currentTime = Math.max(0, currentTime - frameDur);
+      render();
+    });
+
+    btnNextFrame.addEventListener('click', () => {
+      pause();
+      const frameDur = 1 / currentScene.fps;
+      currentTime = Math.min(currentScene.duration, currentTime + frameDur);
+      render();
+    });
+
+    timeScrubber.addEventListener('input', (e) => {
+      pause();
+      currentTime = parseFloat(e.target.value);
+      render();
+    });
+
+    sceneSelector.addEventListener('change', (e) => {
+      pause();
+      currentScene = SCENES[e.target.value];
+      currentTime = 0;
+      updateSceneMetadata();
+      render();
+    });
+
+    speedSelector.addEventListener('change', (e) => {
+      playbackSpeed = parseFloat(e.target.value);
+    });
+
+    // -----------------------------------------------------------------
+    // FONT PRELOADING CHECK
+    // -----------------------------------------------------------------
+    async function checkFonts() {
+      const fontsToCheck = [
+        { name: 'Cairo', elId: 'font-Cairo' },
+        { name: 'Tajawal', elId: 'font-Tajawal' },
+        { name: 'Almarai', elId: 'font-Almarai' },
+        { name: 'Noto Kufi Arabic', elId: 'font-NotoKufi' },
+        { name: 'Readex Pro', elId: 'font-Readex' },
+        { name: 'Inter', elId: 'font-Inter' }
+      ];
+
+      try {
+        await MotionEngine.ensureFontsLoaded(fontsToCheck.map(f => f.name), 3000);
+      } catch (err) {
+        console.warn('Font loading warning:', err);
+      }
+
+      fontsToCheck.forEach(f => {
+        const loaded = document.fonts ? document.fonts.check(`16px "${f.name}"`) : true;
+        const el = document.getElementById(f.elId);
+        if (el && loaded) {
+          el.querySelector('.status-dot').classList.add('loaded');
+        }
+      });
+    }
+
+    // -----------------------------------------------------------------
+    // IN-BROWSER AUTOMATED UNIT TEST RUNNER
+    // -----------------------------------------------------------------
+    btnRunTests.addEventListener('click', () => {
+      testResultsBox.innerHTML = '';
+      testSummaryBadge.textContent = 'جارٍ الفحص...';
+      testSummaryBadge.style.color = '#eab308';
+
+      const results = [];
+      function runAssert(name, fn) {
+        const t0 = performance.now();
+        try {
+          fn();
+          const elapsed = (performance.now() - t0).toFixed(2);
+          results.push({ name, pass: true, elapsed });
+        } catch (err) {
+          results.push({ name, pass: false, error: err.message });
+        }
+      }
+
+      // 1. Easings
+      runAssert('Linear Easing Bounds (0, 0.5, 1)', () => {
+        const lin = MotionEngine.getEasing('linear');
+        if (lin(0) !== 0 || lin(0.5) !== 0.5 || lin(1) !== 1) throw new Error('Linear values mismatch');
+      });
+
+      runAssert('Quad, Cubic, and Expo Easing Functions', () => {
+        const q = MotionEngine.getEasing('easeInQuad');
+        const c = MotionEngine.getEasing('easeOutCubic');
+        if (q(0.5) !== 0.25) throw new Error('easeInQuad error');
+        if (c(0) !== 0 || c(1) !== 1) throw new Error('easeOutCubic boundary error');
+      });
+
+      runAssert('Back & Elastic Easings Overshoot Precision', () => {
+        const back = MotionEngine.getEasing('easeOutBack');
+        const elastic = MotionEngine.getEasing('easeOutElastic');
+        if (back(0) !== 0 || back(1) !== 1) throw new Error('Back boundary failed');
+        if (elastic(0) !== 0 || elastic(1) !== 1) throw new Error('Elastic boundary failed');
+      });
+
+      runAssert('Cubic-Bezier Parser and Newton-Raphson Solver', () => {
+        const solver = MotionEngine.getEasing('cubic-bezier(0.42, 0, 0.58, 1)');
+        if (typeof solver !== 'function') throw new Error('Failed to parse cubic-bezier');
+        if (solver(0) !== 0 || solver(1) !== 1) throw new Error('Cubic bezier boundary failed');
+        const mid = solver(0.5);
+        if (mid < 0.4 || mid > 0.6) throw new Error(`Unexpected mid value ${mid}`);
+      });
+
+      // 2. Scene Schema v2 Validation
+      runAssert('Schema v2 Validation on Demo Scenes', () => {
+        const v1 = MotionEngine.validateScene(SCENES.promo);
+        if (!v1.valid) throw new Error('Promo scene invalid: ' + v1.errors.join('; '));
+        const v2 = MotionEngine.validateScene(SCENES.counters);
+        if (!v2.valid) throw new Error('Counters scene invalid: ' + v2.errors.join('; '));
+      });
+
+      runAssert('Schema Validation Rejects Corrupt Scenes', () => {
+        const bad = { version: 1, width: -10, layers: [] };
+        const res = MotionEngine.validateScene(bad);
+        if (res.valid) throw new Error('Should have rejected bad scene');
+      });
+
+      // 3. Arabic & RTL Engine
+      runAssert('RTL Detection & Arabic Presentation Forms Shaping', () => {
+        if (!MotionEngine.isRTLText('مرحبا بالعالم')) throw new Error('Failed to detect pure Arabic RTL');
+        if (!MotionEngine.isRTLText('Mickey Studio - استوديو ميكي')) throw new Error('Failed to detect mixed RTL');
+        if (MotionEngine.isRTLText('Pure English Text')) throw new Error('False positive for English text');
+
+        const shaped = MotionEngine.shapeArabic('لا شريك');
+        if (shaped.charCodeAt(0) < 0xfef5 || shaped.charCodeAt(0) > 0xfefc) {
+          throw new Error('Laam-Alef ligature failed');
+        }
+      });
+
+      runAssert('Multi-line Text Wrapping without Word Fragmentation', () => {
+        const text = 'تصميم احترافي للمشاهد التفاعلية السريعة';
+        const lines = MotionEngine.layoutTextLines(text, 160, t => t.length * 10);
+        if (lines.length < 2) throw new Error('Did not wrap lines properly');
+      });
+
+      // 4. Deterministic Rendering
+      runAssert('Deterministic Frame Rendering (Identical Hashes)', () => {
+        const offscreen1 = document.createElement('canvas');
+        offscreen1.width = 320; offscreen1.height = 180;
+        const offscreen2 = document.createElement('canvas');
+        offscreen2.width = 320; offscreen2.height = 180;
+
+        MotionEngine.renderFrame(SCENES.promo, 2.5, offscreen1);
+        MotionEngine.renderFrame(SCENES.promo, 2.5, offscreen2);
+
+        const data1 = offscreen1.getContext('2d').getImageData(0,0,320,180).data;
+        const data2 = offscreen2.getContext('2d').getImageData(0,0,320,180).data;
+        for (let i = 0; i < data1.length; i += 100) {
+          if (data1[i] !== data2[i]) throw new Error('Non-deterministic pixel output at index ' + i);
+        }
+      });
+
+      // Render Results
+      let passCount = 0;
+      results.forEach(r => {
+        const row = document.createElement('div');
+        row.className = `test-result-row ${r.pass ? 'pass' : 'fail'}`;
+        row.innerHTML = `
+          <span class="icon">${r.pass ? '✓' : '✕'}</span>
+          <span style="flex:1;">${r.name}</span>
+          <span style="font-family: 'Inter', monospace; color: var(--text-muted);">${r.pass ? r.elapsed + 'ms' : r.error}</span>
+        `;
+        testResultsBox.appendChild(row);
+        if (r.pass) passCount++;
+      });
+
+      if (passCount === results.length) {
+        testSummaryBadge.textContent = `نجح ${passCount}/${results.length} (100%)`;
+        testSummaryBadge.style.color = 'var(--success)';
+      } else {
+        testSummaryBadge.textContent = `فشل ${results.length - passCount}/${results.length}`;
+        testSummaryBadge.style.color = 'var(--danger)';
+      }
+    });
+
+    // Initialize
+    updateSceneMetadata();
+    checkFonts().then(() => {
+      render();
+    });
+  </script>
+</body>
+</html>

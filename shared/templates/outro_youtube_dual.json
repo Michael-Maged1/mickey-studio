@@ -1,0 +1,127 @@
+{
+  "version": 2,
+  "id": "outro_youtube_dual",
+  "name": "شاشة نهاية يوتيوب (YouTube Dual Endscreen)",
+  "nameEn": "YouTube Dual Video End Screen",
+  "category": "outro_endscreens",
+  "description": "شاشة خاتمة 16:9 مع إطارين لمقاطع الفيديو ودائرة للاشتراك في القناة.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "color",
+    "color": "#0b0d14"
+  },
+  "layers": [
+    {
+      "id": "box_vid_1",
+      "type": "shape",
+      "name": "إطار الفيديو 1",
+      "start": 0.3,
+      "duration": 5.7,
+      "transform": {
+        "x": 520,
+        "y": 540,
+        "w": 640,
+        "h": 360,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.primary",
+        "strokeWidth": 3,
+        "radius": 16
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "box_vid_2",
+      "type": "shape",
+      "name": "إطار الفيديو 2",
+      "start": 0.5,
+      "duration": 5.5,
+      "transform": {
+        "x": 1400,
+        "y": 540,
+        "w": 640,
+        "h": 360,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.secondary",
+        "strokeWidth": 3,
+        "radius": 16
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "sub_circle",
+      "type": "shape",
+      "name": "دائرة الاشتراك",
+      "start": 0.8,
+      "duration": 5.2,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 180,
+        "h": 180,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.primary",
+        "stroke": "brand.accent",
+        "strokeWidth": 4,
+        "radius": 90
+      },
+      "content": {
+        "shape": "circle"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5,
+          "sfx": "pop"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 2
+        }
+      }
+    }
+  ]
+}

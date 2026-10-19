@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>سياسة الخصوصية // Mickey Studio</title>
+  <link rel="icon" type="image/png" href="assets/mickey-studio-logo.png?v=1">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-[#09090B] text-zinc-100 min-h-screen overflow-y-auto font-sans p-4 md:p-10 flex flex-col items-center">
+
+  <div class="max-w-3xl w-full space-y-8">
+    
+    <!-- Top Bar -->
+    <div class="flex items-center justify-between pb-6 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <img src="assets/mickey-studio-logo.png" alt="Mickey Studio" class="w-10 h-10 object-contain">
+        <div>
+          <h1 class="text-lg font-bold text-white tracking-tight">MICKEY STUDIO</h1>
+          <p class="text-xs text-zinc-400">استوديو الذكاء الاصطناعي والموشن جرافيك</p>
+        </div>
+      </div>
+      <a href="index.html" class="btn-secondary text-xs py-2 px-3 flex items-center gap-2">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>العودة للمنصة</span>
+      </a>
+    </div>
+
+    <!-- Legal Disclaimer Banner -->
+    <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs leading-relaxed flex items-start gap-3">
+      <i class="fa-solid fa-triangle-exclamation text-base shrink-0 mt-0.5"></i>
+      <div>
+        <strong class="font-bold">مسودة للمراجعة:</strong>
+        هذه الوثيقة مسودة استرشادية توضح التزامات الخصوصية وحماية البيانات في Mickey Studio للاطلاع والمراجعة وليست صيغة قانونية معتمدة من جهة استشارية رسمية.
+      </div>
+    </div>
+
+    <!-- Document Content -->
+    <article class="studio-card p-6 md:p-8 space-y-6 text-sm text-zinc-300 leading-relaxed">
+      
+      <header class="space-y-2">
+        <h2 class="text-2xl font-bold text-white">سياسة الخصوصية وحماية البيانات (Privacy Policy)</h2>
+        <p class="text-xs text-zinc-500 font-mono">آخر تحديث: أكتوبر 2026</p>
+      </header>
+
+      <section class="space-y-3">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <i class="fa-solid fa-lock text-xs"></i>
+          1. مبدأ الخصوصية بالتصميم (Privacy by Design)
+        </h3>
+        <p>
+          نحن نؤمن بأن إبداعك ملك لك وحدك. صُممت منصة Mickey Studio وفق معيار الخصوصية أولاً، بحيث تُعالج وتُخزن كافة أعمالك وتصاميمك محلياً داخل متصفحك أو جهازك دون مشاركتها أو بيعها لأي أطراف ثالثة.
+        </p>
+      </section>
+
+      <section class="space-y-3">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <i class="fa-solid fa-database text-xs"></i>
+          2. التخزين المحلي المشفر (Local Encrypted Storage)
+        </h3>
+        <p>
+          عند حفظ الصور، الفيديوهات، الملفات الصوتية، أو مفاتيح API الخاصة بك:
+        </p>
+        <ul class="list-disc list-inside space-y-1 text-zinc-400 pr-2">
+          <li>تُحفظ البيانات داخل قاعدة بيانات متصفحك المحلية (IndexedDB).</li>
+          <li>تُشفر المفاتيح الحساسة محلياً باستخدام خوارزمية التشفير القياسية AES-GCM 256-bit.</li>
+          <li>لا يتم رفع ملفاتك أو وسائطك إلى أي خادم تخزين مركزي تابع لنا ما لم تختر بنفسك مزامنة مشهد مع بريمير برو.</li>
+        </ul>
+      </section>
+
+      <section class="space-y-3">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <i class="fa-solid fa-share-nodes text-xs"></i>
+          3. معالجة الوسائط عبر الأطراف الثالثة (Third-Party Processing)
+        </h3>
+        <p>
+          لتوفير ميزات الذكاء الاصطناعي المتقدمة (توليد الصور، تفريغ الصوت، تحسين المطالبات)، يتم إرسال طلبات محددة ومؤقتة إلى مزودي الذكاء الاصطناعي الخارجيين:
+        </p>
+        <ul class="list-disc list-inside space-y-1 text-zinc-400 pr-2">
+          <li><strong>توليد الصور:</strong> تُرسل المطالبة النصية والأبعاد المختارة عبر واجهة مؤقتة لتوليد الصورة وإرجاعها مباشرة لمتصفحك دون تخزين دائم على الخوادم.</li>
+          <li><strong>التعليق الصوتي والتفريغ:</strong> تُرسل النصوص أو المقاطع الصوتية لمعالجتها فورياً، ولا تُستخدم بياناتك لتدريب النماذج العامة.</li>
+          <li><strong>الربط مع بريمير:</strong> يتم تبادل كود المشهد JSON عبر قناة مشفرة ومؤقتة بصلاحية تنتهي تلقائياً خلال 24 ساعة.</li>
+        </ul>
+      </section>
+
+      <section class="space-y-3">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <i class="fa-solid fa-chart-line text-xs"></i>
+          4. رصد الأخطاء البرمجية المجهول (Zero-Data Error Telemetry)
+        </h3>
+        <p>
+          لضمان استقرار المنصة وإصلاح الأعطال البرمجية، قد يرسل المتصفح تقريراً تقنياً مجهول الهوية عند حدوث خطأ برمجي غير متوقع. يتضمن التقرير فقط: نوع الخطأ، رقم السطر في الملف، وإصدار المتصفح. <strong>يُمنع بشكل صارم</strong> تضمين أي أسماء، نصوص مطالبات، مفاتيح، أو بيانات شخصية في تقارير الأخطاء.
+        </p>
+      </section>
+
+      <section class="space-y-3">
+        <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+          <i class="fa-solid fa-trash-arrow-up text-xs"></i>
+          5. التحكم في بياناتك وحذفها
+        </h3>
+        <p>
+          لديك السيطرة المطلقة على بياناتك في أي وقت: يمكنك مسح خزنك بالكامل، حذف عناصر محددة، أو تصدير نسخة احتياطية محلية بصيغة JSON بضغطة زر واحدة من تبويب "معرض أعمالي".
+        </p>
+      </section>
+
+    </article>
+
+    <!-- Footer Links -->
+    <div class="flex items-center justify-between text-xs text-zinc-500 pt-4 pb-12">
+      <div class="flex items-center gap-4">
+        <a href="terms.html" class="hover:text-indigo-400 transition-colors">شروط الاستخدام</a>
+        <span>•</span>
+        <a href="index.html" class="hover:text-indigo-400 transition-colors">الرئيسية</a>
+      </div>
+      <div>
+        <span>© 2026 Mickey Studio. بياناتك مشفرة ومحمية.</span>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

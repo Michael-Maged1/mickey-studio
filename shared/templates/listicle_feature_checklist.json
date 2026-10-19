@@ -1,0 +1,166 @@
+{
+  "version": 2,
+  "id": "listicle_feature_checklist",
+  "name": "قائمة المميزات الطولية (Feature Checklist)",
+  "nameEn": "Vertical Feature Checklist",
+  "category": "listicles",
+  "description": "قائمة مميزات بتنسيق 9:16 مع علامات صح خضراء متوهجة.",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 5.5,
+  "background": {
+    "type": "color",
+    "color": "#090a12"
+  },
+  "layers": [
+    {
+      "id": "feat_head",
+      "type": "text",
+      "name": "العنوان",
+      "start": 0.3,
+      "duration": 5.2,
+      "transform": {
+        "x": 540,
+        "y": 520,
+        "w": 850,
+        "h": 140,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 64,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "لماذا يختار المحترفون أدواتنا؟",
+        "textEn": "Why Pros Choose Our Tools?"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.6
+        }
+      }
+    },
+    {
+      "id": "f1",
+      "type": "text",
+      "name": "ميزة 1",
+      "start": 0.8,
+      "duration": 4.7,
+      "transform": {
+        "x": 540,
+        "y": 780,
+        "w": 800,
+        "h": 60,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.success",
+        "font": "brand.heading",
+        "fontSize": 40,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "✓ سرعة فائقة في إنتاج المشاهد",
+        "textEn": "✓ Lightning fast render speed"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.4
+        }
+      }
+    },
+    {
+      "id": "f2",
+      "type": "text",
+      "name": "ميزة 2",
+      "start": 1.2,
+      "duration": 4.3,
+      "transform": {
+        "x": 540,
+        "y": 900,
+        "w": 800,
+        "h": 60,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.success",
+        "font": "brand.heading",
+        "fontSize": 40,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "✓ دعم كامل ودقيق للغة العربية",
+        "textEn": "✓ Native Arabic Typography"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.4
+        }
+      }
+    },
+    {
+      "id": "f3",
+      "type": "text",
+      "name": "ميزة 3",
+      "start": 1.6,
+      "duration": 3.9,
+      "transform": {
+        "x": 540,
+        "y": 1020,
+        "w": 800,
+        "h": 60,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.success",
+        "font": "brand.heading",
+        "fontSize": 40,
+        "fontWeight": 700,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "✓ تكامل فوري وبنقرة لبريمير",
+        "textEn": "✓ One-Click Premiere Pro Sync"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.4
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "version": 2,
+  "id": "trans_zoom_flash",
+  "name": "انتقال فلاش وزووم فائق (Zoom Flash Impact)",
+  "nameEn": "Zoom Flash Energy Transition",
+  "category": "transitions",
+  "description": "انتقال سريع مع ارتداد تكبير وفلاش ضوئي أبيض خاطف.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 1.5,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "flash_box",
+      "type": "shape",
+      "name": "فلاش أبيض",
+      "start": 0,
+      "duration": 1.2,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 1920,
+        "h": 1080,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "#ffffff"
+      },
+      "content": {
+        "shape": "rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.3,
+          "sfx": "impact"
+        },
+        "out": {
+          "name": "fade",
+          "dur": 0.7
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // AUTHENTICATION & AUTHORIZATION HELPERS
+    // -------------------------------------------------------------------------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    // Admin verified strictly via server-minted custom claims in auth token
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin'
+      );
+    }
+
+    // Default deny for all unspecified collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // USERS COLLECTION & SUBCOLLECTIONS
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      // User can read only their own profile; Admin can read any profile
+      allow get: if owns(userId) || isAdmin();
+
+      // Only admins can list/query the users collection
+      allow list: if isAdmin();
+
+      // User account creation:
+      // A regular user can only create their own document with default 'user' role and 'free' plan.
+      // Strictly blocks any client-writable quota, role, or administrative escalation fields.
+      allow create: if (
+        owns(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.status == 'active'
+        && request.resource.data.plan == 'free'
+        && request.resource.data.role == 'user'
+        && (!('admin' in request.resource.data) || request.resource.data.admin == false)
+        && (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false)
+        && !('quota' in request.resource.data)
+        && !('generationsQuota' in request.resource.data)
+        && !('totalGenerations' in request.resource.data)
+        && !('credits' in request.resource.data)
+        && !('geminiProviderKeysJson' in request.resource.data)
+      ) || isAdmin();
+
+      // User account updates:
+      // Regular users are strictly confined to safe profile attributes.
+      // Quota, role, plan, status, provider keys, and admin flags CANNOT be modified by client.
+      allow update: if isAdmin() || (
+        owns(userId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoURL', 'phoneNumber', 'updatedAt', 'lastLoginAt'])
+      );
+
+      // Deletion of user records is restricted to server-verified admins
+      allow delete: if isAdmin();
+
+      // Subcollection: User Vault (presets, custom settings, user-saved assets)
+      match /vault/{documentId} {
+        allow read, write: if owns(userId) || isAdmin();
+      }
+
+      // Subcollection: Registered Devices (Premiere Pro CEP paired devices)
+      match /devices/{deviceId} {
+        allow read, write: if owns(userId) || isAdmin();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // AUTH SESSIONS (Used exclusively by backend server / Admin)
+    // Client direct access is strictly denied.
+    // -------------------------------------------------------------------------
+    match /auth_sessions/{sessionId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

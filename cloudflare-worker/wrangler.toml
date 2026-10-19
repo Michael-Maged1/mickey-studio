@@ -1,0 +1,32 @@
+name = "mickey-studio-flux"
+main = "src/index.js"
+compatibility_date = "2026-10-14"
+
+[ai]
+binding = "AI"
+
+[vars]
+# Origin restriction (comma-separated or empty to allow development)
+ALLOWED_ORIGIN = ""
+# Daily free tier generation limits
+LIMIT_IMAGES = "20"
+LIMIT_VOICE = "30"
+LIMIT_TRANSCRIPTION = "15"
+LIMIT_MOTION = "10"
+
+# State & Token Storage KV Namespace
+# Replace with the id obtained from: npx wrangler kv namespace create MICKEY_STATE
+[[kv_namespaces]]
+binding = "MICKEY_STATE"
+id = "<YOUR_KV_NAMESPACE_ID>"
+
+# Free SQLite-backed Durable Object for atomic rate-limiting, pair staging, and daily quotas
+[durable_objects]
+bindings = [
+  { name = "MICKEY_COORDINATOR", class_name = "MickeyCoordinatorDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MickeyCoordinatorDO"]
+

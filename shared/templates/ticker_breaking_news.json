@@ -1,0 +1,150 @@
+{
+  "version": 2,
+  "id": "ticker_breaking_news",
+  "name": "شريط الأخبار العاجلة (Breaking News Ticker)",
+  "nameEn": "Breaking News Broadcast Ticker",
+  "category": "news_ticker",
+  "description": "شريط أحمر أسفل الشاشة للأخبار العاجلة والتحديثات الفورية.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "ticker_bar_bg",
+      "type": "shape",
+      "name": "شريط التيكر",
+      "start": 0.2,
+      "duration": 5.8,
+      "transform": {
+        "x": 960,
+        "y": 990,
+        "w": 1920,
+        "h": 70,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.96
+      },
+      "style": {
+        "fill": "#141724",
+        "stroke": "#ef4444",
+        "strokeWidth": 2
+      },
+      "content": {
+        "shape": "rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideUp",
+          "dur": 0.4,
+          "sfx": "impact"
+        }
+      }
+    },
+    {
+      "id": "breaking_tag",
+      "type": "shape",
+      "name": "شارة عاجل",
+      "start": 0.35,
+      "duration": 5.65,
+      "transform": {
+        "x": 1780,
+        "y": 990,
+        "w": 180,
+        "h": 70,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "#ef4444"
+      },
+      "content": {
+        "shape": "rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.3
+        }
+      }
+    },
+    {
+      "id": "breaking_tag_text",
+      "type": "text",
+      "name": "كلمة عاجل",
+      "start": 0.45,
+      "duration": 5.55,
+      "transform": {
+        "x": 1780,
+        "y": 990,
+        "w": 160,
+        "h": 40,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "#ffffff",
+        "font": "Cairo",
+        "fontSize": 28,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "عاجل",
+        "textEn": "BREAKING"
+      }
+    },
+    {
+      "id": "ticker_news_text",
+      "type": "text",
+      "name": "نص الخبر المتحرك",
+      "start": 0.5,
+      "duration": 5.5,
+      "transform": {
+        "x": 860,
+        "y": 990,
+        "w": 1450,
+        "h": 36,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "#ffffff",
+        "font": "Cairo",
+        "fontSize": 24,
+        "fontWeight": 600,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "محرر الموشن جرافيك الجديد v2 يطلق رسمياً لجميع صناع المحتوى في الشرق الأوسط.",
+        "textEn": "Motion Editor v2 officially launched for all digital creators."
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.6
+        }
+      }
+    }
+  ]
+}

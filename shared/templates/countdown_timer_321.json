@@ -1,0 +1,103 @@
+{
+  "version": 2,
+  "id": "countdown_timer_321",
+  "name": "عد تنازلي افتتاحي 3-2-1 (Countdown 3-2-1)",
+  "nameEn": "Opening 3-2-1 Countdown Sequence",
+  "category": "countdown_counters",
+  "description": "عد تنازلي دراماتيكي لافتتاح الفيديوهات بقوة وتركيز عالي.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 4,
+  "background": {
+    "type": "color",
+    "color": "#08090f"
+  },
+  "layers": [
+    {
+      "id": "cd_circle",
+      "type": "progress",
+      "name": "دائرة العد التنازلي",
+      "start": 0.2,
+      "duration": 3.8,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 420,
+        "h": 420,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.primary",
+        "trackColor": "#181d2e",
+        "thickness": 16,
+        "radius": 210
+      },
+      "content": {
+        "shape": "progressRing",
+        "value": 1
+      },
+      "keyframes": {
+        "content.value": [
+          {
+            "t": 0,
+            "v": 1,
+            "ease": "linear"
+          },
+          {
+            "t": 3,
+            "v": 0,
+            "ease": "linear"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cd_text",
+      "type": "text",
+      "name": "جاهز؟",
+      "start": 0.3,
+      "duration": 3.7,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 300,
+        "h": 100,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "brand.heading",
+        "fontSize": 72,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "استعد!",
+        "textEn": "READY!"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 1
+        }
+      }
+    }
+  ]
+}

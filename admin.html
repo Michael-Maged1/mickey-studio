@@ -44,7 +44,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="api-config.js"></script>
 </head>
 
 <body class="bg-[#09090B] text-zinc-100 min-h-screen font-sans selection:bg-zinc-700 selection:text-white flex flex-col">
@@ -55,9 +54,7 @@
   <!-- Top Navigation Header -->
   <header class="w-full border-b border-white/5 bg-[#0E0E11]/90 backdrop-blur sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-white to-zinc-400 flex items-center justify-center text-black font-black text-base shadow-lg shadow-white/5">
-        <span>M</span>
-      </div>
+      <img src="assets/mickey-studio-logo.png" alt="شعار Mickey Studio" class="w-10 h-10 object-contain shrink-0">
       <div>
         <div class="flex items-center gap-2">
           <h1 class="text-sm font-bold tracking-tight text-white leading-none">MICKEY STUDIO ADMIN</h1>
@@ -154,7 +151,7 @@
               <h2 class="text-base font-bold text-white">مجمع تدوير مفاتيح Google Gemini API الذكي (Multi-Key Failover Pool)</h2>
             </div>
             <p class="mt-1 text-xs text-zinc-400 leading-relaxed">
-              تُحفظ في Firestore داخل ملف حساب الأدمن، مع نسخة تشغيل خاصة في Cloudflare KV، ولا تُعرض للمستخدمين إلا بصورة مخفية. عند نفاد حصة مفتاح، ينتقل الخادم تلقائياً للمفتاح التالي.
+              تُحفظ على الخادم حصرياً وتُدار من قبل الأدمن فقط. عند نفاد كريدت أو حصة أي مفتاح (429 / Quota Exceeded)، يقوم السيرفر بالتحويل فورياً وتلقائياً للمفتاح التالي دون توقف للمستخدمين.
             </p>
           </div>
           <div class="flex items-center gap-2">
@@ -211,15 +208,16 @@
                   <th class="py-3 px-4">الأولوية</th>
                   <th class="py-3 px-4">المفتاح المقنّع</th>
                   <th class="py-3 px-4">التسمية</th>
-                  <th class="py-3 px-4">تاريخ الإضافة</th>
-                  <th class="py-3 px-4">الحالة</th>
+                  <th class="py-3 px-4">الحالة والصحة</th>
+                  <th class="py-3 px-4">إحصائيات الاستخدام</th>
+                  <th class="py-3 px-4">آخر خطأ مسجل</th>
                   <th class="py-3 px-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody id="gemini-pool-table-body" class="divide-y divide-white/5">
                 <tr>
-                  <td colspan="6" class="py-8 text-center text-zinc-500">
-                    <i class="fa-solid fa-spinner fa-spin text-cyan-400 mr-2"></i> جاري تحميل المفاتيح…
+                  <td colspan="7" class="py-8 text-center text-zinc-500">
+                    <i class="fa-solid fa-spinner fa-spin text-cyan-400 mr-2"></i> جاري تحميل المفاتيح وصحة الحوض…
                   </td>
                 </tr>
               </tbody>
@@ -390,7 +388,7 @@
     }
     const auth = firebase.auth();
     const db = firebase.firestore();
-    const apiUrl = window.MICKEY_API_BASE_URL || new URL('api.php', window.location.href).href;
+    const apiUrl = new URL('api.php', window.location.href).href;
 
     async function providerKeysRequest(action, payload = {}) {
       const user = auth.currentUser;
@@ -438,6 +436,35 @@
 
       tbody.innerHTML = pool.map((item, idx) => {
         const isPrimary = idx === 0;
+        const status = item.status || 'active';
+        const isCoolingDown = status === 'cooling_down' && (item.cooldown_remaining_sec > 0 || (item.cooldown_until && Date.now() < item.cooldown_until));
+        const cooldownMins = item.cooldown_remaining_sec ? Math.ceil(item.cooldown_remaining_sec / 60) : (item.cooldown_until ? Math.ceil((item.cooldown_until - Date.now()) / 60000) : 0);
+
+        let statusBadge = '';
+        if (isCoolingDown) {
+          statusBadge = `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold" title="في وضع تبريد مؤقت بعد خطأ حصة">
+              <i class="fa-solid fa-snowflake text-[8px] animate-spin"></i> تبريد (${cooldownMins} د)
+            </span>
+          `;
+        } else if (status === 'active') {
+          statusBadge = `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold">
+              <i class="fa-solid fa-circle-check text-[7px]"></i> نشط
+            </span>
+          `;
+        } else {
+          statusBadge = `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-semibold">
+              <i class="fa-solid fa-triangle-exclamation text-[7px]"></i> ${status === 'quota_exceeded' ? 'منتهي الحصة' : 'معطل'}
+            </span>
+          `;
+        }
+
+        const requests = Number(item.requests_count) || 0;
+        const successes = Number(item.success_count) || 0;
+        const errors = Number(item.error_count) || 0;
+
         return `
           <tr class="hover:bg-white/[0.02] transition">
             <td class="py-3 px-4">
@@ -446,25 +473,37 @@
               </span>
             </td>
             <td class="py-3 px-4 font-mono text-zinc-200 text-xs" dir="ltr">
-              ${escapeHtml(item.masked_key || 'AIzaSy...')}
+              ${escapeHtml(item.masked_key || 'AIzaSy••••••••')}
             </td>
             <td class="py-3 px-4 text-zinc-300 text-xs font-semibold">
               ${escapeHtml(item.label || `مفتاح #${idx + 1}`)}
             </td>
-            <td class="py-3 px-4 text-zinc-500 font-mono text-[11px]">
-              ${escapeHtml(item.added_at || '—')}
-            </td>
             <td class="py-3 px-4">
-              <span id="key-status-badge-${item.id}" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold">
-                <i class="fa-solid fa-circle text-[6px]"></i> نشط
-              </span>
+              <span id="key-status-badge-${item.id}">${statusBadge}</span>
+            </td>
+            <td class="py-3 px-4 font-mono text-zinc-300 text-[11px]">
+              <span class="text-white font-semibold">${requests}</span> طلب
+              <span class="text-zinc-500 text-[10px]">(${successes} ✓ / <span class="${errors > 0 ? 'text-red-400' : 'text-zinc-500'}">${errors} ✕</span>)</span>
+            </td>
+            <td class="py-3 px-4 text-[11px] max-w-[180px]">
+              ${item.last_error ? `
+                <div class="truncate text-red-400 font-mono text-[10px]" title="${escapeHtml(item.last_error)} (${item.last_error_at || ''})">
+                  <i class="fa-solid fa-circle-exclamation text-[9px] mr-1"></i>${escapeHtml(item.last_error)}
+                </div>
+              ` : '<span class="text-zinc-600 font-mono">—</span>'}
             </td>
             <td class="py-3 px-4 text-center">
-              <div class="flex items-center justify-center gap-2">
+              <div class="flex items-center justify-center gap-1.5">
                 <button type="button" onclick="testGeminiKey('${item.id}')" class="px-2.5 py-1 rounded-lg border border-cyan-500/30 bg-cyan-950/20 hover:bg-cyan-900/40 text-cyan-300 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer" title="اختبار رصيد وصلاحية هذا المفتاح">
                   <i class="fa-solid fa-bolt text-[10px]"></i>
                   <span>فحص</span>
                 </button>
+                ${isCoolingDown ? `
+                  <button type="button" onclick="resetGeminiKeyCooldown('${item.id}')" class="px-2 py-1 rounded-lg border border-amber-500/30 bg-amber-950/20 hover:bg-amber-900/40 text-amber-300 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer" title="إلغاء التبريد فورياً وإعادة المفتاح للخدمة">
+                    <i class="fa-solid fa-fire text-[10px]"></i>
+                    <span>تنشيط</span>
+                  </button>
+                ` : ''}
                 <button type="button" onclick="deleteGeminiKey('${item.id}')" class="px-2.5 py-1 rounded-lg border border-red-500/30 bg-red-950/20 hover:bg-red-900/40 text-red-400 text-[11px] font-medium transition flex items-center gap-1 cursor-pointer" title="حذف هذا المفتاح من الحوض">
                   <i class="fa-solid fa-trash text-[10px]"></i>
                   <span>حذف</span>
@@ -474,6 +513,16 @@
           </tr>
         `;
       }).join('');
+    }
+
+    async function resetGeminiKeyCooldown(keyId) {
+      try {
+        const data = await providerKeysRequest('admin_reset_gemini_key_cooldown', { key_id: keyId });
+        renderGeminiPool(data.gemini_pool || []);
+        showToast('تم إلغاء التبريد وإعادة تنشيط المفتاح بنجاح ✓', 'success');
+      } catch (err) {
+        showToast(`تعذر تنشيط المفتاح: ${err.message}`, 'error');
+      }
     }
 
     async function handleAddGeminiKeys() {
@@ -499,7 +548,7 @@
         renderGeminiPool(data.gemini_pool || []);
         if (keysInput) keysInput.value = '';
         if (labelInput) labelInput.value = '';
-        showToast(`تم حفظ المفاتيح في Firestore ومخزن الخادم (${data.added_count || 1} مفتاح).`, 'success');
+        showToast(`تمت إضافة المفاتيح بنجاح إلى حوض التدوير (${data.added_count || 1} مفتاح).`, 'success');
       } catch (err) {
         showToast(`تعذر إضافة المفاتيح: ${err.message}`, 'error');
       } finally {
@@ -612,33 +661,76 @@
       }, 4000);
     }
 
-    // Monitor Auth State
+    // Monitor Auth State with Server-Side Claim Verification
     auth.onAuthStateChanged(async (user) => {
+      const authSection = document.getElementById('auth-section');
+      const dashboardSection = document.getElementById('dashboard-section');
+      const badge = document.getElementById('admin-user-badge');
+      const logoutBtn = document.getElementById('btn-admin-logout');
+      const emailText = document.getElementById('admin-email-text');
+
       if (user) {
         const userEmail = (user.email || '').toLowerCase().trim();
-        if (userEmail === ADMIN_EMAIL) {
-          // Grant Admin Access
-          document.getElementById('auth-section').classList.add('hidden');
-          document.getElementById('dashboard-section').classList.remove('hidden');
-          document.getElementById('admin-user-badge').classList.remove('hidden');
-          document.getElementById('admin-user-badge').classList.add('flex');
-          document.getElementById('btn-admin-logout').classList.remove('hidden');
-          document.getElementById('admin-email-text').textContent = user.email;
+
+        // Keep dashboard hidden during server verification
+        dashboardSection.classList.add('hidden');
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+        logoutBtn.classList.add('hidden');
+
+        // Check email first as an initial client-side check
+        if (userEmail !== ADMIN_EMAIL) {
+          await auth.signOut();
+          showAuthError(`عذراً! الحساب (${userEmail}) ليس حساب المسؤول المعتمد (${ADMIN_EMAIL}).`);
+          return;
+        }
+
+        // Show verification loading in auth button if present
+        const btnLogin = document.getElementById('btn-submit-login');
+        if (btnLogin) {
+          btnLogin.disabled = true;
+          btnLogin.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق من صلاحيات المسؤول على الخادم...';
+        }
+
+        try {
+          // 1. Force refresh Firebase ID token to obtain fresh custom claims
+          await user.getIdTokenResult(true);
+
+          // 2. Perform Server-Side Admin Verification against Cloudflare Worker
+          const verification = await providerKeysRequest('admin_verify');
+          if (!verification || !verification.verified || !verification.admin) {
+            throw new Error('الخادم رفض اعتماد جلسة المسؤول (Admin Claim غير مفعل).');
+          }
+
+          // 3. Grant Admin Access after successful server verification
+          authSection.classList.add('hidden');
+          dashboardSection.classList.remove('hidden');
+          badge.classList.remove('hidden');
+          badge.classList.add('flex');
+          logoutBtn.classList.remove('hidden');
+          emailText.textContent = user.email;
 
           loadProviderKeysStatus();
           loadUsers();
-          showToast(`مرحبًا بك يا مسؤول Mickey Studio (${user.email})`, 'success');
-        } else {
-          // Reject Access
+          showToast(`تم التحقق من صلاحيات المسؤول بنجاح (${user.email}) ✓`, 'success');
+        } catch (err) {
+          console.error('[Admin Server Auth Error]', err);
           await auth.signOut();
-          showAuthError(`عذراً! الحساب (${userEmail}) لا يملك صلاحية المسؤول. هذا القسم مخصص حصرياً للمسؤول: ${ADMIN_EMAIL}`);
+          authSection.classList.remove('hidden');
+          showAuthError(`تم رفض الوصول: ${err.message || 'فشل التحقق من صلاحيات المسؤول على الخادم.'}`);
+        } finally {
+          if (btnLogin) {
+            btnLogin.disabled = false;
+            btnLogin.innerHTML = '<span>دخول المسؤول</span><i class="fa-solid fa-arrow-left text-[11px]"></i>';
+          }
         }
       } else {
         // Show Login Form
-        document.getElementById('auth-section').classList.remove('hidden');
-        document.getElementById('dashboard-section').classList.add('hidden');
-        document.getElementById('admin-user-badge').classList.add('hidden');
-        document.getElementById('btn-admin-logout').classList.add('hidden');
+        authSection.classList.remove('hidden');
+        dashboardSection.classList.add('hidden');
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+        logoutBtn.classList.add('hidden');
       }
     });
 

@@ -1,0 +1,52 @@
+/**
+ * Mickey Studio - Bundled Local OFL Fonts
+ * Free SIL Open Font License 1.1 fonts for deterministic rendering
+ */
+
+@font-face {
+  font-family: 'Cairo';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./cairo.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tajawal';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./tajawal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Almarai';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./almarai.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Kufi Arabic';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./noto-kufi-arabic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Readex Pro';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./readex-pro.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./inter.woff2') format('woff2');
+}

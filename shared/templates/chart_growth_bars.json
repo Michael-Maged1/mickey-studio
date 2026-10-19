@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "id": "chart_growth_bars",
+  "name": "مخطط نمو أسبوعي (Growth Bar Chart)",
+  "nameEn": "Weekly Growth Bar Chart",
+  "category": "data_charts",
+  "description": "أعمدة بيانية متحركة ترتفع بنعومة فائقة لعرض الأرقام والإحصائيات.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "color",
+    "color": "#0e111a"
+  },
+  "layers": [
+    {
+      "id": "chart_title",
+      "type": "text",
+      "name": "عنوان المخطط",
+      "start": 0.2,
+      "duration": 4.8,
+      "transform": {
+        "x": 960,
+        "y": 220,
+        "w": 1000,
+        "h": 80,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 52,
+        "fontWeight": 800,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "مؤشرات نمو المبيعات الأسبوعية",
+        "textEn": "Weekly Sales Growth Indicators"
+      },
+      "presets": {
+        "in": {
+          "name": "slideDown",
+          "dur": 0.5
+        }
+      }
+    },
+    {
+      "id": "bar_chart_main",
+      "type": "chart",
+      "name": "المخطط البياني",
+      "start": 0.6,
+      "duration": 4.4,
+      "transform": {
+        "x": 960,
+        "y": 620,
+        "w": 1100,
+        "h": 440,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.primary",
+        "stroke": "brand.secondary",
+        "strokeWidth": 2,
+        "font": "brand.body",
+        "fontSize": 18
+      },
+      "content": {
+        "chartType": "bar",
+        "data": [
+          {
+            "label": "السبت",
+            "value": 45,
+            "color": "#6366f1"
+          },
+          {
+            "label": "الأحد",
+            "value": 70,
+            "color": "#8b5cf6"
+          },
+          {
+            "label": "الإثنين",
+            "value": 95,
+            "color": "#06b6d4"
+          },
+          {
+            "label": "الثلاثاء",
+            "value": 130,
+            "color": "#10b981"
+          },
+          {
+            "label": "الأربعاء",
+            "value": 165,
+            "color": "#f59e0b"
+          }
+        ]
+      },
+      "keyframes": {
+        "style.progress": [
+          {
+            "t": 0,
+            "v": 0,
+            "ease": "easeOutCubic"
+          },
+          {
+            "t": 1.8,
+            "v": 1,
+            "ease": "easeOutCubic"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "id": "lt_gradient_neon",
+  "name": "شريط نيون عصري (Gradient Neon)",
+  "nameEn": "Modern Gradient Lower Third",
+  "category": "lower_thirds",
+  "description": "شريط تعريفي بكبسولة زجاجية متدرجة وتوهج إلكتروني جذاب.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "pill_bg",
+      "type": "shape",
+      "name": "كبسولة متدرجة",
+      "start": 0.2,
+      "duration": 4.8,
+      "transform": {
+        "x": 450,
+        "y": 920,
+        "w": 660,
+        "h": 84,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.secondary",
+        "strokeWidth": 2,
+        "radius": 42,
+        "glow": {
+          "color": "brand.secondary",
+          "blur": 16
+        }
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "pill_text",
+      "type": "text",
+      "name": "نص الكبسولة",
+      "start": 0.45,
+      "duration": 4.55,
+      "transform": {
+        "x": 450,
+        "y": 920,
+        "w": 600,
+        "h": 45,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 30,
+        "fontWeight": 700,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "سارة خالد • مصممة موشن سينمائي",
+        "textEn": "Sara Khaled • Motion Designer"
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 0.4
+        }
+      }
+    }
+  ]
+}

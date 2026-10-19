@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "id": "chart_distribution_pie",
+  "name": "مخطط توزيع دائري (Market Share Pie)",
+  "nameEn": "Market Share Circular Donut Chart",
+  "category": "data_charts",
+  "description": "رسم بياني دائري ملون يستعرض نسب الحصص السوقية مع تأثير البناء.",
+  "width": 1080,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "color",
+    "color": "#0b0d14"
+  },
+  "layers": [
+    {
+      "id": "pie_title",
+      "type": "text",
+      "name": "عنوان الرسم الدائري",
+      "start": 0.2,
+      "duration": 4.8,
+      "transform": {
+        "x": 540,
+        "y": 180,
+        "w": 800,
+        "h": 70,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 44,
+        "fontWeight": 800,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "توزيع مصادر الدخل الرقمي",
+        "textEn": "Digital Revenue Sources"
+      }
+    },
+    {
+      "id": "pie_chart_main",
+      "type": "chart",
+      "name": "الرسم الدائري",
+      "start": 0.5,
+      "duration": 4.5,
+      "transform": {
+        "x": 540,
+        "y": 560,
+        "w": 460,
+        "h": 460,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "strokeWidth": 3,
+        "font": "Inter, Cairo",
+        "fontSize": 16
+      },
+      "content": {
+        "chartType": "pie",
+        "data": [
+          {
+            "label": "يوتيوب",
+            "value": 45,
+            "color": "#ef4444"
+          },
+          {
+            "label": "كورسات",
+            "value": 30,
+            "color": "#6366f1"
+          },
+          {
+            "label": "استشارات",
+            "value": 15,
+            "color": "#10b981"
+          },
+          {
+            "label": "رعايات",
+            "value": 10,
+            "color": "#f59e0b"
+          }
+        ]
+      },
+      "keyframes": {
+        "style.progress": [
+          {
+            "t": 0,
+            "v": 0,
+            "ease": "easeOutCubic"
+          },
+          {
+            "t": 1.6,
+            "v": 1,
+            "ease": "easeOutCubic"
+          }
+        ]
+      }
+    }
+  ]
+}

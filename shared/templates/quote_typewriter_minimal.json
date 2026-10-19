@@ -1,0 +1,86 @@
+{
+  "version": 2,
+  "id": "quote_typewriter_minimal",
+  "name": "اقتباس الآلة الكاتبة (Typewriter Quote)",
+  "nameEn": "Minimal Typewriter Quote Card",
+  "category": "quote_cards",
+  "description": "ظهور حرفاً بحرف مع المحافظة التامة على تشبيك الخط العربي.",
+  "width": 1080,
+  "height": 1350,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "color",
+    "color": "#090a10"
+  },
+  "layers": [
+    {
+      "id": "quote_quote_mark",
+      "type": "text",
+      "name": "علامة التنصيص",
+      "start": 0.2,
+      "duration": 5.8,
+      "transform": {
+        "x": 540,
+        "y": 380,
+        "w": 200,
+        "h": 100,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.4
+      },
+      "style": {
+        "fill": "brand.primary",
+        "font": "Cairo",
+        "fontSize": 120,
+        "fontWeight": 900,
+        "align": "center"
+      },
+      "content": {
+        "text": "“"
+      }
+    },
+    {
+      "id": "quote_body",
+      "type": "text",
+      "name": "نص الاقتباس",
+      "start": 0.5,
+      "duration": 5.5,
+      "transform": {
+        "x": 540,
+        "y": 640,
+        "w": 900,
+        "h": 360,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "Noto Kufi Arabic",
+        "fontSize": 52,
+        "fontWeight": 700,
+        "align": "center",
+        "direction": "rtl",
+        "lineHeight": 1.5
+      },
+      "content": {
+        "text": "الإبداع ليس صدفة، بل قرار يومي بالتجربة والشغف.",
+        "textEn": "Creativity is not luck, it is a daily commitment."
+      },
+      "presets": {
+        "in": {
+          "name": "typewriter",
+          "dur": 3,
+          "sfx": "click"
+        }
+      }
+    }
+  ]
+}
