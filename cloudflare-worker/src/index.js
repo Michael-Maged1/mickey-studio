@@ -1103,6 +1103,33 @@ async function detectCensorWords(ctx) {
   return json({ success: true, words }, 200, ctx.headers);
 }
 
+async function transcribeWithCloudflareWhisper(ctx, audioBase64) {
+  if (!ctx.env.AI) return json({ success: false, error: 'خدمة التفريغ غير مهيأة: لم يتم ربط Cloudflare Workers AI بهذا الـWorker.' }, 503, ctx.headers);
+  try {
+    const result = await ctx.env.AI.run('@cf/openai/whisper-large-v3-turbo', {
+      audio: audioBase64.replace(/^data:[^,]+,/, ''),
+      task: 'transcribe'
+    });
+    const segments = (Array.isArray(result?.segments) ? result.segments : []).map(segment => ({
+      start: Number(segment.start), end: Number(segment.end), text: String(segment.text || '').trim()
+    })).filter(segment => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start && segment.text);
+    if (!segments.length && typeof result?.vtt === 'string') {
+      const cues = result.vtt.matchAll(/(?:\d+\s*\n)?(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})\s*\n([\s\S]*?)(?=\n\s*\n|$)/g);
+      for (const cue of cues) {
+        const toSeconds = value => { const [h, m, s] = value.split(':'); return Number(h) * 3600 + Number(m) * 60 + Number(s); };
+        const text = cue[3].replace(/<[^>]+>/g, '').trim();
+        if (text) segments.push({ start: toSeconds(cue[1]), end: toSeconds(cue[2]), text });
+      }
+    }
+    const text = String(result?.text || segments.map(segment => segment.text).join(' ')).trim();
+    if (!text) return json({ success: false, error: 'لم يتمكن Whisper من استخراج كلام من الملف.' }, 422, ctx.headers);
+    return json({ success: true, text, segments, provider: 'Cloudflare Workers AI Whisper' }, 200, ctx.headers);
+  } catch (error) {
+    console.error('[Workers AI transcription error]', error?.message || error);
+    return json({ success: false, error: 'تعذر التفريغ عبر Cloudflare Whisper. تحقق من تفعيل Workers AI لهذا الحساب ثم أعد المحاولة.' }, 503, ctx.headers);
+  }
+}
+
 async function transcribeAudio(ctx) {
   const forceCloudflareWhisper = String(ctx.body.provider || ctx.body.force_provider || '').toLowerCase() === 'cloudflare_whisper';
   const groqKey = forceCloudflareWhisper ? '' : ctx.env.GROQ_API_KEY;
@@ -1124,30 +1151,7 @@ async function transcribeAudio(ctx) {
   // Use Cloudflare Workers AI Whisper when Groq is not configured. The AI
   // binding is already part of this Worker, so no extra provider key is needed.
   if (!groqKey) {
-    if (!ctx.env.AI) return json({ success: false, error: 'خدمة التفريغ غير مهيأة: لم يتم ربط Cloudflare Workers AI بهذا الـWorker.' }, 503, ctx.headers);
-    try {
-      const result = await ctx.env.AI.run('@cf/openai/whisper-large-v3-turbo', {
-        audio: audioBase64.replace(/^data:[^,]+,/, ''),
-        task: 'transcribe'
-      });
-      const segments = (Array.isArray(result?.segments) ? result.segments : []).map(segment => ({
-        start: Number(segment.start), end: Number(segment.end), text: String(segment.text || '').trim()
-      })).filter(segment => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start && segment.text);
-      if (!segments.length && typeof result?.vtt === 'string') {
-        const cues = result.vtt.matchAll(/(?:\d+\s*\n)?(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})\s*\n([\s\S]*?)(?=\n\s*\n|$)/g);
-        for (const cue of cues) {
-          const toSeconds = value => { const [h, m, s] = value.split(':'); return Number(h) * 3600 + Number(m) * 60 + Number(s); };
-          const text = cue[3].replace(/<[^>]+>/g, '').trim();
-          if (text) segments.push({ start: toSeconds(cue[1]), end: toSeconds(cue[2]), text });
-        }
-      }
-      const text = String(result?.text || segments.map(segment => segment.text).join(' ')).trim();
-      if (!text) return json({ success: false, error: 'لم يتمكن Whisper من استخراج كلام من الملف.' }, 422, ctx.headers);
-      return json({ success: true, text, segments, provider: 'Cloudflare Workers AI Whisper' }, 200, ctx.headers);
-    } catch (error) {
-      console.error('[Workers AI transcription error]', error?.message || error);
-      return json({ success: false, error: 'تعذر التفريغ عبر Cloudflare Whisper. تحقق من تفعيل Workers AI لهذا الحساب ثم أعد المحاولة.' }, 503, ctx.headers);
-    }
+    return transcribeWithCloudflareWhisper(ctx, audioBase64);
   }
 
   const rawFileName = String(ctx.body.file_name || 'media');
@@ -1164,7 +1168,15 @@ async function transcribeAudio(ctx) {
     body: form
   });
   const data = await readJson(resp);
-  if (!resp.ok) return json({ success: false, error: data.error?.message || 'تعذر التفريغ عبر Groq Whisper.' }, resp.status, ctx.headers);
+  if (!resp.ok) {
+    const providerError = String(data.error?.message || data.message || 'تعذر التفريغ عبر Groq Whisper.');
+    const quotaExhausted = resp.status === 429 || ((resp.status === 402 || resp.status === 403) && /quota|rate.?limit|billing|usage limit|exceeded/i.test(providerError));
+    if (quotaExhausted && ctx.env.AI) {
+      console.warn('[Groq transcription quota reached; falling back to Cloudflare Whisper]', resp.status);
+      return transcribeWithCloudflareWhisper(ctx, audioBase64);
+    }
+    return json({ success: false, error: providerError }, resp.status, ctx.headers);
+  }
 
   return json({
     success: true,
