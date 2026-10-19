@@ -72,7 +72,8 @@
     
     // Captions styling & settings
     captions: {
-      items: JSON.parse(JSON.stringify(SAMPLE_SUBTITLES)),
+      // Demo captions are loaded only when the user selects the demo sample.
+      items: [],
       font: 'Cairo',
       fontSize: 32,
       textColor: '#ffffff',
@@ -358,14 +359,20 @@
 
     STATE.mediaFile = file;
     STATE.mediaType = file.type && file.type.startsWith('audio') ? 'audio' : 'video';
+    STATE.captions.items = [];
+    STATE.currentTime = 0;
+    STATE.isPlaying = false;
     if (STATE.mediaUrl) URL.revokeObjectURL(STATE.mediaUrl);
     STATE.mediaUrl = URL.createObjectURL(file);
 
     const video = document.getElementById('media-editor-video');
     if (video) {
+      video.pause();
+      video.srcObject = null;
       video.src = STATE.mediaUrl;
       video.load();
     }
+    renderSubtitlesList();
 
     // Update UI View
     const dropzone = document.getElementById('media-upload-dropzone');
@@ -388,6 +395,8 @@
   function loadDemoSample() {
     SFX.playClick();
     showToast('جاري تجهيز مقطع العرض التوضيحي المباشر…', 'info');
+    STATE.captions.items = JSON.parse(JSON.stringify(SAMPLE_SUBTITLES));
+    renderSubtitlesList();
 
     // Create an animated canvas video stream
     const canvas = document.createElement('canvas');
