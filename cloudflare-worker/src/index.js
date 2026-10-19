@@ -1104,7 +1104,8 @@ async function detectCensorWords(ctx) {
 }
 
 async function transcribeAudio(ctx) {
-  const groqKey = ctx.env.GROQ_API_KEY;
+  const forceCloudflareWhisper = String(ctx.body.provider || ctx.body.force_provider || '').toLowerCase() === 'cloudflare_whisper';
+  const groqKey = forceCloudflareWhisper ? '' : ctx.env.GROQ_API_KEY;
   const audioBase64 = String(ctx.body.audio_base64 || ctx.body.audio || '');
   if (!audioBase64) return json({ success: false, error: 'لم يتم إرسال ملف الصوت للتفريغ.' }, 400, ctx.headers);
 
