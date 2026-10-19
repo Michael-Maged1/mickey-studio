@@ -1748,3 +1748,134 @@ async function generateFluxImage(ctx) {
     return json({ error: `تعذر التوليد عبر FLUX: ${message.slice(0, 200)}` }, 502, ctx.headers);
   }
 }
+
+export class MickeyCoordinatorDO {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    const action = new URL(request.url).pathname.slice(1);
+    const body = await request.json().catch(() => ({}));
+    try {
+      let result;
+      if (action === 'stage') {
+        result = await this.state.storage.transaction(async txn => {
+          if (await txn.get('pairConsumed') || await txn.get('pairResult')) return { staged: false };
+          await txn.put('pairResult', body);
+          return { staged: true };
+        });
+      } else if (action === 'consume') {
+        result = await this.state.storage.transaction(async txn => {
+          const value = await txn.get('pairResult');
+          if (!value || await txn.get('pairConsumed')) return { consumed: false };
+          await txn.put('pairConsumed', true);
+          await txn.delete('pairResult');
+          return { consumed: true, ...value };
+        });
+      } else if (action === 'rate' || action === 'rate2') {
+        const now = Date.now();
+        const minuteLimit = Number(body.minuteLimit || 60);
+        const dayLimit = Number(body.dayLimit || 1000);
+        if (this.state.storage.sql) {
+          try {
+            this.state.storage.sql.exec(`
+              CREATE TABLE IF NOT EXISTS user_rate_limits (
+                bucket TEXT PRIMARY KEY,
+                count INTEGER,
+                updated_at INTEGER
+              );
+            `);
+            const minuteWindow = Math.floor(now / 60000);
+            const dayWindow = new Date(now).toISOString().slice(0, 10);
+            const minuteKey = `m:${minuteWindow}`;
+            const dayKey = `d:${dayWindow}`;
+
+            this.state.storage.sql.exec(`DELETE FROM user_rate_limits WHERE updated_at < ?;`, now - 172800000);
+
+            let mRow = this.state.storage.sql.exec(`SELECT count FROM user_rate_limits WHERE bucket = ?;`, minuteKey).toArray()[0];
+            const mCount = (mRow ? Number(mRow.count) : 0) + 1;
+            this.state.storage.sql.exec(`INSERT OR REPLACE INTO user_rate_limits (bucket, count, updated_at) VALUES (?, ?, ?);`, minuteKey, mCount, now);
+
+            let dRow = this.state.storage.sql.exec(`SELECT count FROM user_rate_limits WHERE bucket = ?;`, dayKey).toArray()[0];
+            const dCount = (dRow ? Number(dRow.count) : 0) + 1;
+            this.state.storage.sql.exec(`INSERT OR REPLACE INTO user_rate_limits (bucket, count, updated_at) VALUES (?, ?, ?);`, dayKey, dCount, now);
+
+            const allowed = mCount <= minuteLimit && dCount <= dayLimit;
+            const window = dCount > dayLimit ? 'day' : (mCount > minuteLimit ? 'minute' : 'ok');
+            result = { allowed, window, minuteCount: mCount, dayCount: dCount };
+          } catch (sqlErr) {
+            console.warn('[CoordinatorDO:SQL] fallback to txn:', sqlErr);
+          }
+        }
+        if (!result) {
+          result = await this.state.storage.transaction(async txn => {
+            const minuteWindow = Math.floor(now / 60000);
+            const dayWindow = new Date(now).toISOString().slice(0, 10);
+            const minuteKey = `minute:${minuteWindow}`;
+            const dayKey = `day:${dayWindow}`;
+            const minute = Number(await txn.get(minuteKey) || 0) + 1;
+            const day = Number(await txn.get(dayKey) || 0) + 1;
+            await txn.put(minuteKey, minute);
+            await txn.put(dayKey, day);
+            await txn.delete(`minute:${minuteWindow - 1}`);
+            const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            await txn.delete(`day:${yesterday}`);
+            return { allowed: minute <= minuteLimit && day <= dayLimit, window: day > dayLimit ? 'day' : 'minute', minuteCount: minute, dayCount: day };
+          });
+        }
+      } else if (action === 'guest') {
+        const now = Date.now();
+        result = await this.state.storage.transaction(async txn => {
+          const today = new Date(now).toISOString().slice(0, 10);
+          let state = await txn.get('guest') || { count: 0, permits: {}, day: today };
+          if (state.day !== today) state = { count: 0, permits: {}, day: today };
+          const used = Number(state.count) || 0;
+          if (body.action !== 'consume_generation' && body.permitHash) {
+            const permit = state.permits?.[body.permitHash];
+            if (permit?.tool === body.tool && permit.expires > now) {
+              delete state.permits[body.permitHash];
+              await txn.put('guest', state);
+              return { allowed: true, count: used };
+            }
+          }
+          if (used + body.count > 5) return { allowed: false, count: used };
+          state.count = used + body.count;
+          let permit;
+          if (body.action === 'consume_generation') {
+            permit = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
+            state.permits ||= {};
+            const digest = await sha256(permit);
+            state.permits[digest] = { tool: body.tool, expires: now + 90000 };
+          }
+          await txn.put('guest', state);
+          return { allowed: true, count: state.count, permit };
+        });
+      } else if (action === 'device_add') {
+        result = await this.state.storage.transaction(async txn => {
+          const devices = await txn.get('devices') || [];
+          if (devices.some(item => item.deviceId === body.deviceId)) return { added: false };
+          devices.push({ deviceId: body.deviceId, name: body.name, email: body.email, createdAt: body.createdAt, tokenHash: body.tokenHash });
+          await txn.put('devices', devices);
+          return { added: true };
+        });
+      } else if (action === 'device_list') {
+        const devices = await this.state.storage.get('devices') || [];
+        result = { devices: devices.map(({ tokenHash, ...device }) => ({ ...device, tokenHash: undefined })) };
+      } else if (action === 'device_check') {
+        const devices = await this.state.storage.get('devices') || [];
+        result = { active: devices.some(item => item.deviceId === body.deviceId && item.tokenHash === body.tokenHash) };
+      } else if (action === 'device_revoke') {
+        result = await this.state.storage.transaction(async txn => {
+          const devices = await txn.get('devices') || [];
+          const target = devices.find(item => item.deviceId === body.deviceId);
+          if (!target) return { revoked: false };
+          await txn.put('devices', devices.filter(item => item.deviceId !== body.deviceId));
+          return { revoked: true, tokenHash: target.tokenHash };
+        });
+      } else {
+        return json({ success: false, error: 'Unknown coordinator operation.' }, 404);
+      }
+      return json({ success: true, ...result }, 200);
+    } catch (error) {
+      return json({ success: false, error: error?.message || 'Coordinator operation failed.' }, 500);
+    }
+  }
+}
