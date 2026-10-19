@@ -29,6 +29,10 @@ const DEFAULT_PLANS = {
     name: 'الخطة الاحترافية (Pro)',
     name_en: 'Pro Plan',
     description: 'للمصممين المحترفين وصناع المحتوى النشطين',
+    price: null,
+    currency: 'EGP',
+    billing_period: 'month',
+    unlimited_usage: true,
     limits: {
       images: { daily: 100, monthly: 2000 },
       voice: { daily: 150, monthly: 3000 },
@@ -40,24 +44,6 @@ const DEFAULT_PLANS = {
       extension_access: true,
       watermark_free: true,
       max_upload_size_mb: 500
-    }
-  },
-  custom: {
-    id: 'custom',
-    name: 'خطة الاستوديو المخصصة (Custom)',
-    name_en: 'Custom Studio Plan',
-    description: 'أعلى حدود وإمكانيات غير محدودة للشركات والإنتاج الضخم',
-    limits: {
-      images: { daily: 500, monthly: 10000 },
-      voice: { daily: 500, monthly: 10000 },
-      transcription: { daily: 200, monthly: 4000 },
-      motion_ai: { daily: 200, monthly: 4000 },
-      video: { daily: 100, monthly: 2000 }
-    },
-    features: {
-      extension_access: true,
-      watermark_free: true,
-      max_upload_size_mb: 2048
     }
   }
 };
@@ -202,6 +188,10 @@ export default {
         case 'admin_get_plans': return await adminGetPlans(context);
         case 'admin_update_plans': return await adminUpdatePlans(context);
         case 'admin_set_subscription_mode': return await adminSetSubscriptionMode(context);
+        case 'admin_list_coupons': return await adminListCoupons(context);
+        case 'admin_create_coupon': return await adminCreateCoupon(context);
+        case 'admin_toggle_coupon': return await adminToggleCoupon(context);
+        case 'admin_delete_coupon': return await adminDeleteCoupon(context);
 
         case 'admin_list_keys': return await adminListGeminiKeys(context);
         case 'admin_add_keys': return await adminAddGeminiKeys(context);
@@ -445,7 +435,8 @@ async function authenticate(ctx, adminOnly = false) {
       : 'تم إيقاف حسابك من قبل إدارة Mickey Studio. يرجى التواصل مع الدعم الفني.');
   }
 
-  const plan = profile.fields?.plan?.stringValue || 'free';
+  const storedPlan = profile.fields?.plan?.stringValue || 'free';
+  const plan = storedPlan === 'custom' ? 'pro' : (storedPlan === 'pro' ? 'pro' : 'free');
   const extraCredits = Number(profile.fields?.extraCredits?.integerValue || profile.fields?.extraCredits?.doubleValue || 0);
   let limitOverrides = {};
   if (profile.fields?.limitOverridesJson?.stringValue) {
@@ -502,8 +493,18 @@ async function getSystemConfig(env) {
 }
 
 async function getPlansConfig(env) {
-  const customPlans = await env.MICKEY_STATE.get('system_plans', 'json');
-  return customPlans || DEFAULT_PLANS;
+  const saved = await env.MICKEY_STATE.get('system_plans', 'json') || {};
+  return {
+    free: { ...DEFAULT_PLANS.free, ...(saved.free || {}) },
+    pro: {
+      ...DEFAULT_PLANS.pro,
+      ...(saved.pro || {}),
+      price: saved.pro?.price ?? DEFAULT_PLANS.pro.price,
+      currency: saved.pro?.currency || 'EGP',
+      billing_period: saved.pro?.billing_period || 'month',
+      unlimited_usage: true
+    }
+  };
 }
 
 function toolCategoryForAction(action) {
@@ -578,6 +579,9 @@ async function enforcePlanLimits(account, action, ctx) {
   // If subscription mode is ON: enforce plan limits + user overrides
   const plans = await getPlansConfig(ctx.env);
   const userPlan = plans[account.plan] || plans.free || DEFAULT_PLANS.free;
+  if (account.plan === 'pro' || userPlan.unlimited_usage === true) {
+    return { enforced: false, subscription_mode: true, tool, remaining: null, unlimited: true };
+  }
   const toolLimits = userPlan.limits?.[tool] || { daily: 15, monthly: 300 };
 
   const effectiveDailyLimit = account.limitOverrides?.[tool]?.daily ?? account.limitOverrides?.[tool] ?? toolLimits.daily;
@@ -1183,7 +1187,8 @@ async function adminListUsers(ctx) {
     const displayName = fields.displayName?.stringValue || (email ? email.split('@')[0] : 'مستخدم');
     const isProtectedAdmin = email.toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
     const status = isProtectedAdmin ? 'active' : (fields.status?.stringValue || (authUser.disabled ? 'banned' : 'active'));
-    const plan = fields.plan?.stringValue || 'free';
+    const storedPlan = fields.plan?.stringValue || 'free';
+    const plan = storedPlan === 'custom' ? 'pro' : (storedPlan === 'pro' ? 'pro' : 'free');
     const banReason = fields.banReason?.stringValue || '';
     const authDate = value => {
       if (value == null || value === '') return null;
@@ -1297,10 +1302,10 @@ async function adminUpdateUserStatus(ctx) {
 async function adminUpdateUserPlan(ctx) {
   const account = await authenticate(ctx, true);
   const targetUid = String(ctx.body.target_uid || ctx.body.uid || '').trim();
-  const newPlan = String(ctx.body.plan || 'free').trim(); // 'free' | 'pro' | 'custom'
+  const newPlan = String(ctx.body.plan || 'free').trim(); // 'free' | 'pro'
 
   if (!targetUid) return json({ success: false, error: 'معرف المستخدم غير محدد' }, 400, ctx.headers);
-  if (!['free', 'pro', 'custom'].includes(newPlan)) {
+  if (!['free', 'pro'].includes(newPlan)) {
     return json({ success: false, error: 'الباقة المحددة غير معروفة' }, 400, ctx.headers);
   }
   await protectAdminAccountTarget(ctx, account, targetUid);
@@ -1441,10 +1446,25 @@ async function adminUpdatePlans(ctx) {
     return json({ success: false, error: 'بيانات الخطط غير صالحة' }, 400, ctx.headers);
   }
 
-  await ctx.env.MICKEY_STATE.put('system_plans', JSON.stringify(incomingPlans));
-  await logAdminAudit(ctx, 'update_plans', 'system_plans', { plans: Object.keys(incomingPlans) });
+  const price = incomingPlans.pro?.price == null || incomingPlans.pro.price === '' ? null : Number(incomingPlans.pro.price);
+  if (price !== null && (!Number.isFinite(price) || price < 0 || price > 10000000)) {
+    return json({ success: false, error: 'سعر باقة Pro يجب أن يكون رقمًا من صفر إلى 10,000,000.' }, 400, ctx.headers);
+  }
+  const plans = {
+    free: { ...DEFAULT_PLANS.free, ...(incomingPlans.free || {}) },
+    pro: {
+      ...DEFAULT_PLANS.pro,
+      ...(incomingPlans.pro || {}),
+      price,
+      currency: 'EGP',
+      billing_period: 'month',
+      unlimited_usage: true
+    }
+  };
+  await ctx.env.MICKEY_STATE.put('system_plans', JSON.stringify(plans));
+  await logAdminAudit(ctx, 'update_plans', 'system_plans', { plans: Object.keys(plans), pro_price: price });
 
-  return json({ success: true, message: 'تم حفظ إعدادات الباقات والحدود بنجاح.', plans: incomingPlans }, 200, ctx.headers);
+  return json({ success: true, message: 'تم حفظ الباقتين وسعر Pro بنجاح.', plans }, 200, ctx.headers);
 }
 
 async function adminSetSubscriptionMode(ctx) {
@@ -1466,6 +1486,91 @@ async function adminSetSubscriptionMode(ctx) {
       ? 'تم تفعيل نمط الاشتراكات: يتم فرض الحدود والباقات على الجميع فورياً.'
       : 'تم إيقاف نمط الاشتراكات: كافة الحسابات تعمل بالنظام المجاني غير المحدود.'
   }, 200, ctx.headers);
+}
+
+const COUPONS_KEY = 'discount_coupons';
+
+async function adminListCoupons(ctx) {
+  await authenticate(ctx, true);
+  const coupons = await ctx.env.MICKEY_STATE.get(COUPONS_KEY, 'json') || [];
+  return json({ success: true, count: coupons.length, coupons }, 200, ctx.headers);
+}
+
+async function adminCreateCoupon(ctx) {
+  const account = await authenticate(ctx, true);
+  const code = String(ctx.body.code || '').trim().toUpperCase();
+  const type = String(ctx.body.type || 'percent').trim();
+  const value = Number(ctx.body.value);
+  const maxUses = ctx.body.maxUses === '' || ctx.body.maxUses == null ? null : Number(ctx.body.maxUses);
+  let expiresAt = null;
+
+  if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(code)) {
+    return json({ success: false, error: 'اكتب رمز كوبون من 3 إلى 32 خانة باستخدام الحروف الإنجليزية والأرقام والشرطة فقط.' }, 400, ctx.headers);
+  }
+  if (!['percent', 'fixed'].includes(type) || !Number.isFinite(value) || value <= 0 ||
+      (type === 'percent' && value > 100) || (type === 'fixed' && value > 10000000)) {
+    return json({ success: false, error: 'قيمة الخصم غير صالحة.' }, 400, ctx.headers);
+  }
+  if (maxUses !== null && (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 10000000)) {
+    return json({ success: false, error: 'عدد الاستخدامات يجب أن يكون رقمًا صحيحًا موجبًا.' }, 400, ctx.headers);
+  }
+  if (ctx.body.expiresAt) {
+    const expiryTime = Date.parse(ctx.body.expiresAt);
+    if (!Number.isFinite(expiryTime)) {
+      return json({ success: false, error: 'تاريخ انتهاء الكوبون غير صالح.' }, 400, ctx.headers);
+    }
+    if (expiryTime <= Date.now()) {
+      return json({ success: false, error: 'تاريخ انتهاء الكوبون يجب أن يكون في المستقبل.' }, 400, ctx.headers);
+    }
+    expiresAt = new Date(expiryTime).toISOString();
+  }
+
+  const coupons = await ctx.env.MICKEY_STATE.get(COUPONS_KEY, 'json') || [];
+  if (coupons.some(item => item.code === code)) {
+    return json({ success: false, error: 'رمز الكوبون مستخدم بالفعل.' }, 409, ctx.headers);
+  }
+  const coupon = {
+    id: 'coupon_' + crypto.randomUUID(),
+    code,
+    type,
+    value,
+    currency: 'EGP',
+    plan: 'pro',
+    status: 'active',
+    maxUses,
+    redemptionCount: 0,
+    expiresAt,
+    createdAt: nowIso(),
+    createdBy: account.email
+  };
+  coupons.unshift(coupon);
+  await ctx.env.MICKEY_STATE.put(COUPONS_KEY, JSON.stringify(coupons));
+  await logAdminAudit(ctx, 'create_coupon', coupon.id, { code, type, value, maxUses, expiresAt });
+  return json({ success: true, coupon, message: 'تم إنشاء كوبون الخصم.' }, 200, ctx.headers);
+}
+
+async function adminToggleCoupon(ctx) {
+  const account = await authenticate(ctx, true);
+  const couponId = String(ctx.body.couponId || '').trim();
+  const enabled = Boolean(ctx.body.enabled);
+  const coupons = await ctx.env.MICKEY_STATE.get(COUPONS_KEY, 'json') || [];
+  const coupon = coupons.find(item => item.id === couponId);
+  if (!coupon) return json({ success: false, error: 'الكوبون غير موجود.' }, 404, ctx.headers);
+  coupon.status = enabled ? 'active' : 'disabled';
+  await ctx.env.MICKEY_STATE.put(COUPONS_KEY, JSON.stringify(coupons));
+  await logAdminAudit(ctx, 'toggle_coupon', couponId, { enabled });
+  return json({ success: true, coupons, message: enabled ? 'تم تفعيل الكوبون.' : 'تم إيقاف الكوبون.' }, 200, ctx.headers);
+}
+
+async function adminDeleteCoupon(ctx) {
+  const account = await authenticate(ctx, true);
+  const couponId = String(ctx.body.couponId || '').trim();
+  const coupons = await ctx.env.MICKEY_STATE.get(COUPONS_KEY, 'json') || [];
+  const next = coupons.filter(item => item.id !== couponId);
+  if (next.length === coupons.length) return json({ success: false, error: 'الكوبون غير موجود.' }, 404, ctx.headers);
+  await ctx.env.MICKEY_STATE.put(COUPONS_KEY, JSON.stringify(next));
+  await logAdminAudit(ctx, 'delete_coupon', couponId);
+  return json({ success: true, coupons: next, message: 'تم حذف الكوبون.' }, 200, ctx.headers);
 }
 
 // 3. Gemini Keys Tab Handlers (Write-Only, Failover Management)

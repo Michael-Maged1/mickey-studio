@@ -287,7 +287,6 @@
                 <option value="all">كافة الباقات</option>
                 <option value="free">المجانية (Free)</option>
                 <option value="pro">الاحترافية (Pro)</option>
-                <option value="custom">المخصصة (Custom)</option>
               </select>
 
               <button onclick="loadUsers()" title="تحديث الحسابات من الخادم" class="p-2.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 text-zinc-300 hover:text-white text-xs transition cursor-pointer">
@@ -352,7 +351,7 @@
         </div>
 
         <!-- Editable Plans Cards (Free, Pro, Custom) -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           <!-- 1. Free Plan -->
           <div class="p-6 rounded-3xl border border-white/10 bg-[#121216] space-y-5 shadow-lg flex flex-col justify-between">
@@ -433,39 +432,17 @@
                 <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono text-[10px]">pro</span>
               </div>
 
-              <!-- Limit inputs -->
-              <div class="space-y-3 text-xs">
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">توليد الصور (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-pro-images-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-pro-images-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
+              <div class="rounded-2xl border border-emerald-500/20 bg-emerald-950/10 p-4 text-xs text-emerald-200">
+                <i class="fa-solid fa-infinity ml-1"></i> استخدام غير محدود لجميع الأدوات
+              </div>
+              <div class="space-y-1.5 text-xs">
+                <label for="plan-pro-price" class="block text-zinc-300">السعر الشهري لبرو (جنيه مصري)</label>
+                <div class="flex items-center gap-2">
+                  <input id="plan-pro-price" type="number" min="0" max="10000000" step="0.01" class="w-full bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white" placeholder="لم يحدد بعد">
+                  <span class="text-zinc-500 font-mono">EGP / شهر</span>
                 </div>
-
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">التعليق الصوتي الفائق TTS (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-pro-voice-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-pro-voice-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">التفريغ الصوتي والكابشن (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-pro-transcription-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-pro-transcription-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">قوالب الموشن الذكية (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-pro-motion-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-pro-motion-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
+                <p class="text-[10px] text-zinc-500">تغيير السعر يحفظ إعداد الباقة للمبيعات المستقبلية؛ بوابة الدفع غير مفعلة بعد.</p>
+              </div>
 
                 <!-- Feature flags -->
                 <div class="pt-2 border-t border-white/5 space-y-2">
@@ -486,74 +463,6 @@
             </div>
           </div>
 
-          <!-- 3. Custom Studio Plan -->
-          <div class="p-6 rounded-3xl border border-purple-500/30 bg-[#121216] space-y-5 shadow-lg flex flex-col justify-between relative overflow-hidden">
-            <div class="absolute -right-12 -top-12 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"></div>
-            <div class="space-y-4">
-              <div class="flex items-center justify-between border-b border-white/5 pb-3">
-                <div>
-                  <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
-                    <span>خطة الاستوديو المخصصة (Custom)</span>
-                    <i class="fa-solid fa-gem text-purple-400 text-xs"></i>
-                  </h3>
-                  <p class="text-[11px] text-zinc-400">للشركات والإنتاج التلفزيوني الضخم</p>
-                </div>
-                <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 font-mono text-[10px]">custom</span>
-              </div>
-
-              <!-- Limit inputs -->
-              <div class="space-y-3 text-xs">
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">توليد الصور (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-custom-images-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-custom-images-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">التعليق الصوتي الفائق TTS (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-custom-voice-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-custom-voice-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">التفريغ الصوتي والكابشن (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-custom-transcription-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-custom-transcription-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-zinc-400 text-[11px] mb-1">قوالب الموشن الذكية (يومي / شهري):</label>
-                  <div class="grid grid-cols-2 gap-2">
-                    <input id="plan-custom-motion-daily" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="يومي">
-                    <input id="plan-custom-motion-monthly" type="number" min="0" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white" placeholder="شهري">
-                  </div>
-                </div>
-
-                <!-- Feature flags -->
-                <div class="pt-2 border-t border-white/5 space-y-2">
-                  <label class="flex items-center gap-2 text-[11px] text-zinc-300">
-                    <input id="plan-custom-flag-extension" type="checkbox" class="accent-purple-400 rounded">
-                    <span>السماح بربط إضافة Premiere Pro</span>
-                  </label>
-                  <label class="flex items-center gap-2 text-[11px] text-zinc-300">
-                    <input id="plan-custom-flag-watermark" type="checkbox" class="accent-purple-400 rounded">
-                    <span>تصدير بدون علامة مائية (Watermark-free)</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div class="text-[10px] text-purple-400/80 font-mono pt-3 border-t border-white/5">
-              حدود استهلاك ضخمة ودعم مخصص
-            </div>
-          </div>
-
         </div>
 
         <!-- Save Plans Button Bar -->
@@ -563,6 +472,34 @@
             <span>حفظ تعديلات الباقات في الخادم</span>
           </button>
         </div>
+
+        <div class="p-6 rounded-3xl border border-amber-500/20 bg-[#121216] space-y-5 shadow-lg">
+          <div>
+            <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-ticket text-amber-300 ml-1"></i> كوبونات خصم باقة Pro</h3>
+            <p class="mt-1 text-[11px] text-zinc-400">إنشاء وإيقاف كوبونات النسبة المئوية أو الخصم الثابت بالجنيه المصري.</p>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            <input id="coupon-code" maxlength="32" dir="ltr" placeholder="مثال: MICKEY20" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+            <select id="coupon-type" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+              <option value="percent">نسبة مئوية %</option>
+              <option value="fixed">خصم ثابت (EGP)</option>
+            </select>
+            <input id="coupon-value" type="number" min="0.01" step="0.01" placeholder="قيمة الخصم" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+            <input id="coupon-max-uses" type="number" min="1" step="1" placeholder="عدد الاستخدامات (اختياري)" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+            <input id="coupon-expires-at" type="datetime-local" title="تاريخ الانتهاء (اختياري)" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+          </div>
+          <div class="flex justify-between items-center gap-3">
+            <span class="text-[10px] text-zinc-500">يتم حفظ الكوبون للتحقق عند ربط بوابة الدفع.</span>
+            <button type="button" onclick="handleCreateCoupon()" class="px-5 py-2.5 rounded-xl bg-amber-300 text-black font-bold text-xs"><i class="fa-solid fa-plus ml-1"></i> إنشاء كوبون</button>
+          </div>
+          <div class="overflow-x-auto rounded-2xl border border-white/5">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-white/[0.02] text-zinc-400"><tr><th class="p-3">الكود</th><th class="p-3">الخصم</th><th class="p-3">الاستخدامات</th><th class="p-3">ينتهي</th><th class="p-3">الحالة</th><th class="p-3">إجراءات</th></tr></thead>
+              <tbody id="coupons-table-body" class="divide-y divide-white/5"><tr><td colspan="6" class="p-5 text-center text-zinc-500">جاري تحميل الكوبونات…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
       </section>
 
       <!-- ============================================================== -->
@@ -796,7 +733,6 @@
           <select id="modal-plan-select" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400">
             <option value="free">الخطة المجانية (Free)</option>
             <option value="pro">الخطة الاحترافية (Pro)</option>
-            <option value="custom">خطة الاستوديو المخصصة (Custom)</option>
           </select>
         </div>
       </div>
@@ -1205,6 +1141,7 @@
       loadSystemHealth().catch(() => {});
       loadUsers().catch(() => {});
       loadPlansConfig().catch(() => {});
+      loadCoupons().catch(() => {});
       loadGeminiPool().catch(() => {});
       loadStats().catch(() => {});
     }
@@ -1409,10 +1346,10 @@
 
       tbody.innerHTML = users.map(user => {
         const isBanned = user.status === 'banned' || user.status === 'suspended';
-        const planName = { free: 'مجانية', pro: 'احترافية (Pro)', custom: 'مخصصة (Custom)' }[user.plan] || user.plan;
+        const planName = { free: 'مجانية', pro: 'احترافية (Pro)' }[user.plan] || user.plan;
         const planBadgeClass = user.plan === 'pro'
           ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
-          : (user.plan === 'custom' ? 'bg-purple-500/10 border-purple-500/30 text-purple-300' : 'bg-white/5 border-white/10 text-zinc-400');
+          : 'bg-white/5 border-white/10 text-zinc-400';
 
         let dateStr = '—';
         if (user.createdAt) {
@@ -1684,31 +1621,10 @@
         document.getElementById('plan-free-flag-extension').checked = free.features?.extension_access ?? true;
         document.getElementById('plan-free-flag-watermark').checked = free.features?.watermark_free ?? false;
 
-        // Populate Pro plan fields
         const pro = currentPlans.pro || {};
-        document.getElementById('plan-pro-images-daily').value = pro.limits?.images?.daily ?? 100;
-        document.getElementById('plan-pro-images-monthly').value = pro.limits?.images?.monthly ?? 2000;
-        document.getElementById('plan-pro-voice-daily').value = pro.limits?.voice?.daily ?? 150;
-        document.getElementById('plan-pro-voice-monthly').value = pro.limits?.voice?.monthly ?? 3000;
-        document.getElementById('plan-pro-transcription-daily').value = pro.limits?.transcription?.daily ?? 50;
-        document.getElementById('plan-pro-transcription-monthly').value = pro.limits?.transcription?.monthly ?? 1000;
-        document.getElementById('plan-pro-motion-daily').value = pro.limits?.motion_ai?.daily ?? 50;
-        document.getElementById('plan-pro-motion-monthly').value = pro.limits?.motion_ai?.monthly ?? 1000;
+        document.getElementById('plan-pro-price').value = pro.price ?? '';
         document.getElementById('plan-pro-flag-extension').checked = pro.features?.extension_access ?? true;
         document.getElementById('plan-pro-flag-watermark').checked = pro.features?.watermark_free ?? true;
-
-        // Populate Custom plan fields
-        const custom = currentPlans.custom || {};
-        document.getElementById('plan-custom-images-daily').value = custom.limits?.images?.daily ?? 500;
-        document.getElementById('plan-custom-images-monthly').value = custom.limits?.images?.monthly ?? 10000;
-        document.getElementById('plan-custom-voice-daily').value = custom.limits?.voice?.daily ?? 500;
-        document.getElementById('plan-custom-voice-monthly').value = custom.limits?.voice?.monthly ?? 10000;
-        document.getElementById('plan-custom-transcription-daily').value = custom.limits?.transcription?.daily ?? 200;
-        document.getElementById('plan-custom-transcription-monthly').value = custom.limits?.transcription?.monthly ?? 4000;
-        document.getElementById('plan-custom-motion-daily').value = custom.limits?.motion_ai?.daily ?? 200;
-        document.getElementById('plan-custom-motion-monthly').value = custom.limits?.motion_ai?.monthly ?? 4000;
-        document.getElementById('plan-custom-flag-extension').checked = custom.features?.extension_access ?? true;
-        document.getElementById('plan-custom-flag-watermark').checked = custom.features?.watermark_free ?? true;
         const banner = document.getElementById('plans-error-banner');
         if (banner) banner.classList.add('hidden');
       } catch (err) {
@@ -1739,6 +1655,79 @@
       }
     }
 
+    async function loadCoupons() {
+      const tbody = document.getElementById('coupons-table-body');
+      if (!tbody) return;
+      try {
+        const data = await apiAdminRequest('admin_list_coupons');
+        renderCoupons(data.coupons || []);
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-red-300">' + escapeHtml(err.message || 'تعذر تحميل الكوبونات.') + '</td></tr>';
+      }
+    }
+
+    function renderCoupons(coupons) {
+      const tbody = document.getElementById('coupons-table-body');
+      if (!tbody) return;
+      if (!coupons.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-zinc-500">لا توجد كوبونات بعد.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = coupons.map(coupon => {
+        const discount = coupon.type === 'percent' ? coupon.value + '%' : coupon.value + ' EGP';
+        const expires = coupon.expiresAt ? new Date(coupon.expiresAt).toLocaleString('ar-EG') : 'بدون انتهاء';
+        const usage = (coupon.redemptionCount || 0) + ' / ' + (coupon.maxUses || '∞');
+        const enabled = coupon.status !== 'active';
+        return '<tr><td class="p-3 font-mono text-cyan-200" dir="ltr">' + escapeHtml(coupon.code) +
+          '</td><td class="p-3">' + escapeHtml(discount) +
+          '</td><td class="p-3 font-mono">' + escapeHtml(usage) +
+          '</td><td class="p-3 text-zinc-400">' + escapeHtml(expires) +
+          '</td><td class="p-3">' + (enabled ? 'متوقف' : 'فعال') +
+          '</td><td class="p-3 whitespace-nowrap"><button type="button" onclick="toggleCoupon(\'' + escapeHtml(coupon.id) + '\',' + enabled + ')" class="px-2 py-1 rounded-lg border border-white/10 text-zinc-200">' + (enabled ? 'تفعيل' : 'إيقاف') +
+          '</button> <button type="button" onclick="deleteCoupon(\'' + escapeHtml(coupon.id) + '\')" class="px-2 py-1 rounded-lg border border-red-500/20 text-red-300">حذف</button></td></tr>';
+      }).join('');
+    }
+
+    async function handleCreateCoupon() {
+      const code = document.getElementById('coupon-code').value.trim().toUpperCase();
+      const type = document.getElementById('coupon-type').value;
+      const value = Number(document.getElementById('coupon-value').value);
+      const maxUses = document.getElementById('coupon-max-uses').value.trim();
+      const expiresAt = document.getElementById('coupon-expires-at').value;
+      try {
+        await apiAdminRequest('admin_create_coupon', { code, type, value, maxUses, expiresAt });
+        document.getElementById('coupon-code').value = '';
+        document.getElementById('coupon-value').value = '';
+        document.getElementById('coupon-max-uses').value = '';
+        document.getElementById('coupon-expires-at').value = '';
+        showToast('تم إنشاء كوبون الخصم.', 'success');
+        await loadCoupons();
+      } catch (err) {
+        showToast(err.message || 'تعذر إنشاء الكوبون.', 'error');
+      }
+    }
+
+    async function toggleCoupon(couponId, enabled) {
+      try {
+        await apiAdminRequest('admin_toggle_coupon', { couponId, enabled });
+        showToast(enabled ? 'تم تفعيل الكوبون.' : 'تم إيقاف الكوبون.', 'success');
+        await loadCoupons();
+      } catch (err) {
+        showToast(err.message || 'تعذر تعديل الكوبون.', 'error');
+      }
+    }
+
+    async function deleteCoupon(couponId) {
+      if (!confirm('هل تريد حذف هذا الكوبون؟')) return;
+      try {
+        await apiAdminRequest('admin_delete_coupon', { couponId });
+        showToast('تم حذف الكوبون.', 'success');
+        await loadCoupons();
+      } catch (err) {
+        showToast(err.message || 'تعذر حذف الكوبون.', 'error');
+      }
+    }
+
     async function handleSavePlans() {
       const btn = document.getElementById('btn-save-plans');
       btn.disabled = true;
@@ -1765,34 +1754,16 @@
           id: 'pro',
           name: 'الخطة الاحترافية (Pro)',
           name_en: 'Pro Plan',
-          limits: {
-            images: { daily: Number(document.getElementById('plan-pro-images-daily').value) || 100, monthly: Number(document.getElementById('plan-pro-images-monthly').value) || 2000 },
-            voice: { daily: Number(document.getElementById('plan-pro-voice-daily').value) || 150, monthly: Number(document.getElementById('plan-pro-voice-monthly').value) || 3000 },
-            transcription: { daily: Number(document.getElementById('plan-pro-transcription-daily').value) || 50, monthly: Number(document.getElementById('plan-pro-transcription-monthly').value) || 1000 },
-            motion_ai: { daily: Number(document.getElementById('plan-pro-motion-daily').value) || 50, monthly: Number(document.getElementById('plan-pro-motion-monthly').value) || 1000 },
-            video: { daily: 25, monthly: 500 }
-          },
+          unlimited_usage: true,
+          price: document.getElementById('plan-pro-price').value.trim() === '' ? null : Number(document.getElementById('plan-pro-price').value),
+          currency: 'EGP',
+          billing_period: 'month',
           features: {
             extension_access: document.getElementById('plan-pro-flag-extension').checked,
             watermark_free: document.getElementById('plan-pro-flag-watermark').checked
           }
-        },
-        custom: {
-          id: 'custom',
-          name: 'خطة الاستوديو المخصصة (Custom)',
-          name_en: 'Custom Studio Plan',
-          limits: {
-            images: { daily: Number(document.getElementById('plan-custom-images-daily').value) || 500, monthly: Number(document.getElementById('plan-custom-images-monthly').value) || 10000 },
-            voice: { daily: Number(document.getElementById('plan-custom-voice-daily').value) || 500, monthly: Number(document.getElementById('plan-custom-voice-monthly').value) || 10000 },
-            transcription: { daily: Number(document.getElementById('plan-custom-transcription-daily').value) || 200, monthly: Number(document.getElementById('plan-custom-transcription-monthly').value) || 4000 },
-            motion_ai: { daily: Number(document.getElementById('plan-custom-motion-daily').value) || 200, monthly: Number(document.getElementById('plan-custom-motion-monthly').value) || 4000 },
-            video: { daily: 100, monthly: 2000 }
-          },
-          features: {
-            extension_access: document.getElementById('plan-custom-flag-extension').checked,
-            watermark_free: document.getElementById('plan-custom-flag-watermark').checked
-          }
         }
+
       };
 
       try {
