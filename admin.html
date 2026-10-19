@@ -1346,6 +1346,7 @@
 
       tbody.innerHTML = users.map(user => {
         const isBanned = user.status === 'banned' || user.status === 'suspended';
+        const isProtectedAdmin = user.protected === true;
         const planName = { free: 'مجانية', pro: 'احترافية (Pro)' }[user.plan] || user.plan;
         const planBadgeClass = user.plan === 'pro'
           ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
@@ -1413,7 +1414,11 @@
             </td>
 
             <td class="py-3 px-4 text-center">
-              <div class="flex items-center justify-center gap-1.5">
+              ${isProtectedAdmin
+                ? `<span class="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-[10px] font-semibold text-emerald-300" title="حساب المشرف الأساسي محمي من الحظر والتعديل والحذف والرسوم">
+                     <i class="fa-solid fa-shield-halved"></i> حساب محمي
+                   </span>`
+                : `<div class="flex items-center justify-center gap-1.5">
                 ${isBanned
                   ? `<button onclick="openBanModal('${user.uid}', '${escapeHtml(user.email)}', 'unban')" class="px-2.5 py-1 rounded-lg border border-emerald-500/30 bg-emerald-950/20 text-emerald-300 hover:bg-emerald-900/40 text-[10px] transition" title="إلغاء الحظر وتنشيط الحساب">
                        <i class="fa-solid fa-unlock"></i> تفعيل
@@ -1442,7 +1447,8 @@
                 <button onclick="handleDeleteUser('${user.uid}')" class="px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 text-[10px] transition" title="حذف الحساب نهائياً">
                   <i class="fa-solid fa-trash-can"></i>
                 </button>
-              </div>
+              </div>`
+              }
             </td>
           </tr>
         `;
