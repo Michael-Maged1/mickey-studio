@@ -1,88 +1,91 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // -------------------------------------------------------------------------
-    // AUTHENTICATION & AUTHORIZATION HELPERS
-    // -------------------------------------------------------------------------
-    function signedIn() {
-      return request.auth != null;
+    // ===== دالة التحقق: تسجيل الدخول =====
+    function signedIn() { 
+      return request.auth != null; 
     }
-
-    function owns(userId) {
-      return signedIn() && request.auth.uid == userId;
+    
+    // ===== دالة التحقق: مالك المستند =====
+    function owns(userId) { 
+      return signedIn() && request.auth.uid == userId; 
     }
-
-    // Admin verified strictly via server-minted custom claims in auth token
+    
+    // ===== دالة التحقق: المشرف (Admin) بالاعتماد على Custom Claim والبريد المعتمد =====
     function isAdmin() {
       return signedIn() && (
         request.auth.token.admin == true ||
-        request.auth.token.role == 'admin'
+        request.auth.token.role == 'admin' ||
+        request.auth.token.email.lower() == 'michaelmagednew@gmail.com'
       );
     }
 
-    // Default deny for all unspecified collections
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // -------------------------------------------------------------------------
-    // USERS COLLECTION & SUBCOLLECTIONS
-    // -------------------------------------------------------------------------
+    // ===== 1. مجموعة المستخدمين (Users) =====
     match /users/{userId} {
-      // User can read only their own profile; Admin can read any profile
       allow get: if owns(userId) || isAdmin();
-
-      // Only admins can list/query the users collection
       allow list: if isAdmin();
-
-      // User account creation:
-      // A regular user can only create their own document with default 'user' role and 'free' plan.
-      // Strictly blocks any client-writable quota, role, or administrative escalation fields.
-      allow create: if (
-        owns(userId)
+      allow create: if (owns(userId)
         && request.resource.data.uid == userId
         && request.resource.data.status == 'active'
         && request.resource.data.plan == 'free'
-        && request.resource.data.role == 'user'
-        && (!('admin' in request.resource.data) || request.resource.data.admin == false)
-        && (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false)
-        && !('quota' in request.resource.data)
-        && !('generationsQuota' in request.resource.data)
-        && !('totalGenerations' in request.resource.data)
-        && !('credits' in request.resource.data)
-        && !('geminiProviderKeysJson' in request.resource.data)
-      ) || isAdmin();
-
-      // User account updates:
-      // Regular users are strictly confined to safe profile attributes.
-      // Quota, role, plan, status, provider keys, and admin flags CANNOT be modified by client.
-      allow update: if isAdmin() || (
-        owns(userId)
+        && request.resource.data.role == 'user') || isAdmin();
+      
+      // التحديث للمستخدم مقتصر على بيانات الملف الشخصي، والحقول الحساسة (الحظر، الباقة، الحدود) للأدمن فقط
+      allow update: if isAdmin() || (owns(userId)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'photoURL', 'phoneNumber', 'updatedAt', 'lastLoginAt'])
-      );
-
-      // Deletion of user records is restricted to server-verified admins
+          .hasOnly(['displayName', 'photoURL', 'phoneNumber', 'updatedAt', 'lastLoginAt', 'totalGenerations', 'geminiApiKey']));
       allow delete: if isAdmin();
 
-      // Subcollection: User Vault (presets, custom settings, user-saved assets)
       match /vault/{documentId} {
         allow read, write: if owns(userId) || isAdmin();
       }
-
-      // Subcollection: Registered Devices (Premiere Pro CEP paired devices)
       match /devices/{deviceId} {
         allow read, write: if owns(userId) || isAdmin();
       }
     }
 
-    // -------------------------------------------------------------------------
-    // AUTH SESSIONS (Used exclusively by backend server / Admin)
-    // Client direct access is strictly denied.
-    // -------------------------------------------------------------------------
+    // ===== 2. جلسات تسجيل الدخول والاقتران (Auth Sessions) =====
     match /auth_sessions/{sessionId} {
-      allow read, write: if isAdmin();
+      allow read, write: if true;
+    }
+
+    // ===== 3. إعدادات النظام العامة (System Config: نمط الاشتراكات) =====
+    // القراءة متاحة للمستخدمين المسجلين، والكتابة محظورة على العملاء (حصراً عبر السيرفر/Worker)
+    match /system_config/{configId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // ===== 4. باقات الاشتراك والحدود (Plans) =====
+    // القراءة متاحة لعرض تفاصيل الباقات في الموقع والإضافة، والكتابة محظورة على العملاء تماماً
+    match /plans/{planId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // ===== 5. عدادات الاستهلاك والحدود (User Limits Quota) =====
+    // القراءة للمستخدم والمسؤول، والكتابة محظورة كلياً على التطبيق (تتم ذرياً عبر الخادم فقط)
+    match /user_limits/{userId} {
+      allow read: if owns(userId) || isAdmin();
+      allow write: if false;
+    }
+
+    // ===== 6. سجل الرقابة والعمليات الإدارية (Admin Audit Logs) =====
+    // محظور كلياً على عملاء المتصفح؛ يُكتب ويُقرأ حصرياً عبر الـ Cloudflare Worker للمسؤولين المعتمدين
+    match /admin_audit_logs/{logId} {
+      allow read, write: if false;
+    }
+
+    // ===== 7. حوض مفاتيح Gemini (Gemini Keys Pool - حماية قصوى) =====
+    // Write-only / Server-only: ممنوع منعاً باتاً قراءتها أو كتابتها من أي عميل SDK مباشر
+    // الوصول لها حصري من الـ Cloudflare Worker عبر Service Account / KV الآمن
+    match /gemini_keys/{keyId} {
+      allow read, write: if false;
+    }
+
+    // ===== حظر أي مسار أو مجموعة أخرى غير معرّفة =====
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

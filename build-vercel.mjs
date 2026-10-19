@@ -16,11 +16,12 @@ for (const directory of ['assets', 'shared', 'studios']) {
 }
 
 const configuredApi = (process.env.MICKEY_API_BASE_URL || '').trim();
-let apiBase = '';
 if (configuredApi) {
   const parsed = new URL(configuredApi);
   if (parsed.protocol !== 'https:') throw new Error('MICKEY_API_BASE_URL must use HTTPS.');
-  apiBase = parsed.href.replace(/\/$/, '');
+  const apiBase = parsed.href.replace(/\/$/, '');
+  await writeFile(new URL('./dist/api-config.js', import.meta.url), `window.MICKEY_API_BASE_URL = ${JSON.stringify(apiBase)};\n`);
+} else {
+  await cp(new URL('./api-config.js', import.meta.url), new URL('./dist/api-config.js', import.meta.url));
 }
-await writeFile(new URL('./dist/api-config.js', import.meta.url), `window.MICKEY_API_BASE_URL = ${JSON.stringify(apiBase)};\n`);
 
