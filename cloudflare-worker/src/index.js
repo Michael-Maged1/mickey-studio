@@ -1130,9 +1130,94 @@ async function transcribeWithCloudflareWhisper(ctx, audioBase64) {
   }
 }
 
+async function uploadGeminiTranscriptionFile(apiKey, raw, mimeType) {
+  const start = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
+    method: 'POST',
+    headers: {
+      'x-goog-api-key': apiKey,
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(raw.byteLength),
+      'X-Goog-Upload-Header-Content-Type': mimeType,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ file: { display_name: `mickey-transcription-${Date.now()}` } })
+  });
+  const startData = await readJson(start);
+  if (!start.ok) {
+    const error = new Error(startData.error?.message || `Gemini audio upload failed HTTP ${start.status}`);
+    error.status = start.status;
+    throw error;
+  }
+  const uploadUrl = start.headers.get('x-goog-upload-url');
+  if (!uploadUrl) throw new Error('لم يُرجع Gemini رابط رفع ملف الصوت.');
+
+  const uploaded = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'X-Goog-Upload-Offset': '0',
+      'X-Goog-Upload-Command': 'upload, finalize',
+      'Content-Type': mimeType
+    },
+    body: raw
+  });
+  const uploadData = await readJson(uploaded);
+  if (!uploaded.ok) {
+    const error = new Error(uploadData.error?.message || `Gemini audio upload failed HTTP ${uploaded.status}`);
+    error.status = uploaded.status;
+    throw error;
+  }
+  const file = uploadData.file || uploadData;
+  if (!file.uri) throw new Error('لم يُرجع Gemini رابط الملف بعد الرفع.');
+  const name = file.name || new URL(file.uri).pathname.split('/').slice(-2).join('/');
+  return { uri: file.uri, name };
+}
+
+async function deleteGeminiTranscriptionFile(apiKey, fileName) {
+  if (!fileName) return;
+  try {
+    const safeName = fileName.split('/').map(encodeURIComponent).join('/');
+    await fetch(`https://generativelanguage.googleapis.com/v1beta/${safeName}?key=${encodeURIComponent(apiKey)}`, {
+      method: 'DELETE'
+    });
+  } catch (_) {}
+}
+
+function secondsFromGeminiOffset(value) {
+  const match = String(value || '').match(/([0-9]+(?:\.[0-9]+)?)/);
+  return match ? Number(match[1]) : NaN;
+}
+
+function groupGeminiTranscriptWords(words) {
+  const segments = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const start = secondsFromGeminiOffset(group[0].startOffset);
+    const end = secondsFromGeminiOffset(group[group.length - 1].endOffset);
+    segments.push({
+      start: Number.isFinite(start) ? start : 0,
+      end: Number.isFinite(end) ? end : (Number.isFinite(start) ? start : 0),
+      text: group.map(item => item.word).join(' ').trim()
+    });
+    group = [];
+  };
+
+  for (const item of words) {
+    const word = String(item.word || '').trim();
+    if (!word) continue;
+    const start = secondsFromGeminiOffset(item.startOffset);
+    const priorEnd = group.length ? secondsFromGeminiOffset(group[group.length - 1].endOffset) : NaN;
+    if (group.length && ((Number.isFinite(start) && Number.isFinite(priorEnd) && start - priorEnd > 0.8) || group.length >= 8)) flush();
+    group.push({ word, startOffset: item.startOffset, endOffset: item.endOffset });
+    if (/[.!?؟؛،]$/.test(word)) flush();
+  }
+  flush();
+  return segments;
+}
+
 async function transcribeAudio(ctx) {
   const forceCloudflareWhisper = String(ctx.body.provider || ctx.body.force_provider || '').toLowerCase() === 'cloudflare_whisper';
-  const groqKey = forceCloudflareWhisper ? '' : ctx.env.GROQ_API_KEY;
   const audioBase64 = String(ctx.body.audio_base64 || ctx.body.audio || '');
   if (!audioBase64) return json({ success: false, error: 'لم يتم إرسال ملف الصوت للتفريغ.' }, 400, ctx.headers);
 
@@ -1148,45 +1233,51 @@ async function transcribeAudio(ctx) {
     return json({ success: false, error: 'حجم الملف أكبر من الحد المدعوم للتفريغ السحابي (18 ميجابايت). قصّ الملف أو قلّل حجمه ثم أعد المحاولة.' }, 413, ctx.headers);
   }
 
-  // Use Cloudflare Workers AI Whisper when Groq is not configured. The AI
-  // binding is already part of this Worker, so no extra provider key is needed.
-  if (!groqKey) {
+  // Gemini's dedicated transcription model accepts audio containers. Keep
+  // video uploads on the established Whisper path; CEP normally sends audio.
+  if (forceCloudflareWhisper || mimeType.startsWith('video/')) {
     return transcribeWithCloudflareWhisper(ctx, audioBase64);
   }
 
-  const rawFileName = String(ctx.body.file_name || 'media');
-  const extensionMatch = rawFileName.match(/\.(wav|mp3|m4a|mp4|aac|ogg|webm|flac|mov|mkv|mpeg)$/i);
-  const mediaFileName = `upload.${(extensionMatch?.[1] || (mimeType.startsWith('video/') ? 'mp4' : 'mp3')).toLowerCase()}`;
-  const form = new FormData();
-  form.append('file', new Blob([raw], { type: mimeType }), mediaFileName);
-  form.append('model', 'whisper-large-v3');
-  form.append('response_format', 'verbose_json');
-
-  const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${groqKey}` },
-    body: form
-  });
-  const data = await readJson(resp);
-  if (!resp.ok) {
-    const providerError = String(data.error?.message || data.message || 'تعذر التفريغ عبر Groq Whisper.');
-    const quotaExhausted = resp.status === 429 || ((resp.status === 402 || resp.status === 403) && /quota|rate.?limit|billing|usage limit|exceeded/i.test(providerError));
-    if (quotaExhausted && ctx.env.AI) {
-      console.warn('[Groq transcription quota reached; falling back to Cloudflare Whisper]', resp.status);
+  const geminiMimeType = mimeType === 'audio/mp4' ? 'audio/m4a' : (mimeType === 'audio/x-wav' ? 'audio/wav' : mimeType);
+  try {
+    const transcript = await callGeminiWithFailover(ctx, async apiKey => {
+      const file = await uploadGeminiTranscriptionFile(apiKey, raw, geminiMimeType);
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ fileData: { fileUri: file.uri, mimeType: geminiMimeType } }] }],
+            generationConfig: { audioTranscriptionConfig: { wordTimestamp: true, mode: 'VERBATIM' } }
+          })
+        });
+        const data = await readJson(response);
+        if (!response.ok) {
+          const error = new Error(data.error?.message || `Gemini transcription failed HTTP ${response.status}`);
+          error.status = response.status;
+          throw error;
+        }
+        const parts = (data.candidates || []).flatMap(candidate => candidate.content?.parts || []);
+        const text = parts.map(part => part.text || '').join('\n').trim();
+        const words = parts.flatMap(part => part.audioTranscription?.words || []);
+        if (!text) throw new Error('لم يُرجع Gemini نصًا للتفريغ.');
+        return { text, segments: groupGeminiTranscriptWords(words), provider: 'Gemini 3.5 Transcribe' };
+      } finally {
+        await deleteGeminiTranscriptionFile(apiKey, file.name);
+      }
+    });
+    return json({ success: true, ...transcript }, 200, ctx.headers);
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    const quotaOrNoKeys = error?.status === 429 || error?.status === 403 || error?.status === 503 ||
+      /quota|resource[_ -]?exhausted|rate.?limit|billing|exceeded|لا توجد مفاتيح|مفاتيح.*(?:مستهلكة|معطلة)|كافة مفاتيح/i.test(message);
+    if (quotaOrNoKeys && ctx.env.AI) {
+      console.warn('[Gemini transcription unavailable; falling back to Cloudflare Whisper]', message.slice(0, 160));
       return transcribeWithCloudflareWhisper(ctx, audioBase64);
     }
-    return json({ success: false, error: providerError }, resp.status, ctx.headers);
+    return json({ success: false, error: message || 'تعذر التفريغ عبر Gemini.' }, error?.status || 502, ctx.headers);
   }
-
-  return json({
-    success: true,
-    text: data.text || '',
-    segments: (data.segments || []).map(s => ({
-      start: s.start,
-      end: s.end,
-      text: s.text?.trim()
-    }))
-  }, 200, ctx.headers);
 }
 
 async function analyzeVideoSilence(ctx) {
