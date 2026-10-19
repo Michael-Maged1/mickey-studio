@@ -3726,29 +3726,33 @@ window.MickeyStudio = (function () {
 
   // pendingPairCode declared above
   let pendingPair2Code = '';
+  let pendingPairCompletionCode = '';
 
   async function completePendingExtensionPair(user) {
-    if (pendingPair2Code && user) {
-      const currentCode2 = pendingPair2Code;
-      try {
-        await accountRequest('pair2_complete', { code: currentCode2, deviceName: 'Mickey Studio · Premiere Pro' });
-        pendingPair2Code = '';
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('pair2');
-        cleanUrl.searchParams.delete('extension_pair2');
-        history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
-        showToast('تم ربط الإضافة بنجاح (Pairing v2)! ارجع إلى Premiere Pro.', 'success');
-        refreshConnectedDevices();
-        return;
-      } catch (error) {
-        console.error('[ExtensionPairingV2] Could not complete secure pairing v2:', error);
-        showToast('تعذر إكمال الربط التلقائي v2: ' + (error.message || 'انتهت صلاحية الرمز'), 'error', 7000);
-      }
-    }
-    if (!pendingPairCode || !user) return;
-    const currentCode = pendingPairCode;
+    const code = pendingPair2Code || pendingPairCode;
+    if (!code || !user || pendingPairCompletionCode === code) return;
+    pendingPairCompletionCode = code;
     try {
-      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro' });
+      if (pendingPair2Code) {
+        try {
+          await accountRequest('pair2_complete', { code: pendingPair2Code, deviceName: 'Mickey Studio · Premiere Pro' });
+          pendingPair2Code = '';
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('pair2');
+          cleanUrl.searchParams.delete('extension_pair2');
+          history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
+          showToast('تم ربط الإضافة بنجاح! ارجع إلى Premiere Pro.', 'success');
+          refreshConnectedDevices();
+          return;
+        } catch (error) {
+          console.error('[ExtensionPairingV2] Could not complete secure pairing v2:', error);
+          showToast('تعذر إكمال الربط التلقائي: ' + (error.message || 'انتهت صلاحية الرمز'), 'error', 9000);
+          return;
+        }
+      }
+
+      if (!pendingPairCode) return;
+      await accountRequest('pair_complete', { code: pendingPairCode, deviceName: 'Mickey Studio · Premiere Pro' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
@@ -3757,7 +3761,7 @@ window.MickeyStudio = (function () {
       refreshConnectedDevices();
     } catch (error) {
       console.error('[ExtensionPairing] Could not complete secure pairing:', error);
-      showToast('تعذر إكمال الربط التلقائي. ما زال بإمكانك استخدام كود الربط اليدوي من إعدادات الإضافة.', 'error', 7000);
+      showToast('تعذر إكمال الربط التلقائي: ' + (error.message || 'تحقق من تسجيل الدخول وأن الرمز لم تنته صلاحيته.'), 'error', 9000);
     }
   }
 
