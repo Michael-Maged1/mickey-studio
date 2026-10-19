@@ -39,6 +39,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="style.css">
+  <style>
+    .admin-tab-panel[hidden] { display: none !important; }
+  </style>
 
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -217,7 +220,7 @@
       <!-- ============================================================== -->
       <!-- TAB 1: USERS (إدارة الحسابات، الحظر، الباقات، الأجهزة)          -->
       <!-- ============================================================== -->
-      <section id="tab-content-users" class="space-y-6">
+      <section id="tab-content-users" class="admin-tab-panel space-y-6">
         <!-- Metrics Row -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-[#121216] border border-white/5 rounded-2xl p-5 space-y-2">
@@ -325,7 +328,7 @@
       <!-- ============================================================== -->
       <!-- TAB 2: PLANS & LIMITS (تحكم كامل بالحدود ونمط الاشتراكات)       -->
       <!-- ============================================================== -->
-      <section id="tab-content-plans" class="hidden space-y-6">
+      <section id="tab-content-plans" class="admin-tab-panel hidden space-y-6" hidden>
         <!-- Error Banner Container for Plans -->
         <div id="plans-error-banner" class="hidden"></div>
 
@@ -505,7 +508,7 @@
       <!-- ============================================================== -->
       <!-- TAB 3: GEMINI MULTI-KEY FAILOVER POOL (حوض التدوير الذكي)       -->
       <!-- ============================================================== -->
-      <section id="tab-content-gemini" class="hidden space-y-6">
+      <section id="tab-content-gemini" class="admin-tab-panel hidden space-y-6" hidden>
         <!-- Security & Architecture Guarantee Card -->
         <div class="p-6 rounded-3xl border border-cyan-500/30 bg-[#121216] space-y-4 shadow-xl">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
@@ -604,7 +607,7 @@
       <!-- ============================================================== -->
       <!-- TAB 4: STATS & HEALTH & AUDIT LOGS (الإحصائيات وسجل العمليات)   -->
       <!-- ============================================================== -->
-      <section id="tab-content-stats" class="hidden space-y-6">
+      <section id="tab-content-stats" class="admin-tab-panel hidden space-y-6" hidden>
 
         <!-- Tool Usage Breakdown Cards -->
         <div class="space-y-3">
@@ -1136,6 +1139,7 @@
       document.getElementById('btn-admin-logout')?.classList.remove('hidden');
       document.getElementById('admin-email-text').textContent = 'المشرف المعتمد (Admin)';
       hideAuthError();
+      switchTab('users');
 
       // Load initial dashboard state asynchronously
       loadSystemHealth().catch(() => {});
@@ -1259,7 +1263,10 @@
         const content = document.getElementById(`tab-content-${t}`);
         const btn = document.getElementById(`tab-btn-${t}`);
         if (content && btn) {
-          if (t === tabId) {
+          const active = t === tabId;
+          content.hidden = !active;
+          content.classList.toggle('hidden', !active);
+          if (active) {
             content.classList.remove('hidden');
             btn.className = 'px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-bold text-xs transition flex items-center gap-2 cursor-pointer shadow-sm';
           } else {
@@ -1364,11 +1371,15 @@
           <tr class="hover:bg-white/[0.02] transition">
             <td class="py-3 px-4">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-xs text-white">
-                  ${(user.displayName || user.email || 'M').charAt(0).toUpperCase()}
+                <div class="w-7 h-7 rounded-full ${isProtectedAdmin ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-zinc-800 border-white/10 text-white'} border flex items-center justify-center font-bold text-xs">
+                  ${isProtectedAdmin ? '<i class="fa-solid fa-user-shield"></i>' : (user.displayName || user.email || 'M').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div class="font-semibold text-white">${escapeHtml(user.displayName || 'مستخدم')}</div>
+                  <div class="font-semibold ${isProtectedAdmin ? 'text-emerald-200' : 'text-white'} flex items-center gap-1.5">
+                    ${isProtectedAdmin
+                      ? '<i class="fa-solid fa-user-shield text-emerald-400" title="المشرف الرئيسي"></i> المشرف الرئيسي (Admin)'
+                      : escapeHtml(user.displayName || 'مستخدم')}
+                  </div>
                   <div class="text-[11px] text-zinc-400 font-mono" dir="ltr">${escapeHtml(user.email || 'بدون بريد')}</div>
                 </div>
               </div>
@@ -1387,7 +1398,11 @@
             </td>
 
             <td class="py-3 px-4">
-              ${isBanned
+              ${isProtectedAdmin
+                ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold">
+                     <i class="fa-solid fa-shield-halved"></i> مشرف محمي
+                   </span>`
+                : isBanned
                 ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-semibold" title="${escapeHtml(user.banReason || 'بدون سبب مسجل')}">
                      <i class="fa-solid fa-ban text-[8px]"></i> موقوف
                    </span>`
