@@ -1,32 +1,16 @@
-name = "mickey-studio-flux"
+name = "mickey-studio-api"
 main = "src/index.js"
 compatibility_date = "2026-10-14"
+workers_dev = true
 
 [ai]
 binding = "AI"
 
-[vars]
-# Origin restriction (comma-separated or empty to allow development)
-ALLOWED_ORIGIN = ""
-# Daily free tier generation limits
-LIMIT_IMAGES = "20"
-LIMIT_VOICE = "30"
-LIMIT_TRANSCRIPTION = "15"
-LIMIT_MOTION = "10"
-
-# State & Token Storage KV Namespace
-# Replace with the id obtained from: npx wrangler kv namespace create MICKEY_STATE
 [[kv_namespaces]]
 binding = "MICKEY_STATE"
-id = "<YOUR_KV_NAMESPACE_ID>"
+id = "2dcfe2752b3d44638db77d9cd533394c"
 
-# Free SQLite-backed Durable Object for atomic rate-limiting, pair staging, and daily quotas
-[durable_objects]
-bindings = [
-  { name = "MICKEY_COORDINATOR", class_name = "MickeyCoordinatorDO" }
-]
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["MickeyCoordinatorDO"]
-
+[vars]
+FIREBASE_PROJECT_ID = "mickey-gemini-studio"
+ADMIN_EMAIL = "michaelmagednew@gmail.com"
+ALLOWED_ORIGINS = "https://mickey-studio-eta.vercel.app"
