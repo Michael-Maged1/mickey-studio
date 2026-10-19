@@ -1215,11 +1215,18 @@ window.MickeyStudio = (function () {
     return false;
   }
 
-  const API_BASE_URL = window.MICKEY_API_BASE_URL || (function() {
+  const DEFAULT_WORKER_API_URL = 'https://mickey-studio-api.kma279500.workers.dev/api.php';
+  const API_BASE_URL = (function() {
+    const configured = String(window.MICKEY_API_BASE_URL || '').trim();
+    if (!configured) return DEFAULT_WORKER_API_URL;
     try {
-      return new URL('api.php', window.location.href).href;
+      const parsed = new URL(configured, window.location.href);
+      // Never fall back to the Vercel site itself: it does not host the API
+      // endpoint and can return a generic Forbidden response for /api.php.
+      if (parsed.origin === window.location.origin) return DEFAULT_WORKER_API_URL;
+      return parsed.href;
     } catch (_) {
-      return 'api.php';
+      return DEFAULT_WORKER_API_URL;
     }
   })();
   const MOTION_SCENE_API_URL = 'https://mickey-studio-api.kma279500.workers.dev';
