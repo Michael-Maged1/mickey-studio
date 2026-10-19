@@ -105,6 +105,20 @@ body {
   transform: translateY(0);
 }
 
+/* Keep the signed-in account state readable against the dark free-plan banner. */
+#free-unlimited-notice .btn-primary.account-activated {
+  background: #0f766e !important;
+  color: #ffffff !important;
+  border-color: #5eead4 !important;
+  box-shadow: 0 4px 18px rgba(20, 184, 166, 0.28);
+}
+
+#free-unlimited-notice .btn-primary.account-activated:hover {
+  background: #0d9488 !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 22px rgba(20, 184, 166, 0.38);
+}
+
 /* Secondary Button: Clean Muted Surface */
 .btn-secondary {
   background: rgba(255, 255, 255, 0.06);

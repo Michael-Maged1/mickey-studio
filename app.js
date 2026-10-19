@@ -3547,6 +3547,8 @@ window.MickeyStudio = (function () {
     const dashMeterGen = document.getElementById('dashboard-meter-generations');
     const dashMeterBar = document.getElementById('dashboard-meter-bar');
     const freeNoticeBtnText = document.getElementById('free-banner-btn-text');
+    const freeNoticeBtn = document.getElementById('free-banner-auth-btn');
+    const freeNoticeIcon = freeNoticeBtn && freeNoticeBtn.querySelector('i');
 
     if (STATE.user || (window.firebase && firebase.apps && firebase.apps.length && firebase.auth().currentUser)) {
       if (badge) badge.classList.add('hidden');
@@ -3554,6 +3556,8 @@ window.MickeyStudio = (function () {
       if (dashMeterGen) dashMeterGen.textContent = 'غير محدود';
       if (dashMeterBar) dashMeterBar.style.width = '100%';
       if (freeNoticeBtnText) freeNoticeBtnText.textContent = 'حسابك مفعل ✓';
+      if (freeNoticeBtn) freeNoticeBtn.classList.add('account-activated');
+      if (freeNoticeIcon) freeNoticeIcon.className = 'fa-solid fa-circle-check text-xs';
       return;
     }
     // Keep 5-attempt badge hidden from top UI as requested
@@ -3565,6 +3569,8 @@ window.MickeyStudio = (function () {
     if (dashMeterGen) dashMeterGen.textContent = `${remaining} تجريبية`;
     if (dashMeterBar) dashMeterBar.style.width = `${(remaining / 5) * 100}%`;
     if (freeNoticeBtnText) freeNoticeBtnText.textContent = 'إنشاء حساب مجاني الآن';
+    if (freeNoticeBtn) freeNoticeBtn.classList.remove('account-activated');
+    if (freeNoticeIcon) freeNoticeIcon.className = 'fa-solid fa-user-plus text-xs';
   }
 
   async function authorizeAndConsume(tool, count = 1) {
