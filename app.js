@@ -4104,7 +4104,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     const requestBody = { action, ...body };
     // InfinityFree/shared Apache may drop Authorization before PHP receives it.
     // Include the short-lived ID token in this HTTPS request body as a fallback.
-    if (['pair_complete', 'consume_generation'].includes(action) && user) requestBody.idToken = await user.getIdToken();
+    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke'].includes(action) && user) requestBody.idToken = await user.getIdToken();
     const response = await fetch(`${API_BASE_URL}?action=${encodeURIComponent(action)}`, {
       method: 'POST', headers, body: JSON.stringify(requestBody)
     });
@@ -4421,6 +4421,297 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
       else if (layout.adjusted) motionNotice(`تم إرسال المشهد بعد إعادة ترتيب ${layout.adjusted} عنصر تلقائياً لمنع التداخل.`, false, statusId);
     } catch (error) { motionNotice(error.message || 'تعذر إرسال المشهد.', true, statusId); }
     finally { if (button) button.disabled = false; }
+  }
+
+  function motionComputeElementKeyframes(item) {
+    const dur = Math.max(0.1, Number(item.duration) || 5);
+    const animIn = String(item.animationIn || 'none').toLowerCase();
+    const animOut = String(item.animationOut || 'none').toLowerCase();
+    const basePos = Array.isArray(item.position) ? [Number(item.position[0]), Number(item.position[1])] : [960, 540];
+    const baseScale = Number(item.scale) || 100;
+    const inDur = animIn === 'word-reveal' ? 0.85 : 0.48;
+    const outDur = 0.42;
+
+    const keyframes = { position: [], scale: [], opacity: [] };
+
+    // Initial state at t=0
+    let startPos = [...basePos];
+    let startScale = baseScale;
+    let startOp = 1.0;
+
+    if (animIn === 'pop-in') {
+      startScale = 0;
+      startOp = 0.05;
+    } else if (['zoom-in', 'bounce-in'].includes(animIn)) {
+      startScale = animIn === 'bounce-in' ? 10 : 20;
+      startOp = 0.05;
+    } else if (animIn === 'slide-up') {
+      startPos = [basePos[0], basePos[1] + 78];
+      startOp = 0.05;
+    } else if (animIn === 'slide-left') {
+      startPos = [basePos[0] + 110, basePos[1]];
+      startOp = 0.05;
+    } else if (animIn === 'slide-right') {
+      startPos = [basePos[0] - 110, basePos[1]];
+      startOp = 0.05;
+    } else if (animIn === 'fade-in' || animIn === 'word-reveal') {
+      startOp = 0.05;
+    }
+
+    keyframes.position.push({ time: 0, value: startPos });
+    keyframes.scale.push({ time: 0, value: startScale });
+    keyframes.opacity.push({ time: 0, value: startOp });
+
+    // Entrance complete
+    if (animIn !== 'none' && dur > inDur) {
+      keyframes.position.push({ time: inDur, value: [...basePos] });
+      keyframes.scale.push({ time: inDur, value: baseScale });
+      keyframes.opacity.push({ time: inDur, value: 1.0 });
+    }
+
+    // Hold before exit
+    const holdEnd = Math.max(inDur, dur - outDur);
+    if (animOut !== 'none' && holdEnd > inDur && holdEnd < dur) {
+      keyframes.position.push({ time: holdEnd, value: [...basePos] });
+      keyframes.scale.push({ time: holdEnd, value: baseScale });
+      keyframes.opacity.push({ time: holdEnd, value: 1.0 });
+    }
+
+    // Exit end state at t=dur
+    let endPos = [...basePos];
+    let endScale = baseScale;
+    let endOp = animOut === 'none' ? 1.0 : 0.0;
+
+    if (animOut === 'slide-down') {
+      endPos = [basePos[0], basePos[1] + 78];
+    } else if (animOut === 'slide-left') {
+      endPos = [basePos[0] - 90, basePos[1]];
+    } else if (animOut === 'slide-right') {
+      endPos = [basePos[0] + 90, basePos[1]];
+    } else if (animOut === 'zoom-out') {
+      endScale = baseScale * 0.76;
+    }
+
+    keyframes.position.push({ time: dur, value: endPos });
+    keyframes.scale.push({ time: dur, value: endScale });
+    keyframes.opacity.push({ time: dur, value: endOp });
+
+    return keyframes;
+  }
+
+  function motionSerializeEditableScene(scene) {
+    const v2 = {
+      version: 2,
+      aspectRatio: ['16:9', '9:16', '1:1'].includes(scene.aspectRatio) ? scene.aspectRatio : '16:9',
+      duration: Number(scene.duration) || 15,
+      music: scene.music ? { ...scene.music } : undefined,
+      elements: []
+    };
+
+    (scene.elements || []).forEach((item, index) => {
+      if (!item) return;
+
+      if (item.type === 'sfx') {
+        v2.elements.push({
+          type: 'sfx',
+          sfxId: item.sfxId || (index === 0 ? 'soft_whoosh' : 'click'),
+          startTime: Number(item.startTime) || 0,
+          duration: Number(item.duration) || 0.5,
+          volume: Number(item.volume) || 0.5,
+          trackIndex: Number(item.trackIndex) || 0
+        });
+        return;
+      }
+
+      if (item.type === 'text' || motionEditorIsText(item)) {
+        const text = item.params?.text || item.text || item.params?.label || '';
+        const params = item.params || {};
+        v2.elements.push({
+          type: 'text',
+          templateId: item.templateId || 'text_kinetic',
+          text: String(text).trim(),
+          label: String(params.label || '').trim(),
+          fontFamily: String(params.fontFamily || item.fontFamily || 'Readex Pro').replace(/["\\]/g, ''),
+          fontSize: Math.round(Number(params.fontSize || item.fontSize || 68)),
+          textColor: params.textColor || item.textColor || '#FFFFFF',
+          color1: params.color1 || item.color1 || '#FB923C',
+          color2: params.color2 || item.color2 || '#3F2A70',
+          alignment: params.alignment || item.alignment || 'center',
+          trackIndex: Number(item.trackIndex) || 0,
+          startTime: Number(item.startTime) || 0,
+          duration: Number(item.duration) || 5,
+          position: Array.isArray(item.position) ? [Number(item.position[0]), Number(item.position[1])] : [960, 540],
+          scale: Number(item.scale) || 100,
+          opacity: 1.0,
+          animationIn: item.animationIn || 'pop-in',
+          animationOut: item.animationOut || 'fade-out',
+          keyframes: motionComputeElementKeyframes(item)
+        });
+        return;
+      }
+
+      if (item.type === 'shape' || item.type === 'color_matte' || ['bg_aurora', 'bg_grid'].includes(item.templateId)) {
+        const p = item.params || {};
+        const shapeType = item.type === 'color_matte' ? 'solid' : (item.templateId === 'bg_grid' ? 'grid' : (item.templateId === 'bg_aurora' ? 'aurora' : (item.shapeType || 'rect')));
+        v2.elements.push({
+          type: 'shape',
+          templateId: item.templateId || 'color_matte',
+          shapeType: shapeType,
+          color1: p.color1 || item.color1 || '#1A2744',
+          color2: p.color2 || item.color2 || '#3F2A70',
+          strokeColor: p.strokeColor || '#FFFFFF22',
+          trackIndex: Number(item.trackIndex) || 0,
+          startTime: Number(item.startTime) || 0,
+          duration: Number(item.duration) || 15,
+          position: Array.isArray(item.position) ? [Number(item.position[0]), Number(item.position[1])] : [960, 540],
+          scale: Number(item.scale) || 100,
+          opacity: 1.0,
+          keyframes: motionComputeElementKeyframes(item)
+        });
+        return;
+      }
+
+      if (item.type === 'image' || item.imageData || item.renderedPng) {
+        v2.elements.push({
+          type: 'image',
+          imageData: item.imageData || item.renderedPng || '',
+          trackIndex: Number(item.trackIndex) || 0,
+          startTime: Number(item.startTime) || 0,
+          duration: Number(item.duration) || 5,
+          position: Array.isArray(item.position) ? [Number(item.position[0]), Number(item.position[1])] : [960, 540],
+          scale: Number(item.scale) || 100,
+          opacity: 1.0,
+          animationIn: item.animationIn || 'fade-in',
+          animationOut: item.animationOut || 'fade-out',
+          keyframes: motionComputeElementKeyframes(item)
+        });
+        return;
+      }
+
+      v2.elements.push({
+        ...item,
+        type: item.type || 'graphic',
+        keyframes: motionComputeElementKeyframes(item)
+      });
+    });
+
+    return v2;
+  }
+
+  async function motionCompressImageDataUrl(dataUrl, maxWidth = 1920, quality = 0.82) {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl;
+    if (typeof Image === 'undefined') return dataUrl;
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+        if (width > maxWidth) {
+          height = Math.round(height * (maxWidth / width));
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(dataUrl); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        let compressed = canvas.toDataURL('image/webp', quality);
+        if (!compressed || !compressed.startsWith('data:image/webp')) {
+          compressed = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(compressed && compressed.length < dataUrl.length ? compressed : dataUrl);
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  function motionChunkPayloadString(jsonString, maxChunkBytes = 1.5 * 1024 * 1024) {
+    if (!jsonString || jsonString.length <= maxChunkBytes) return null;
+    const chunks = [];
+    for (let i = 0; i < jsonString.length; i += maxChunkBytes) {
+      chunks.push(jsonString.slice(i, i + maxChunkBytes));
+    }
+    return chunks;
+  }
+
+  async function motionSendEditableSceneToPremiere() {
+    const button = document.getElementById('motion-send-v2') || document.getElementById('motion-editor-send-v2');
+    const statusId = document.getElementById('section-motion-editor')?.classList.contains('hidden') ? 'motion-status' : 'motion-editor-status';
+    try {
+      if (!window.firebase?.auth?.().currentUser) throw new Error('سجّل الدخول إلى الموقع أولاً بالحساب المرتبط بإضافة Premiere.');
+      const sourceJSON = document.getElementById('motion-json')?.value || '';
+      const rawScene = motionEditorScene ? JSON.parse(JSON.stringify(motionEditorScene)) : parseMotionJSON(sourceJSON);
+      validateMotionScene(rawScene);
+
+      const layout = motionAutoLayoutScene(rawScene);
+      motionEditorEnsureTextContrast(rawScene);
+
+      const style = document.getElementById('motion-style')?.value || 'social';
+      const musicEnabled = document.getElementById('motion-music-enabled')?.checked !== false;
+      const selectedMusic = document.getElementById('motion-music-track')?.value || 'auto';
+      if (musicEnabled) {
+        const musicId = selectedMusic === 'auto' ? MOTION_STYLE_MUSIC[style] || 'social_upbeat' : selectedMusic;
+        const volume = Math.max(10, Math.min(50, Number(document.getElementById('motion-music-volume')?.value) || 28)) / 100;
+        rawScene.music = { musicId, duration: Number(document.getElementById('motion-duration')?.value) || 15, volume, fadeIn: 1.2, fadeOut: 1.5 };
+      } else delete rawScene.music;
+
+      const sfxElements = rawScene.elements.filter(item => item.type === 'sfx').slice(0, 2);
+      rawScene.elements = rawScene.elements.filter(item => item.type !== 'sfx').concat(sfxElements.map((item, index) => ({
+        ...item,
+        sfxId: index === 0 ? 'soft_whoosh' : 'click',
+        duration: Math.min(Number(item.duration) || 0.5, index === 0 ? 0.65 : 0.2),
+      })));
+
+      motionNotice('جارٍ تحويل المشهد إلى عناصر قابلة للتعديل (v2)…', false, statusId);
+      if (button) button.disabled = true;
+
+      const v2Scene = motionSerializeEditableScene(rawScene);
+
+      for (const el of v2Scene.elements) {
+        if (el.type === 'image' && el.imageData) {
+          el.imageData = await motionCompressImageDataUrl(el.imageData);
+        }
+      }
+
+      const serialized = JSON.stringify({ scene: v2Scene, version: 2 });
+      const user = firebase.auth().currentUser;
+      const token = await user.getIdToken();
+      const chunks = motionChunkPayloadString(serialized);
+
+      motionNotice('جارٍ إرسال المشهد القابل للتعديل إلى حسابك…', false, statusId);
+
+      if (chunks && chunks.length > 1) {
+        const chunkId = 'chk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        for (let i = 0; i < chunks.length; i++) {
+          motionNotice(`جارٍ إرسال المشهد (جزء ${i + 1} من ${chunks.length})…`, false, statusId);
+          const resp = await fetch(`${MOTION_SCENE_API_URL}/?action=motion_scene_submit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ chunkId, chunkIndex: i, totalChunks: chunks.length, chunkData: chunks[i], version: 2 })
+          });
+          const resData = await resp.json().catch(() => ({}));
+          if (!resp.ok || !resData.success) throw new Error(resData.error || `تعذر إرسال الجزء ${i + 1} (${resp.status}).`);
+        }
+      } else {
+        const response = await fetch(`${MOTION_SCENE_API_URL}/?action=motion_scene_submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: serialized
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success) throw new Error(result.error || `تعذر إرسال المشهد (${response.status}).`);
+      }
+
+      motionNotice('تم إرسال المشهد القابل للتعديل (v2). افتح Premiere Pro لتطبيقه كنصوص وعناصر أصلية.', false, statusId);
+      if (layout.unresolved) motionNotice(`تم الإرسال (v2)، لكن تعذر تفادي ${layout.unresolved} تداخلات تلقائياً. راجع النص بعد الإدراج.`, true, statusId);
+      else if (layout.adjusted) motionNotice(`تم إرسال المشهد (v2) بعد ضبط موضع ${layout.adjusted} عنصر تلقائياً.`, false, statusId);
+    } catch (error) {
+      motionNotice(error.message || 'تعذر إرسال المشهد القابل للتعديل.', true, statusId);
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   async function motionAttachRenderedLayers(scene) {
@@ -5467,18 +5758,37 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   function closeAccountModal() { document.getElementById('modal-account')?.classList.add('hidden'); }
   function isAdminUser(user = STATE.user) { return String(user?.email || '').toLowerCase().trim() === ADMIN_EMAIL; }
 
+  let pendingPairCode = '';
+  let pendingPair2Code = '';
+
   async function completePendingExtensionPair(user) {
-    if (!pendingPairCode || !user?.refreshToken) return;
+    if (pendingPair2Code && user) {
+      const currentCode2 = pendingPair2Code;
+      try {
+        await accountRequest('pair2_complete', { code: currentCode2, deviceName: 'Mickey Studio · Premiere Pro' });
+        pendingPair2Code = '';
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('pair2');
+        cleanUrl.searchParams.delete('extension_pair2');
+        history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
+        showToast('تم ربط الإضافة بنجاح (Pairing v2)! ارجع إلى Premiere Pro.', 'success');
+        refreshConnectedDevices();
+        return;
+      } catch (error) {
+        console.error('[ExtensionPairingV2] Could not complete secure pairing v2:', error);
+        showToast('تعذر إكمال الربط التلقائي v2: ' + (error.message || 'انتهت صلاحية الرمز'), 'error', 7000);
+      }
+    }
+    if (!pendingPairCode || !user) return;
     const currentCode = pendingPairCode;
     try {
-      // Complete through the Worker, which validates the signed-in account and
-      // encrypts the refresh token before storing it in Firestore.
-      await accountRequest('pair_complete', { code: currentCode, refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
       history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
       showToast('تم ربط الإضافة بحساب Mickey Studio بنجاح! ارجع إلى Premiere Pro.', 'success');
+      refreshConnectedDevices();
     } catch (error) {
       console.error('[ExtensionPairing] Could not complete secure pairing:', error);
       showToast('تعذر إكمال الربط التلقائي. ما زال بإمكانك استخدام كود الربط اليدوي من إعدادات الإضافة.', 'error', 7000);
@@ -5487,23 +5797,54 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
 
   async function copyPremierePairToken() {
     const user = firebase.auth().currentUser;
-    if (!user || !user.refreshToken) {
+    if (!user) {
       showToast('سجّل الدخول أولاً في الموقع لنسخ كود الربط.', 'warning');
       return;
     }
-    const tokenPayload = {
-      mickey_pair: true,
-      refreshToken: user.refreshToken,
-      email: user.email || user.phoneNumber || '',
-      uid: user.uid,
-      ts: Date.now()
-    };
-    const tokenStr = 'MKP_' + btoa(unescape(encodeURIComponent(JSON.stringify(tokenPayload))));
     try {
-      await navigator.clipboard.writeText(tokenStr);
-      showToast('✓ تم نسخ كود الربط! افتح إضافة Premiere Pro والصقه في خانة الربط المباشر.', 'success', 5000);
-    } catch (_) {
-      prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr);
+      const begin = await accountRequest('pair_begin');
+      await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro' });
+      const tokenStr = `MKP_${begin.code}`;
+      try { await navigator.clipboard.writeText(tokenStr); }
+      catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
+      showToast('✓ تم نسخ كود ربط لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
+      refreshConnectedDevices();
+    } catch (error) {
+      showToast(error.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
+    }
+  }
+
+  async function refreshConnectedDevices() {
+    const list = document.getElementById('connected-devices-list');
+    if (!list || !firebase.auth().currentUser) return;
+    list.innerHTML = '<p class="text-xs text-zinc-500">جاري تحميل الأجهزة…</p>';
+    try {
+      const result = await accountRequest('device_list');
+      if (!result.devices?.length) {
+        list.innerHTML = '<p class="text-xs text-zinc-500">لا توجد أجهزة مرتبطة.</p>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const device of result.devices) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2';
+        const info = document.createElement('div');
+        info.className = 'min-w-0';
+        const name = document.createElement('div'); name.className = 'text-xs text-zinc-200 truncate'; name.textContent = device.name || 'جهاز Premiere Pro';
+        const date = document.createElement('div'); date.className = 'text-[10px] text-zinc-500'; date.textContent = `تاريخ الربط: ${new Date(device.createdAt).toLocaleString()}`;
+        info.append(name, date);
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'shrink-0 text-[10px] text-red-300 hover:text-red-200'; button.textContent = 'إلغاء الربط';
+        button.addEventListener('click', async () => {
+          if (!confirm('سيُلغى وصول هذا الجهاز فورًا. هل تريد المتابعة؟')) return;
+          try { await accountRequest('device_revoke', { deviceId: device.deviceId }); await refreshConnectedDevices(); showToast('تم إلغاء ربط الجهاز.', 'success'); }
+          catch (error) { showToast(error.message || 'تعذر إلغاء ربط الجهاز.', 'error'); }
+        });
+        row.append(info, button); list.append(row);
+      }
+    } catch (error) {
+      list.innerHTML = '<p class="text-xs text-red-300">تعذر تحميل الأجهزة المرتبطة.</p>';
+      console.warn('[ConnectedDevices]', error);
     }
   }
 
@@ -5513,6 +5854,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     document.getElementById('account-profile-fields')?.classList.toggle('hidden', !signedIn);
     updateGuestBadge();
     if (!signedIn) return;
+    refreshConnectedDevices();
     const name = STATE.user.displayName || STATE.userProfile?.displayName || (STATE.user.email ? STATE.user.email.split('@')[0] : 'مستخدم Mickey Studio');
     const email = STATE.user.email || STATE.user.phoneNumber || STATE.userProfile?.phoneNumber || '';
     const avatar = document.getElementById('account-profile-avatar');
@@ -5613,7 +5955,9 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
   }
 
   function initFirebaseAuth() {
-    pendingPairCode = new URLSearchParams(window.location.search).get('extension_pair') || '';
+    const searchParams = new URLSearchParams(window.location.search);
+    pendingPair2Code = searchParams.get('pair2') || searchParams.get('extension_pair2') || '';
+    pendingPairCode = searchParams.get('extension_pair') || '';
     const config = getActiveFirebaseConfig();
     try {
       if (!window.firebase) return;
@@ -5640,7 +5984,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
         });
         firebaseAuthObserverAttached = true;
       }
-      if (pendingPairCode && window.firebase && !firebase.auth().currentUser) {
+      if ((pendingPairCode || pendingPair2Code) && window.firebase && !firebase.auth().currentUser) {
         setTimeout(() => { openAccountModal(); showToast('سجّل الدخول لإكمال ربط إضافة Premiere.', 'info'); }, 0);
       }
     } catch (e) {
@@ -5708,6 +6052,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     switchTab,
     motionGeneratePrompt,
     motionSendToPremiere,
+    motionSendEditableSceneToPremiere,
     motionCopyRepairPrompt,
     motionOpenEditor,
     motionTogglePlayback,
@@ -5818,6 +6163,7 @@ ${s1Name}: شكراً لك على هذه الرؤية الملهمة، وإلى 
     executeLiveApiTest,
     copyApiTestResponse,
     copyPremierePairToken,
+    refreshConnectedDevices,
   };
 
 })();

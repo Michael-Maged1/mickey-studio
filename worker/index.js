@@ -41,11 +41,16 @@ export default {
         case 'consume_generation': return json({ success: true, remaining: context.access.remaining, plan: context.access.account ? 'free' : 'guest', permit: context.access.permit || undefined }, 200, headers);
         case 'account_status': {
           const account = await authenticate(context, false);
-          return json({ success: true, uid: account.uid, email: account.email, status: account.status, plan: 'free' }, 200, headers);
+          return json({ success: true, uid: account.uid, email: account.email, status: account.status, deviceId: account.deviceId || null, plan: 'free' }, 200, headers);
         }
         case 'pair_begin': return await pairBegin(context);
         case 'pair_complete': return await pairComplete(context);
         case 'pair_poll': return await pairPoll(context);
+        case 'pair2_start': return await pair2Start(context);
+        case 'pair2_complete': return await pair2Complete(context);
+        case 'pair2_poll': return await pair2Poll(context);
+        case 'device_list': return await listDevices(context);
+        case 'device_revoke': return await revokeDevice(context);
         case 'motion_scene_submit': return await submitMotionScene(context);
         case 'motion_scene_poll': return await pollMotionScene(context);
         case 'motion_scene_ack': return await acknowledgeMotionScene(context);
@@ -158,6 +163,17 @@ async function firebaseLookup(token, env) {
 }
 async function authenticate(ctx, adminOnly = false) {
   const token = bearer(ctx.request) || String(ctx.body.idToken || '');
+  if (/^msd[2]?[_-][a-f0-9]{64}$/i.test(token) || /^msd_[a-f0-9]{64}$/i.test(token)) {
+    const tokenHash = await sha256(token);
+    const device = await ctx.env.MICKEY_STATE.get(`device_token:${tokenHash}`, 'json');
+    if (!device || device.revokedAt) fail(401, 'تم إلغاء ربط هذا الجهاز. أعد ربط الإضافة من الموقع.');
+    if (adminOnly) fail(403, 'هذه العملية متاحة لمسؤول الموقع فقط.');
+    const live = await coordinatorRequest(ctx.env, `user:${device.userId}`, 'device_check', { deviceId: device.deviceId, tokenHash });
+    if (!live.active) fail(401, 'تم إلغاء ربط هذا الجهاز. أعد ربط الإضافة من الموقع.');
+    device.lastUsed = nowIso();
+    ctx.env.MICKEY_STATE.put(`device_token:${tokenHash}`, JSON.stringify(device)).catch(() => {});
+    return { uid: device.userId, email: device.email || '', isAdmin: false, status: 'active', deviceId: device.deviceId, deviceToken: true, version: device.version || 2 };
+  }
   const user = await firebaseLookup(token, ctx.env);
   const isAdmin = String(user.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
   if (adminOnly && !isAdmin) fail(403, 'هذه العملية متاحة لمسؤول الموقع فقط.');
@@ -184,35 +200,39 @@ async function enforceGenerationAccess(ctx) {
     fail(403, 'مفتاح API غير صالح أو تم إلغاؤه.');
   }
   const token = bearer(ctx.request) || String(ctx.body.idToken || '');
-  if (token) return { account: await authenticate(ctx), remaining: null };
+  if (token) {
+    const account = await authenticate(ctx);
+    const rateAction = account.deviceToken ? 'rate2' : 'rate';
+    const rate = await coordinatorRequest(ctx.env, `user:${account.uid}`, rateAction, { minuteLimit: 60, dayLimit: 1000 });
+    if (!rate.allowed) fail(429, rate.window === 'day' ? 'تم بلوغ حد الاستخدام اليومي. حاول غدًا.' : 'طلبات كثيرة خلال دقيقة واحدة. انتظر قليلًا ثم أعد المحاولة.');
+    return { account, remaining: null };
+  }
   const anonymousId = ctx.request.headers.get('X-Anonymous-ID') || '';
   if (!/^[a-f0-9]{32,96}$/i.test(anonymousId)) fail(400, 'تعذر بدء جلسة الضيف. أعد تحميل الموقع وحاول مرة أخرى.');
   const ip = ctx.request.headers.get('CF-Connecting-IP') || '';
   const digest = await sha256(`${anonymousId}|${ip}`);
   const key = `guest:${digest}`;
-  const state = await ctx.env.MICKEY_STATE.get(key, 'json') || { count: 0, permits: {} };
-  const used = Number(state.count) || 0;
   const count = Math.min(20, Math.max(1, Number(ctx.body.count) || 1));
   const tool = ({ generate_image: 'image', generate_tts: 'voiceover', transcribe_audio: 'transcription', analyze_video_silence: 'transcription', enhance_prompt: 'prompt', refine_voiceover: 'voiceover' })[action] || ctx.body.tool || action;
   const permitHeader = ctx.request.headers.get('X-Generation-Permit') || '';
   const permitHash = permitHeader ? await sha256(permitHeader) : '';
-  if (action !== 'consume_generation' && permitHash && state.permits?.[permitHash]?.tool === tool && state.permits[permitHash].expires > Date.now()) {
-    delete state.permits[permitHash];
-    await ctx.env.MICKEY_STATE.put(key, JSON.stringify(state), { expirationTtl: 86400 });
-    return { account: null, remaining: Math.max(0, 5 - used) };
-  }
-  if (used + count > 5) fail(429, 'استخدمت محاولات الضيف الخمس. أنشئ حسابًا مجانيًا للمتابعة.');
-  state.count = used + count;
-  let permit;
-  if (action === 'consume_generation') {
-    permit = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
-    state.permits ||= {};
-    state.permits[await sha256(permit)] = { tool, expires: Date.now() + 90000 };
-  }
-  await ctx.env.MICKEY_STATE.put(key, JSON.stringify(state), { expirationTtl: 86400 });
-  return { account: null, remaining: Math.max(0, 5 - state.count), permit };
+  const permitValue = action !== 'consume_generation' ? permitHash : '';
+  const result = await coordinatorRequest(ctx.env, key, 'guest', { action, tool, count, permitHash: permitValue });
+  if (!result.allowed) fail(429, 'استخدمت محاولات الضيف الخمس. أنشئ حسابًا مجانيًا للمتابعة.');
+  return { account: null, remaining: Math.max(0, 5 - result.count), permit: result.permit };
 }
 async function sha256(value) { const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)); return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+
+async function coordinatorRequest(env, name, action, payload = {}) {
+  if (!env.MICKEY_COORDINATOR) fail(503, 'خدمة الحماية غير مهيأة. أعد نشر Worker مع Durable Object binding.');
+  const id = env.MICKEY_COORDINATOR.idFromName(name);
+  const response = await env.MICKEY_COORDINATOR.get(id).fetch(`https://coordinator/${action}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) fail(response.status || 503, data.error || 'تعذر تنفيذ عملية الحماية.');
+  return data;
+}
 
 async function getGeminiKeys(env) {
   const pool = await env.MICKEY_STATE.get('gemini_pool', 'json') || [];
@@ -670,99 +690,187 @@ async function proxyMedia(ctx) {
   return new Response(response.body, { status: 200, headers: h });
 }
 
-async function firestoreUrl(code, env, collection = 'auth_sessions') {
-  const id = await sha256(code);
-  return `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/${collection}/${id}?key=${encodeURIComponent(envFirebaseKey(env))}`;
-}
-async function firestoreCreatePair(code, pair, env, ignoreConflict = false) {
-  const id = await sha256(code);
-  const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/auth_sessions?documentId=${id}&key=${encodeURIComponent(envFirebaseKey(env))}`;
-  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pairFirestoreFields(pair)) });
-  if (response.ok || (ignoreConflict && response.status === 409)) return;
-  fail(502, 'تعذر إنشاء جلسة الربط في Firestore.');
-}
-function pairFirestoreFields(pair) {
-  const fields = { status: { stringValue: pair.status }, expiresAt: { integerValue: String(pair.expiresAt) } };
-  if (pair.status === 'complete') fields.payload = { stringValue: pair.payload };
-  return { fields };
-}
-async function encryptPair(code, values) {
-  const keyBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
-  const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
-  const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const plaintext = new TextEncoder().encode(JSON.stringify({ uid: values.uid || '', email: values.email || '', refreshToken: values.refreshToken || '' }));
-  const cipherAndTag = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, additionalData: new TextEncoder().encode('mickey-pairing-v1'), tagLength: 128 }, key, plaintext));
-  const tagAt = cipherAndTag.length - 16;
-  const combined = new Uint8Array(nonce.length + cipherAndTag.length);
-  combined.set(nonce); combined.set(cipherAndTag.slice(tagAt), nonce.length); combined.set(cipherAndTag.slice(0, tagAt), nonce.length + 16);
-  return btoa(String.fromCharCode(...combined));
-}
-async function decryptPair(code, payload) {
-  try {
-    const all = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
-    const keyBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
-    const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
-    const cipherAndTag = new Uint8Array(all.length - 12); cipherAndTag.set(all.slice(28)); cipherAndTag.set(all.slice(12, 28), all.length - 28);
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12), additionalData: new TextEncoder().encode('mickey-pairing-v1'), tagLength: 128 }, key, cipherAndTag);
-    return JSON.parse(new TextDecoder().decode(plain));
-  } catch { return null; }
-}
 async function pairBegin(ctx) {
-  const code = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
-  await firestoreCreatePair(code, { status: 'pending', expiresAt: Math.floor(Date.now() / 1000) + 600 }, ctx.env);
-  return json({ success: true, code, expiresIn: 600 }, 200, ctx.headers);
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const code = base64Url(bytes);
+  const key = `pair:${await sha256(code)}`;
+  await ctx.env.MICKEY_STATE.put(key, JSON.stringify({ status: 'pending', createdAt: Date.now() }), { expirationTtl: 120 });
+  return json({ success: true, code, expiresIn: 120 }, 200, ctx.headers);
 }
 async function pairComplete(ctx) {
   const code = String(ctx.body.code || '');
-  if (!/^[a-f0-9]{64}$/i.test(code)) return json({ success: false, error: 'رمز الربط غير صالح.' }, 400, ctx.headers);
+  if (!/^[A-Za-z0-9_-]{32}$/.test(code)) return json({ success: false, error: 'رمز الربط غير صالح.' }, 400, ctx.headers);
   const account = await authenticate(ctx);
-  const refreshToken = String(ctx.body.refreshToken || '');
-  if (refreshToken.length < 20 || refreshToken.length > 4096) return json({ success: false, error: 'تعذر تأمين جلسة الإضافة. أعد تسجيل الدخول ثم حاول مرة أخرى.' }, 400, ctx.headers);
-  const url = await firestoreUrl(code, ctx.env);
-  let response = await fetch(url);
-  if (response.status === 404) { await firestoreCreatePair(code, { status: 'pending', expiresAt: Math.floor(Date.now() / 1000) + 600 }, ctx.env, true); response = await fetch(url); }
-  const doc = await readJson(response); const fields = doc.fields || {};
-  if (!response.ok) fail(502, 'تعذر قراءة حالة الربط من Firestore.');
-  if (fields.status?.stringValue !== 'pending' || Number(fields.expiresAt?.integerValue || 0) < Date.now() / 1000) fail(410, 'انتهت صلاحية طلب الربط. ابدأ الربط من الإضافة مجددًا.');
-  const payload = await encryptPair(code, { uid: account.uid, email: account.email, refreshToken });
-  const updated = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pairFirestoreFields({ status: 'complete', expiresAt: Math.floor(Date.now() / 1000) + 600, payload })) });
-  if (!updated.ok) fail(502, 'تعذر حفظ اكتمال الربط في Firestore.');
-  return json({ success: true }, 200, ctx.headers);
+  if (account.deviceToken) fail(403, 'أكمل الربط من جلسة الموقع المسجلة الدخول.');
+  const hash = await sha256(code);
+  const pairKey = `pair:${hash}`;
+  const pending = await ctx.env.MICKEY_STATE.get(pairKey, 'json');
+  if (!pending || pending.status !== 'pending' || Date.now() - pending.createdAt > 120000) fail(410, 'انتهت صلاحية طلب الربط. ابدأ الربط من الإضافة مجددًا.');
+  const deviceToken = `msd_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
+  const deviceId = crypto.randomUUID();
+  const createdAt = nowIso();
+  const device = { deviceId, userId: account.uid, email: account.email, createdAt, name: String(ctx.body.deviceName || 'Mickey Studio · Premiere Pro').slice(0, 80) };
+  const staged = await coordinatorRequest(ctx.env, `pair:${hash}`, 'stage', { deviceToken, device });
+  if (!staged.staged) fail(409, 'تم استخدام طلب الربط بالفعل. ابدأ طلبًا جديدًا.');
+  await ctx.env.MICKEY_STATE.put(`device_token:${await sha256(deviceToken)}`, JSON.stringify(device));
+  await coordinatorRequest(ctx.env, `user:${account.uid}`, 'device_add', { ...device, tokenHash: await sha256(deviceToken) });
+  await ctx.env.MICKEY_STATE.put(pairKey, JSON.stringify({ ...pending, status: 'complete', completedAt: Date.now() }), { expirationTtl: 120 });
+  return json({ success: true, deviceId, createdAt }, 200, ctx.headers);
 }
 async function pairPoll(ctx) {
   const code = String(ctx.body.code || ctx.url.searchParams.get('code') || '');
-  if (!/^[a-f0-9]{64}$/i.test(code)) return json({ success: false, error: 'رمز الربط غير صالح.' }, 400, ctx.headers);
-  const url = await firestoreUrl(code, ctx.env); let response = await fetch(url);
-  if (response.status === 404) { await firestoreCreatePair(code, { status: 'pending', expiresAt: Math.floor(Date.now() / 1000) + 600 }, ctx.env, true); return json({ success: true, status: 'pending' }, 200, ctx.headers); }
-  const doc = await readJson(response); if (!response.ok) fail(502, 'تعذر قراءة حالة الربط من Firestore.');
-  const fields = doc.fields || {}; const expiry = Number(fields.expiresAt?.integerValue || 0);
-  if (expiry < Date.now() / 1000) { await fetch(url, { method: 'DELETE' }); return json({ success: false, error: 'انتهت صلاحية طلب الربط.' }, 410, ctx.headers); }
-  if (fields.status?.stringValue !== 'complete') return json({ success: true, status: 'pending' }, 200, ctx.headers);
-  const pair = await decryptPair(code, fields.payload?.stringValue || '');
-  await fetch(url, { method: 'DELETE' });
-  if (!pair) return json({ success: false, error: 'تعذر فك تشفير جلسة الربط.' }, 502, ctx.headers);
-  return json({ success: true, status: 'complete', email: pair.email, refreshToken: pair.refreshToken }, 200, ctx.headers);
+  if (!/^[A-Za-z0-9_-]{32}$/.test(code)) return json({ success: false, error: 'رمز الربط غير صالح.' }, 400, ctx.headers);
+  const hash = await sha256(code);
+  const key = `pair:${hash}`;
+  const pending = await ctx.env.MICKEY_STATE.get(key, 'json');
+  if (!pending || Date.now() - pending.createdAt > 120000) { if (pending) await ctx.env.MICKEY_STATE.delete(key); return json({ success: false, error: 'انتهت صلاحية طلب الربط.' }, 410, ctx.headers); }
+  if (pending.status !== 'complete') return json({ success: true, status: 'pending' }, 200, ctx.headers);
+  const result = await coordinatorRequest(ctx.env, `pair:${hash}`, 'consume', {});
+  if (!result.consumed || !result.deviceToken) return json({ success: false, error: 'تم استخدام كود الربط أو انتهت صلاحيته.' }, 410, ctx.headers);
+  await ctx.env.MICKEY_STATE.delete(key);
+  return json({ success: true, status: 'complete', email: result.device.email, deviceToken: result.deviceToken, deviceId: result.device.deviceId }, 200, ctx.headers);
 }
 
-function validateMotionScene(scene) {
-  if (!scene || typeof scene !== 'object' || !Array.isArray(scene.elements) || scene.elements.length < 1 || scene.elements.length > 30) {
-    fail(400, 'المشهد يجب أن يحتوي من عنصر إلى 30 عنصراً.');
+async function pair2Start(ctx) {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const code = base64Url(bytes);
+  const hash = await sha256(code);
+  const key = `pair2:${hash}`;
+  await ctx.env.MICKEY_STATE.put(key, JSON.stringify({ status: 'pending', createdAt: Date.now(), version: 2 }), { expirationTtl: 120 });
+  return json({ success: true, code, expiresIn: 120, version: 2 }, 200, ctx.headers);
+}
+
+async function pair2Complete(ctx) {
+  const code = String(ctx.body.code || ctx.url.searchParams.get('code') || '').trim();
+  if (!code || code.length < 8 || code.length > 64) {
+    return json({ success: false, error: 'رمز الاقتران غير صالح.' }, 400, ctx.headers);
   }
+  const account = await authenticate(ctx);
+  if (account.deviceToken) {
+    fail(403, 'أكمل عملية الاقتران من جلسة الموقع المسجلة الدخول.');
+  }
+  const hash = await sha256(code);
+  const pairKey = `pair2:${hash}`;
+  const pending = await ctx.env.MICKEY_STATE.get(pairKey, 'json');
+  if (!pending || pending.status !== 'pending' || (Date.now() - pending.createdAt > 120000)) {
+    fail(410, 'انتهت صلاحية طلب الاقتران (صالح لدقيقتين فقط). ابدأ طلب اقتران جديد من الإضافة.');
+  }
+
+  const deviceToken = `msd_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
+  const deviceId = crypto.randomUUID();
+  const createdAt = nowIso();
+  const device = {
+    deviceId,
+    userId: account.uid,
+    email: account.email,
+    name: String(ctx.body.deviceName || 'Mickey Studio · Premiere Pro').slice(0, 80),
+    createdAt,
+    lastUsed: createdAt,
+    version: 2
+  };
+
+  const staged = await coordinatorRequest(ctx.env, `pair2:${hash}`, 'stage', { deviceToken, device });
+  if (!staged.staged) {
+    fail(409, 'تم استخدام طلب الاقتران مسبقاً أو انتهت صلاحيته.');
+  }
+
+  const tokenHash = await sha256(deviceToken);
+  await ctx.env.MICKEY_STATE.put(`device_token:${tokenHash}`, JSON.stringify(device));
+  await coordinatorRequest(ctx.env, `user:${account.uid}`, 'device_add', { ...device, tokenHash });
+  await ctx.env.MICKEY_STATE.put(pairKey, JSON.stringify({ ...pending, status: 'complete', completedAt: Date.now() }), { expirationTtl: 120 });
+
+  return json({ success: true, deviceId, createdAt }, 200, ctx.headers);
+}
+
+async function pair2Poll(ctx) {
+  const code = String(ctx.body.code || ctx.url.searchParams.get('code') || '').trim();
+  if (!code || code.length < 8 || code.length > 64) {
+    return json({ success: false, error: 'رمز الاقتران غير صالح.' }, 400, ctx.headers);
+  }
+  const hash = await sha256(code);
+  const key = `pair2:${hash}`;
+  const pending = await ctx.env.MICKEY_STATE.get(key, 'json');
+  if (!pending || (Date.now() - pending.createdAt > 120000)) {
+    if (pending) await ctx.env.MICKEY_STATE.delete(key);
+    return json({ success: false, error: 'انتهت صلاحية جلسة الاقتران.' }, 410, ctx.headers);
+  }
+  if (pending.status !== 'complete') {
+    return json({ success: true, status: 'pending' }, 200, ctx.headers);
+  }
+
+  const result = await coordinatorRequest(ctx.env, `pair2:${hash}`, 'consume', {});
+  if (!result.consumed || !result.deviceToken) {
+    await ctx.env.MICKEY_STATE.delete(key);
+    return json({ success: false, error: 'تم استهلاك رمز الاقتران مسبقاً (استخدام لمرة واحدة فقط).' }, 410, ctx.headers);
+  }
+
+  await ctx.env.MICKEY_STATE.delete(key);
+
+  return json({
+    success: true,
+    status: 'complete',
+    email: result.device.email,
+    deviceToken: result.deviceToken,
+    deviceId: result.device.deviceId,
+    version: 2
+  }, 200, ctx.headers);
+}
+
+async function listDevices(ctx) {
+  const account = await authenticate(ctx);
+  if (account.deviceToken) fail(403, 'إدارة الأجهزة متاحة من الموقع بعد تسجيل الدخول.');
+  const result = await coordinatorRequest(ctx.env, `user:${account.uid}`, 'device_list');
+  return json({ success: true, devices: result.devices || [] }, 200, ctx.headers);
+}
+async function revokeDevice(ctx) {
+  const account = await authenticate(ctx);
+  if (account.deviceToken) fail(403, 'إدارة الأجهزة متاحة من الموقع بعد تسجيل الدخول.');
+  const deviceId = String(ctx.body.deviceId || '');
+  if (!deviceId || deviceId.length > 80) return json({ success: false, error: 'معرّف الجهاز غير صالح.' }, 400, ctx.headers);
+  const result = await coordinatorRequest(ctx.env, `user:${account.uid}`, 'device_revoke', { deviceId });
+  if (!result.revoked) return json({ success: false, error: 'الجهاز غير موجود أو تم إلغاؤه مسبقًا.' }, 404, ctx.headers);
+  await ctx.env.MICKEY_STATE.delete(`device_token:${result.tokenHash}`);
+  return json({ success: true }, 200, ctx.headers);
+}
+function hex(bytes) { return [...bytes].map(value => value.toString(16).padStart(2, '0')).join(''); }
+function base64Url(bytes) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); }
+
+function validateMotionScene(scene) {
+  if (!scene || typeof scene !== 'object' || !Array.isArray(scene.elements) || scene.elements.length < 1 || scene.elements.length > 50) {
+    fail(400, 'المشهد يجب أن يحتوي من عنصر إلى 50 عنصراً.');
+  }
+  const isV2 = Number(scene.version) === 2;
   const idPattern = /^[A-Za-z0-9_-]{1,80}$/;
   const mogrtIds = new Set(['bg_aurora', 'bg_grid', 'text_kinetic', 'text_badge', 'widget_counter', 'widget_donut_ring', 'widget_social_card', 'logo_outro', 'color_matte']);
   const sfxIds = new Set(['whoosh', 'pop', 'click', 'riser']);
   const musicIds = new Set(['social_upbeat', 'kids_playful', 'tech_corporate', 'luxury_ambient', 'cyber_drive', 'cinematic_inspire', 'stats_pulse']);
   const extendedSfxIds = new Set(['impact', 'sparkle', 'soft_whoosh', 'swipe', 'bass_hit', 'notification']);
   for (const [index, item] of scene.elements.entries()) {
-    if (!item || !['graphic', 'mogrt', 'color_matte', 'sfx'].includes(item.type)) fail(400, `نوع العنصر ${index + 1} غير مدعوم.`);
-    const assetId = item.type === 'sfx' ? item.sfxId : (item.type === 'mogrt' || item.type === 'graphic' ? item.templateId : 'color_matte');
-    if (!idPattern.test(String(assetId || ''))) fail(400, `معرّف الأصل في العنصر ${index + 1} غير صالح.`);
-    if ((item.type === 'mogrt' || item.type === 'graphic') && !mogrtIds.has(assetId)) fail(400, `قالب غير معروف في العنصر ${index + 1}.`);
-    if (item.type === 'sfx' && !sfxIds.has(assetId) && !extendedSfxIds.has(assetId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
-    if (['graphic', 'mogrt', 'color_matte'].includes(item.type)) {
-      const png = String(item.renderedPng || '');
-      if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(png)) fail(400, `الصورة الجاهزة للطبقة ${index + 1} غير موجودة. أعد إرسال المشهد من الموقع بعد تحديثه.`);
-      if (png.length > 6 * 1024 * 1024) fail(413, `الصورة الجاهزة للطبقة ${index + 1} كبيرة جداً.`);
+    if (!item) fail(400, `العنصر ${index + 1} غير صالح.`);
+    if (isV2) {
+      if (!['text', 'shape', 'image', 'graphic', 'mogrt', 'color_matte', 'sfx'].includes(item.type)) {
+        fail(400, `نوع العنصر ${index + 1} (${item.type}) غير مدعوم في المشهد v2.`);
+      }
+      if (item.type === 'sfx') {
+        const sfxId = String(item.sfxId || '');
+        if (!sfxIds.has(sfxId) && !extendedSfxIds.has(sfxId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
+      }
+      if (item.type === 'image' && item.imageData) {
+        if (!/^data:image\/(webp|jpeg|png|jpg);base64,[A-Za-z0-9+/=]+$/.test(item.imageData)) {
+          fail(400, `بيانات الصورة في العنصر ${index + 1} غير صالحة.`);
+        }
+      }
+    } else {
+      if (!['graphic', 'mogrt', 'color_matte', 'sfx'].includes(item.type)) fail(400, `نوع العنصر ${index + 1} غير مدعوم.`);
+      const assetId = item.type === 'sfx' ? item.sfxId : (item.type === 'mogrt' || item.type === 'graphic' ? item.templateId : 'color_matte');
+      if (!idPattern.test(String(assetId || ''))) fail(400, `معرّف الأصل في العنصر ${index + 1} غير صالح.`);
+      if ((item.type === 'mogrt' || item.type === 'graphic') && !mogrtIds.has(assetId)) fail(400, `قالب غير معروف في العنصر ${index + 1}.`);
+      if (item.type === 'sfx' && !sfxIds.has(assetId) && !extendedSfxIds.has(assetId)) fail(400, `مؤثر صوتي غير معروف في العنصر ${index + 1}.`);
+      if (['graphic', 'mogrt', 'color_matte'].includes(item.type)) {
+        const png = String(item.renderedPng || '');
+        if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(png)) fail(400, `الصورة الجاهزة للطبقة ${index + 1} غير موجودة. أعد إرسال المشهد من الموقع بعد تحديثه.`);
+        if (png.length > 6 * 1024 * 1024) fail(413, `الصورة الجاهزة للطبقة ${index + 1} كبيرة جداً.`);
+      }
     }
     for (const key of ['trackIndex', 'startTime', 'duration']) {
       const value = Number(item[key]);
@@ -784,12 +892,49 @@ function validateMotionScene(scene) {
 
 async function submitMotionScene(ctx) {
   const account = await authenticate(ctx);
+  // Support chunked payloads under KV limits
+  if (ctx.body && ctx.body.chunkId && Number.isInteger(ctx.body.chunkIndex) && Number.isInteger(ctx.body.totalChunks)) {
+    const { chunkId, chunkIndex, totalChunks, chunkData } = ctx.body;
+    if (totalChunks < 1 || totalChunks > 50 || chunkIndex < 0 || chunkIndex >= totalChunks) {
+      fail(400, 'بيانات الجزء غير صالحة.');
+    }
+    const chunkKey = `motion_chunk:${account.uid}:${chunkId}:${chunkIndex}`;
+    await ctx.env.MICKEY_STATE.put(chunkKey, String(chunkData || ''), { expirationTtl: 900 });
+
+    if (chunkIndex === totalChunks - 1) {
+      let fullJson = '';
+      for (let i = 0; i < totalChunks; i++) {
+        const part = await ctx.env.MICKEY_STATE.get(`motion_chunk:${account.uid}:${chunkId}:${i}`);
+        if (!part) fail(400, `تعذر استلام الجزء ${i + 1} من ${totalChunks}. أعد إرسال المشهد.`);
+        fullJson += part;
+      }
+      for (let i = 0; i < totalChunks; i++) {
+        const cleanupKey = `motion_chunk:${account.uid}:${chunkId}:${i}`;
+        if (ctx.waitUntil) ctx.waitUntil(ctx.env.MICKEY_STATE.delete(cleanupKey));
+        else ctx.env.MICKEY_STATE.delete(cleanupKey).catch(() => {});
+      }
+      const parsed = JSON.parse(fullJson);
+      const scene = validateMotionScene(parsed.scene || parsed);
+      const version = Number(parsed.version) || Number(scene.version) || 2;
+      scene.version = version;
+      const assetsBaseUrl = String(parsed.assetsBaseUrl || ctx.body.assetsBaseUrl || '').replace(/\/$/, '');
+      const jobId = crypto.randomUUID();
+      const record = { jobId, scene, version, assetsBaseUrl, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000 };
+      await ctx.env.MICKEY_STATE.put(`motion_scene:${account.uid}`, JSON.stringify(record), { expirationTtl: 900 });
+      return json({ success: true, jobId, status: 'pending', version, message: 'المشهد القابل للتعديل جاهز للاستلام من إضافة Premiere.' }, 200, ctx.headers);
+    }
+    return json({ success: true, status: 'chunk_received', chunkIndex, totalChunks }, 200, ctx.headers);
+  }
+
+  // Standard non-chunked submission
   const scene = validateMotionScene(ctx.body.scene);
+  const version = Number(ctx.body.version) || Number(scene.version) || 1;
+  scene.version = version;
   const assetsBaseUrl = String(ctx.body.assetsBaseUrl || '').replace(/\/$/, '');
   const jobId = crypto.randomUUID();
-  const record = { jobId, scene, assetsBaseUrl, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000 };
+  const record = { jobId, scene, version, assetsBaseUrl, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000 };
   await ctx.env.MICKEY_STATE.put(`motion_scene:${account.uid}`, JSON.stringify(record), { expirationTtl: 900 });
-  return json({ success: true, jobId, status: 'pending', message: 'المشهد جاهز للاستلام من إضافة Premiere.' }, 200, ctx.headers);
+  return json({ success: true, jobId, status: 'pending', version, message: 'المشهد جاهز للاستلام من إضافة Premiere.' }, 200, ctx.headers);
 }
 
 async function pollMotionScene(ctx) {
@@ -800,7 +945,16 @@ async function pollMotionScene(ctx) {
     if (record) await ctx.env.MICKEY_STATE.delete(key);
     return json({ success: true, status: 'empty' }, 200, ctx.headers);
   }
-  return json({ success: true, status: 'pending', jobId: record.jobId, scene: record.scene, assetsBaseUrl: record.assetsBaseUrl || '', audioAssetEndpoint: `${ctx.url.origin}${ctx.url.pathname}`, createdAt: record.createdAt }, 200, ctx.headers);
+  return json({
+    success: true,
+    status: 'pending',
+    jobId: record.jobId,
+    scene: record.scene,
+    version: record.version || record.scene?.version || 1,
+    assetsBaseUrl: record.assetsBaseUrl || '',
+    audioAssetEndpoint: `${ctx.url.origin}${ctx.url.pathname}`,
+    createdAt: record.createdAt
+  }, 200, ctx.headers);
 }
 
 async function motionAudioAsset(ctx) {
@@ -904,3 +1058,134 @@ async function revokeApiKey(ctx) {
   return json({ success: changed, message: changed ? 'تم إيقاف صلاحية المفتاح بنجاح' : 'لم يتم العثور على المفتاح' }, 200, ctx.headers);
 }
 function apiDocs(ctx) { return { title: 'Mickey Studio AI Gateway REST API', version: '4.0.0', description: 'واجهة برمجة تطبيقات للصور والصوت والتعليق الصوتي.', base_url: `${ctx.url.origin}/api.php`, auth_format: 'Authorization: Bearer mk_live_YOUR_KEY', endpoints: ['transcribe_audio', 'generate_image', 'generate_tts', 'enhance_prompt', 'refine_voiceover', 'status'] }; }
+
+export class MickeyCoordinatorDO {
+  constructor(state) { this.state = state; }
+  async fetch(request) {
+    const action = new URL(request.url).pathname.slice(1);
+    const body = await request.json().catch(() => ({}));
+    try {
+      let result;
+      if (action === 'stage') {
+        result = await this.state.storage.transaction(async txn => {
+          if (await txn.get('pairConsumed') || await txn.get('pairResult')) return { staged: false };
+          await txn.put('pairResult', body);
+          return { staged: true };
+        });
+      } else if (action === 'consume') {
+        result = await this.state.storage.transaction(async txn => {
+          const value = await txn.get('pairResult');
+          if (!value || await txn.get('pairConsumed')) return { consumed: false };
+          await txn.put('pairConsumed', true);
+          await txn.delete('pairResult');
+          return { consumed: true, ...value };
+        });
+      } else if (action === 'rate' || action === 'rate2') {
+        const now = Date.now();
+        const minuteLimit = Number(body.minuteLimit || 60);
+        const dayLimit = Number(body.dayLimit || 1000);
+        if (this.state.storage.sql) {
+          try {
+            this.state.storage.sql.exec(`
+              CREATE TABLE IF NOT EXISTS user_rate_limits (
+                bucket TEXT PRIMARY KEY,
+                count INTEGER,
+                updated_at INTEGER
+              );
+            `);
+            const minuteWindow = Math.floor(now / 60000);
+            const dayWindow = new Date(now).toISOString().slice(0, 10);
+            const minuteKey = `m:${minuteWindow}`;
+            const dayKey = `d:${dayWindow}`;
+
+            this.state.storage.sql.exec(`DELETE FROM user_rate_limits WHERE updated_at < ?;`, now - 172800000);
+
+            let mRow = this.state.storage.sql.exec(`SELECT count FROM user_rate_limits WHERE bucket = ?;`, minuteKey).toArray()[0];
+            const mCount = (mRow ? Number(mRow.count) : 0) + 1;
+            this.state.storage.sql.exec(`INSERT OR REPLACE INTO user_rate_limits (bucket, count, updated_at) VALUES (?, ?, ?);`, minuteKey, mCount, now);
+
+            let dRow = this.state.storage.sql.exec(`SELECT count FROM user_rate_limits WHERE bucket = ?;`, dayKey).toArray()[0];
+            const dCount = (dRow ? Number(dRow.count) : 0) + 1;
+            this.state.storage.sql.exec(`INSERT OR REPLACE INTO user_rate_limits (bucket, count, updated_at) VALUES (?, ?, ?);`, dayKey, dCount, now);
+
+            const allowed = mCount <= minuteLimit && dCount <= dayLimit;
+            const window = dCount > dayLimit ? 'day' : (mCount > minuteLimit ? 'minute' : 'ok');
+            result = { allowed, window, minuteCount: mCount, dayCount: dCount };
+          } catch (sqlErr) {
+            console.warn('[CoordinatorDO:SQL] fallback to txn:', sqlErr);
+          }
+        }
+        if (!result) {
+          result = await this.state.storage.transaction(async txn => {
+            const minuteWindow = Math.floor(now / 60000);
+            const dayWindow = new Date(now).toISOString().slice(0, 10);
+            const minuteKey = `minute:${minuteWindow}`;
+            const dayKey = `day:${dayWindow}`;
+            const minute = Number(await txn.get(minuteKey) || 0) + 1;
+            const day = Number(await txn.get(dayKey) || 0) + 1;
+            await txn.put(minuteKey, minute);
+            await txn.put(dayKey, day);
+            await txn.delete(`minute:${minuteWindow - 1}`);
+            const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            await txn.delete(`day:${yesterday}`);
+            return { allowed: minute <= minuteLimit && day <= dayLimit, window: day > dayLimit ? 'day' : 'minute', minuteCount: minute, dayCount: day };
+          });
+        }
+      } else if (action === 'guest') {
+        const now = Date.now();
+        result = await this.state.storage.transaction(async txn => {
+          const today = new Date(now).toISOString().slice(0, 10);
+          let state = await txn.get('guest') || { count: 0, permits: {}, day: today };
+          if (state.day !== today) state = { count: 0, permits: {}, day: today };
+          const used = Number(state.count) || 0;
+          if (body.action !== 'consume_generation' && body.permitHash) {
+            const permit = state.permits?.[body.permitHash];
+            if (permit?.tool === body.tool && permit.expires > now) {
+              delete state.permits[body.permitHash];
+              await txn.put('guest', state);
+              return { allowed: true, count: used };
+            }
+          }
+          if (used + body.count > 5) return { allowed: false, count: used };
+          state.count = used + body.count;
+          let permit;
+          if (body.action === 'consume_generation') {
+            permit = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
+            state.permits ||= {};
+            const digest = await sha256(permit);
+            state.permits[digest] = { tool: body.tool, expires: now + 90000 };
+          }
+          await txn.put('guest', state);
+          return { allowed: true, count: state.count, permit };
+        });
+      } else if (action === 'device_add') {
+        result = await this.state.storage.transaction(async txn => {
+          const devices = await txn.get('devices') || [];
+          if (devices.some(item => item.deviceId === body.deviceId)) return { added: false };
+          devices.push({ deviceId: body.deviceId, name: body.name, email: body.email, createdAt: body.createdAt, tokenHash: body.tokenHash });
+          await txn.put('devices', devices);
+          return { added: true };
+        });
+      } else if (action === 'device_list') {
+        const devices = await this.state.storage.get('devices') || [];
+        result = { devices: devices.map(({ tokenHash, ...device }) => ({ ...device, tokenHash: undefined })) };
+      } else if (action === 'device_check') {
+        const devices = await this.state.storage.get('devices') || [];
+        result = { active: devices.some(item => item.deviceId === body.deviceId && item.tokenHash === body.tokenHash) };
+      } else if (action === 'device_revoke') {
+        result = await this.state.storage.transaction(async txn => {
+          const devices = await txn.get('devices') || [];
+          const target = devices.find(item => item.deviceId === body.deviceId);
+          if (!target) return { revoked: false };
+          await txn.put('devices', devices.filter(item => item.deviceId !== body.deviceId));
+          return { revoked: true, tokenHash: target.tokenHash };
+        });
+      } else {
+        return json({ success: false, error: 'Unknown coordinator operation.' }, 404);
+      }
+      return json({ success: true, ...result }, 200);
+    } catch (error) {
+      return json({ success: false, error: error?.message || 'Coordinator operation failed.' }, 500);
+    }
+  }
+}

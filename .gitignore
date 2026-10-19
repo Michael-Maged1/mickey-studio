@@ -6,6 +6,7 @@
 gemini_keys.json
 api_keys.json
 .mickey-provider-keys.php
+.mickey-gemini-pool.php
 dist/
 .venv/
 video-worker/.venv/

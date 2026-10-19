@@ -181,7 +181,15 @@ switch ($action) {
 
 
 function geminiKeysPoolPath() {
-    return __DIR__ . DIRECTORY_SEPARATOR . 'gemini_keys.json';
+    $envPath = getenv('MICKEY_KEYS_PATH') ?: getenv('GEMINI_KEYS_PATH');
+    if ($envPath && is_dir($envPath)) {
+        return rtrim($envPath, '/\\') . DIRECTORY_SEPARATOR . '.mickey-gemini-pool.php';
+    }
+    $secureOutside = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'secure_keys' . DIRECTORY_SEPARATOR . '.mickey-gemini-pool.php';
+    if (is_file($secureOutside)) {
+        return $secureOutside;
+    }
+    return __DIR__ . DIRECTORY_SEPARATOR . '.mickey-gemini-pool.php';
 }
 
 function isValidGeminiKeyFormat($key) {
@@ -199,68 +207,95 @@ function maskGeminiKey($key) {
 }
 
 function loadGeminiKeysPool() {
-    $path = geminiKeysPoolPath();
     $pool = [];
-    if (is_file($path)) {
-        $raw = @json_decode(file_get_contents($path), true);
-        if (is_array($raw)) {
-            foreach ($raw as $item) {
-                if (is_string($item) && isValidGeminiKeyFormat($item)) {
+
+    // 1. Priority: Environment variables (MICKEY_GEMINI_POOL or GEMINI_API_KEY)
+    $envPoolJson = getenv('MICKEY_GEMINI_POOL');
+    if ($envPoolJson) {
+        $parsed = @json_decode($envPoolJson, true);
+        if (is_array($parsed)) {
+            foreach ($parsed as $item) {
+                if (is_array($item) && !empty($item['key']) && isValidGeminiKeyFormat($item['key'])) {
+                    $pool[] = $item;
+                } elseif (is_string($item) && isValidGeminiKeyFormat($item)) {
                     $pool[] = [
                         'id' => 'key_' . substr(md5($item), 0, 8),
                         'key' => trim($item),
-                        'label' => 'مفتاح Gemini',
+                        'label' => 'مفتاح Gemini (Env)',
                         'status' => 'active',
                         'added_at' => date('Y-m-d H:i')
                     ];
-                } elseif (is_array($item) && !empty($item['key']) && isValidGeminiKeyFormat($item['key'])) {
-                    $pool[] = $item;
                 }
             }
         }
     }
+
+    // 2. Priority: Protected PHP storage file (.mickey-gemini-pool.php)
     if (empty($pool)) {
-        $leg = '';
-        $txtPath = __DIR__ . DIRECTORY_SEPARATOR . 'gemini_key.txt';
-        if (is_file($txtPath)) {
-            $leg = trim(file_get_contents($txtPath));
+        $path = geminiKeysPoolPath();
+        if (is_file($path)) {
+            if (!defined('MICKEY_KEY_INTERNAL')) define('MICKEY_KEY_INTERNAL', true);
+            $loaded = @include $path;
+            if (is_array($loaded)) {
+                $pool = $loaded;
+            }
         }
-        if (empty($leg)) {
-            $prov = $GLOBALS['PROVIDER_KEYS'] ?? loadProviderKeys();
-            $leg = trim((string)($prov['geminiKey'] ?? ''));
-        }
-        if (empty($leg)) {
-            $leg = trim((string)(getenv('GEMINI_API_KEY') ?: ''));
-        }
-        if (!empty($leg) && isValidGeminiKeyFormat($leg)) {
+    }
+
+    // 3. Priority: Provider keys storage (.mickey-provider-keys.php)
+    if (empty($pool)) {
+        $prov = $GLOBALS['PROVIDER_KEYS'] ?? loadProviderKeys();
+        if (!empty($prov['geminiPool']) && is_array($prov['geminiPool'])) {
+            $pool = $prov['geminiPool'];
+        } elseif (!empty($prov['geminiKey']) && isValidGeminiKeyFormat($prov['geminiKey'])) {
             $pool[] = [
-                'id' => 'key_' . substr(md5($leg), 0, 8),
-                'key' => $leg,
-                'label' => 'المفتاح الافتراضي',
+                'id' => 'key_' . substr(md5($prov['geminiKey']), 0, 8),
+                'key' => trim($prov['geminiKey']),
+                'label' => 'المفتاح الأساسي',
                 'status' => 'active',
                 'added_at' => date('Y-m-d H:i')
             ];
-            saveGeminiKeysPool($pool);
         }
     }
+
+    // 4. Fallback to GEMINI_API_KEY environment variable if pool is empty
+    if (empty($pool)) {
+        $envKey = trim((string)(getenv('GEMINI_API_KEY') ?: ''));
+        if ($envKey && isValidGeminiKeyFormat($envKey)) {
+            $pool[] = [
+                'id' => 'key_' . substr(md5($envKey), 0, 8),
+                'key' => $envKey,
+                'label' => 'مفتاح البيئة الافتراضي',
+                'status' => 'active',
+                'added_at' => date('Y-m-d H:i')
+            ];
+        }
+    }
+
     return $pool;
 }
 
 function saveGeminiKeysPool($pool) {
     $path = geminiKeysPoolPath();
-    $json = json_encode($pool, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    @file_put_contents($path, $json, LOCK_EX);
+    $php = "<?php\nif (!defined('MICKEY_KEY_INTERNAL')) { http_response_code(404); exit; }\nreturn " . var_export($pool, true) . ";\n";
+    $tmp = $path . '.' . bin2hex(random_bytes(8)) . '.tmp.php';
+    if (@file_put_contents($tmp, $php, LOCK_EX) !== false) {
+        @chmod($tmp, 0600);
+        @rename($tmp, $path);
+    }
     @chmod($path, 0600);
 
-    $firstActive = '';
+    // Sync to provider keys as well for redundancy
+    $prov = $GLOBALS['PROVIDER_KEYS'] ?? loadProviderKeys();
+    $prov['geminiPool'] = $pool;
     foreach ($pool as $item) {
         if (($item['status'] ?? 'active') === 'active' && !empty($item['key'])) {
-            $firstActive = $item['key'];
+            $prov['geminiKey'] = $item['key'];
             break;
         }
     }
-    $txtPath = __DIR__ . DIRECTORY_SEPARATOR . 'gemini_key.txt';
-    @file_put_contents($txtPath, $firstActive, LOCK_EX);
+    saveProviderKeys($prov);
+    $GLOBALS['PROVIDER_KEYS'] = $prov;
 }
 
 function getActiveGeminiKeys() {

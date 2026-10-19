@@ -197,7 +197,7 @@
           <h3 class="font-bold text-sm"><span class="text-orange-300 ml-2">03</span>رد الذكاء الاصطناعي</h3>
           <textarea id="motion-json" rows="12" dir="ltr" spellcheck="false" class="w-full rounded-xl border border-white/10 bg-black/40 p-4 font-mono text-xs" placeholder='{"version":1,"elements":[]}'></textarea>
           <p class="text-[10px] leading-5 text-zinc-500">الصق هنا رد الذكاء الاصطناعي بصيغة JSON فقط. زر برومبت التصحيح ينسخ تعليمات لإرسالها إلى ChatGPT؛ بعد استلام الرد الجديد الصقه هنا.</p>
-          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionOpenEditor()" id="motion-open-editor" class="motion-editor-cta" aria-disabled="true" title="الصق رد JSON صالحاً لفتح المشهد في المحرر"><i class="fa-solid fa-arrow-up-left-from-circle ml-2"></i>الذهاب لواجهة التعديل</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs" title="انسخ البرومبت إلى الذكاء الاصطناعي، ولا تلصقه في حقل JSON">انسخ برومبت إصلاح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
+          <div class="flex flex-wrap items-center gap-2"><button type="button" onclick="MickeyStudio.motionSendToPremiere()" id="motion-send" class="btn-primary bg-orange-400 px-5 py-3 text-sm font-bold text-black"><i class="fa-solid fa-paper-plane ml-2"></i>أرسل إلى إضافة Premiere</button><button type="button" onclick="MickeyStudio.motionSendEditableSceneToPremiere()" id="motion-send-v2" class="btn-primary bg-amber-500 hover:bg-amber-400 px-5 py-3 text-sm font-bold text-black" title="إرسال المشهد كعناصر قابلة للتعديل داخل Premiere"><i class="fa-solid fa-pen-to-square ml-2"></i>إرسال كمشهد قابل للتعديل (v2)</button><button type="button" onclick="MickeyStudio.motionOpenEditor()" id="motion-open-editor" class="motion-editor-cta" aria-disabled="true" title="الصق رد JSON صالحاً لفتح المشهد في المحرر"><i class="fa-solid fa-arrow-up-left-from-circle ml-2"></i>الذهاب لواجهة التعديل</button><button type="button" onclick="MickeyStudio.motionCopyRepairPrompt()" class="btn-secondary px-4 py-3 text-xs" title="انسخ البرومبت إلى الذكاء الاصطناعي، ولا تلصقه في حقل JSON">انسخ برومبت إصلاح JSON</button><span id="motion-status" class="text-xs text-zinc-400"></span></div>
           <p class="text-[10px] text-zinc-500">يجب أن تكون الإضافة مفتوحة ومسجلة الدخول بالحساب نفسه. المشهد المرسل يبقى متاحاً للاستلام لمدة 15 دقيقة.</p>
         </div>
       </div>
@@ -213,7 +213,7 @@
           </div>
           <div class="flex items-center gap-2">
             <button type="button" onclick="MickeyStudio.motionOpenEditor()" class="motion-icon-button" title="تحديث المعاينة"><i class="fa-solid fa-rotate"></i></button>
-            <span id="motion-editor-status" class="text-[9px] text-zinc-400"></span><button id="motion-editor-export" type="button" onclick="MickeyStudio.motionExportVideo()" class="motion-export-button motion-download-button"><i class="fa-solid fa-download ml-2"></i>تصدير WebM</button><button id="motion-editor-send" type="button" onclick="MickeyStudio.motionSendToPremiere()" class="motion-export-button"><i class="fa-solid fa-paper-plane ml-2"></i>إرسال إلى Premiere</button>
+            <span id="motion-editor-status" class="text-[9px] text-zinc-400"></span><button id="motion-editor-export" type="button" onclick="MickeyStudio.motionExportVideo()" class="motion-export-button motion-download-button"><i class="fa-solid fa-download ml-2"></i>تصدير WebM</button><button id="motion-editor-send" type="button" onclick="MickeyStudio.motionSendToPremiere()" class="motion-export-button"><i class="fa-solid fa-paper-plane ml-2"></i>إرسال إلى Premiere</button><button id="motion-editor-send-v2" type="button" onclick="MickeyStudio.motionSendEditableSceneToPremiere()" class="motion-export-button" style="background:#f59e0b;color:#000;font-weight:700;" title="إرسال المشهد كعناصر قابلة للتعديل داخل Premiere"><i class="fa-solid fa-pen-to-square ml-2"></i>إرسال كمشهد قابل للتعديل (v2)</button>
           </div>
         </header>
 
@@ -956,54 +956,54 @@
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <!-- Card 1: Transcript Studio -->
-            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-cyan-500/30 transition-all flex flex-col justify-between space-y-3 group">
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-cyan-500/30 transition-all flex flex-col justify-between space-y-3 group cursor-pointer" onclick="MickeyStudio.switchTab('transcribe-studio')">
               <div class="space-y-2">
                 <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-lg">
                   <i class="fa-solid fa-file-waveform"></i>
                 </div>
                 <div>
                   <span class="text-[10px] font-bold text-cyan-400 font-mono">TRANSCRIPT STUDIO</span>
-                  <h4 class="text-xs font-bold text-white">استوديو تفريغ وتحليل الصوت</h4>
+                  <h4 class="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors">استوديو تفريغ وتحليل الصوت</h4>
                 </div>
                 <p class="text-[11px] text-zinc-400 leading-relaxed">تفريغ فائق الدقة مع تصدير SRT، علامات تايم لاين، وتحليل متقدم لنبرات الصوت والمشاعر.</p>
               </div>
-              <button type="button" onclick="MickeyStudio.switchTab('transcribe-studio')" class="w-full btn-secondary text-xs py-2 justify-center group-hover:border-cyan-500/50 group-hover:text-cyan-300">
+              <button type="button" class="w-full btn-secondary text-xs py-2 justify-center pointer-events-none group-hover:border-cyan-500/50 group-hover:text-cyan-300">
                 <span>فتح الاستوديو</span>
                 <i class="fa-solid fa-arrow-left text-[10px]"></i>
               </button>
             </div>
 
             <!-- Card 2: Podcast Studio -->
-            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-purple-500/30 transition-all flex flex-col justify-between space-y-3 group">
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-purple-500/30 transition-all flex flex-col justify-between space-y-3 group cursor-pointer" onclick="MickeyStudio.switchTab('podcast-studio')">
               <div class="space-y-2">
                 <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg">
                   <i class="fa-solid fa-podcast"></i>
                 </div>
                 <div>
                   <span class="text-[10px] font-bold text-purple-400 font-mono">PODCAST STUDIO</span>
-                  <h4 class="text-xs font-bold text-white">استوديو البودكاست</h4>
+                  <h4 class="text-xs font-bold text-white group-hover:text-purple-300 transition-colors">استوديو البودكاست</h4>
                 </div>
                 <p class="text-[11px] text-zinc-400 leading-relaxed">إنتاج حوار ثنائي واقعي بين مقدم وضيف مع توزيع تلقائي للأدوار وتزامن صوتي كامل.</p>
               </div>
-              <button type="button" onclick="MickeyStudio.switchTab('podcast-studio')" class="w-full btn-secondary text-xs py-2 justify-center group-hover:border-purple-500/50 group-hover:text-purple-300">
+              <button type="button" class="w-full btn-secondary text-xs py-2 justify-center pointer-events-none group-hover:border-purple-500/50 group-hover:text-purple-300">
                 <span>فتح الاستوديو</span>
                 <i class="fa-solid fa-arrow-left text-[10px]"></i>
               </button>
             </div>
 
             <!-- Card 3: Audiobook Studio -->
-            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 transition-all flex flex-col justify-between space-y-3 group">
+            <div class="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 transition-all flex flex-col justify-between space-y-3 group cursor-pointer" onclick="MickeyStudio.switchTab('audiobook-studio')">
               <div class="space-y-2">
                 <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
                   <i class="fa-solid fa-book-open"></i>
                 </div>
                 <div>
                   <span class="text-[10px] font-bold text-amber-400 font-mono">AUDIOBOOK STUDIO</span>
-                  <h4 class="text-xs font-bold text-white">استوديو الكتب والروايات الصوتية</h4>
+                  <h4 class="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">استوديو الكتب والروايات الصوتية</h4>
                 </div>
                 <p class="text-[11px] text-zinc-400 leading-relaxed">إنتاج فصول صوتية متكاملة بأداء قصصي رصين ومؤثرات درامية تحاكي كبار الرواة.</p>
               </div>
-              <button type="button" onclick="MickeyStudio.switchTab('audiobook-studio')" class="w-full btn-secondary text-xs py-2 justify-center group-hover:border-amber-500/50 group-hover:text-amber-300">
+              <button type="button" class="w-full btn-secondary text-xs py-2 justify-center pointer-events-none group-hover:border-amber-500/50 group-hover:text-amber-300">
                 <span>فتح الاستوديو</span>
                 <i class="fa-solid fa-arrow-left text-[10px]"></i>
               </button>
@@ -2017,6 +2017,14 @@
           <i class="fa-solid fa-link"></i>
           <span>نسخ كود ربط إضافة Premiere Pro ⚡</span>
         </button>
+
+        <div class="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-semibold text-zinc-200">أجهزة Premiere المرتبطة</h3>
+            <button type="button" onclick="MickeyStudio.refreshConnectedDevices()" class="text-[10px] text-indigo-300 hover:text-indigo-200">تحديث</button>
+          </div>
+          <div id="connected-devices-list" class="space-y-2"><p class="text-xs text-zinc-500">جاري تحميل الأجهزة…</p></div>
+        </div>
 
         <button type="button" onclick="MickeyStudio.signOutAccount()" class="btn-secondary w-full text-xs py-2.5 justify-center text-red-300 hover:text-red-200">
           <i class="fa-solid fa-right-from-bracket ml-1.5"></i> تسجيل الخروج
