@@ -1105,9 +1105,6 @@ async function detectCensorWords(ctx) {
 
 async function transcribeAudio(ctx) {
   const groqKey = ctx.env.GROQ_API_KEY;
-  if (!groqKey) {
-    return json({ success: false, error: 'خدمة التفريغ السحابي Groq Whisper غير مهيأة على السيرفر.' }, 503, ctx.headers);
-  }
   const audioBase64 = String(ctx.body.audio_base64 || ctx.body.audio || '');
   if (!audioBase64) return json({ success: false, error: 'لم يتم إرسال ملف الصوت للتفريغ.' }, 400, ctx.headers);
 
@@ -1119,6 +1116,48 @@ async function transcribeAudio(ctx) {
   ]);
   const requestedMime = String(ctx.body.mime_type || '').split(';')[0].toLowerCase();
   const mimeType = allowedMediaTypes.has(requestedMime) ? requestedMime : 'audio/mpeg';
+  if (raw.byteLength > 18 * 1024 * 1024) {
+    return json({ success: false, error: 'حجم الملف أكبر من الحد المدعوم للتفريغ السحابي (18 ميجابايت). قصّ الملف أو قلّل حجمه ثم أعد المحاولة.' }, 413, ctx.headers);
+  }
+
+  // Prefer Whisper when configured. Otherwise use the Gemini key pool already
+  // configured for the site, so transcription does not require a separate key.
+  if (!groqKey) {
+    const prompt = `Transcribe all spoken words in this audio in the original language. Return ONLY valid JSON in this exact shape: {"segments":[{"start":0.0,"end":1.2,"text":"spoken phrase"}]}. Split into short consecutive speech segments, preserve the spoken wording, and give each segment start/end times in seconds based on the audio. Do not include silence or commentary.`;
+    try {
+      return await callGeminiWithFailover(ctx, async apiKey => {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [
+              { inlineData: { mimeType, data: audioBase64.replace(/^data:[^,]+,/, '') } },
+              { text: prompt }
+            ] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+          })
+        });
+        const result = await readJson(response);
+        if (!response.ok) {
+          const error = new Error(result.error?.message || `Gemini transcription failed HTTP ${response.status}`);
+          error.status = response.status;
+          throw error;
+        }
+        const text = result.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim() || '';
+        let parsed;
+        try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+        catch (_) { throw new Error('لم تُرجع خدمة Gemini تفريغاً منظماً صالحاً. أعد المحاولة أو أضف GROQ_API_KEY.'); }
+        const segments = (Array.isArray(parsed) ? parsed : parsed.segments || []).map(segment => ({
+          start: Number(segment.start), end: Number(segment.end), text: String(segment.text || '').trim()
+        })).filter(segment => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start && segment.text);
+        if (!segments.length) throw new Error('لم يعثر التفريغ على كلام بتوقيتات صالحة.');
+        return json({ success: true, text: segments.map(segment => segment.text).join(' '), segments, provider: 'Gemini 2.5 Flash' }, 200, ctx.headers);
+      });
+    } catch (error) {
+      return json({ success: false, error: error?.message || 'تعذر التفريغ باستخدام مفاتيح Gemini المتاحة.' }, error?.status || 503, ctx.headers);
+    }
+  }
+
   const rawFileName = String(ctx.body.file_name || 'media');
   const extensionMatch = rawFileName.match(/\.(wav|mp3|m4a|mp4|aac|ogg|webm|flac|mov|mkv|mpeg)$/i);
   const mediaFileName = `upload.${(extensionMatch?.[1] || (mimeType.startsWith('video/') ? 'mp4' : 'mp3')).toLowerCase()}`;
