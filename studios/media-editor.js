@@ -107,10 +107,10 @@
     silence: {
       threshold: -35, // dB
       padding: 150, // ms
-      cuts: [
-        { start: 2.8, end: 3.1, duration: 0.3 },
-        { start: 5.6, end: 6.0, duration: 0.4 }
-      ]
+      cuts: [],
+      envelope: [],
+      samples: [],
+      analyzed: false
     },
 
     // Auto-Zoom Settings
@@ -126,6 +126,7 @@
   function init() {
     bindEventListeners();
     initCanvasRenderer();
+    updateSilenceCutCalculations();
   }
 
   /**
@@ -188,6 +189,7 @@
       fileInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
           loadMediaFile(e.target.files[0]);
+          e.target.value = '';
         }
       });
     }
@@ -333,9 +335,14 @@
         STATE.silence.threshold = parseInt(e.target.value, 10);
         const valEl = document.getElementById('silence-threshold-val');
         if (valEl) valEl.textContent = `${e.target.value} dB`;
+        STATE.silence.analyzed = false;
+        STATE.silence.cuts = [];
         updateSilenceCutCalculations();
       });
     }
+
+    const analyzeSilenceBtn = document.getElementById('btn-analyze-silence');
+    if (analyzeSilenceBtn) analyzeSilenceBtn.addEventListener('click', analyzeSilence);
 
     // Keyboard Shortcuts (Space toggles play/pause)
     window.addEventListener('keydown', (e) => {
@@ -360,6 +367,11 @@
     STATE.mediaFile = file;
     STATE.mediaType = file.type && file.type.startsWith('audio') ? 'audio' : 'video';
     STATE.captions.items = [];
+    STATE.silence.cuts = [];
+    STATE.silence.envelope = [];
+    STATE.silence.samples = [];
+    STATE.silence.analyzed = false;
+    updateSilenceCutCalculations();
     STATE.currentTime = 0;
     STATE.isPlaying = false;
     if (STATE.mediaUrl) URL.revokeObjectURL(STATE.mediaUrl);
@@ -395,6 +407,12 @@
   function loadDemoSample() {
     SFX.playClick();
     showToast('جاري تجهيز مقطع العرض التوضيحي المباشر…', 'info');
+    STATE.mediaFile = null;
+    STATE.silence.cuts = [];
+    STATE.silence.envelope = [];
+    STATE.silence.samples = [];
+    STATE.silence.analyzed = false;
+    updateSilenceCutCalculations();
     STATE.captions.items = JSON.parse(JSON.stringify(SAMPLE_SUBTITLES));
     renderSubtitlesList();
 
@@ -885,21 +903,30 @@
 
     ctx.clearRect(0, 0, w, h);
 
-    // Draw stylized audio bars
+    if (!STATE.silence.envelope.length) {
+      ctx.fillStyle = '#3f3f46';
+      ctx.fillRect(0, h / 2 - 1, w, 2);
+      return;
+    }
+
+    // Draw bars from the decoded audio envelope and mark detected silence.
     const barsCount = 64;
     const barW = (w / barsCount) * 0.6;
     const gap = (w / barsCount) * 0.4;
 
     for (let i = 0; i < barsCount; i++) {
       const x = i * (barW + gap);
-      // Synthetic speech envelope with silences
-      const isSilence = (i > 18 && i < 24) || (i > 42 && i < 48);
-      let barH = isSilence ? h * 0.08 : (Math.sin(i * 0.35) * 0.4 + 0.5) * (h * 0.7);
+      const envelopeIndex = Math.min(STATE.silence.envelope.length - 1,
+        Math.floor(i / barsCount * STATE.silence.envelope.length));
+      const amplitude = STATE.silence.envelope[Math.max(0, envelopeIndex)] || 0;
+      const barH = Math.max(2, amplitude * (h * 0.9));
+      const time = (i / barsCount) * (STATE.duration || 0);
+      const isSilence = STATE.silence.cuts.some(cut => time >= cut.start && time < cut.end);
 
       if (isSilence && STATE.mode === 'silence-cut') {
         ctx.fillStyle = 'rgba(239, 68, 68, 0.6)'; // Red for silence cut
       } else {
-        ctx.fillStyle = (STATE.audio.previewMode === 'clean') ? '#38bdf8' : '#64748b';
+        ctx.fillStyle = '#38bdf8';
       }
 
       ctx.beginPath();
@@ -911,9 +938,105 @@
   function updateSilenceCutCalculations() {
     const countEl = document.getElementById('silence-cuts-count');
     const savedEl = document.getElementById('silence-time-saved');
-    if (countEl) countEl.textContent = '2 وقفات';
-    if (savedEl) savedEl.textContent = '0.7 ثانية';
+    const total = STATE.silence.cuts.reduce((sum, cut) => sum + cut.duration, 0);
+    if (countEl) countEl.textContent = STATE.silence.analyzed
+      ? `${STATE.silence.cuts.length} وقفات` : 'لم يتم التحليل';
+    if (savedEl) savedEl.textContent = STATE.silence.analyzed
+      ? `${total.toFixed(1)} ثانية` : '—';
+    const exportBtn = document.getElementById('btn-export-silence-cuts');
+    if (exportBtn) exportBtn.disabled = !STATE.silence.analyzed || STATE.silence.cuts.length === 0;
+    const analyzeBtn = document.getElementById('btn-analyze-silence');
+    if (analyzeBtn && !analyzeBtn.textContent.includes('جارٍ')) analyzeBtn.disabled = !STATE.mediaFile;
     updateWaveformDisplay();
+  }
+
+  async function analyzeSilence() {
+    if (!STATE.mediaFile) {
+      showToast('اختر ملف فيديو أو صوت أولاً، ثم ابدأ تحليل السكتات.', 'error');
+      return;
+    }
+    const button = document.getElementById('btn-analyze-silence');
+    if (button) { button.disabled = true; button.textContent = 'جارٍ تحليل الصوت…'; }
+    try {
+      const video = document.getElementById('media-editor-video');
+      const audioContext = STATE.audio.audioCtx;
+      if (!video || !audioContext || !STATE.audio.sourceNode) {
+        throw new Error('تعذر تهيئة قارئ صوت الفيديو في هذا المتصفح.');
+      }
+      await audioContext.resume();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0;
+      const silentGain = audioContext.createGain();
+      silentGain.gain.value = 0;
+      STATE.audio.sourceNode.connect(analyser);
+      analyser.connect(silentGain);
+      silentGain.connect(audioContext.destination);
+
+      const initialTime = video.currentTime || 0;
+      const wasPlaying = !video.paused;
+      const duration = video.duration || STATE.duration;
+      const wave = new Float32Array(analyser.fftSize);
+      const samples = [];
+      video.currentTime = 0;
+      await new Promise(resolve => {
+        if (video.readyState >= 2) return resolve();
+        video.addEventListener('seeked', resolve, { once: true });
+      });
+      await video.play();
+      await new Promise((resolve, reject) => {
+        let lastSampleAt = -1;
+        const sampleFrame = () => {
+          try {
+            if (video.ended || video.currentTime >= duration) return resolve();
+            if (video.currentTime - lastSampleAt >= 0.045) {
+              analyser.getFloatTimeDomainData(wave);
+              let sum = 0;
+              for (let i = 0; i < wave.length; i++) sum += wave[i] * wave[i];
+              samples.push({ time: video.currentTime, rms: Math.sqrt(sum / wave.length) });
+              lastSampleAt = video.currentTime;
+              if (button) button.textContent = `جارٍ تحليل الصوت… ${Math.round(video.currentTime / duration * 100)}٪`;
+            }
+            requestAnimationFrame(sampleFrame);
+          } catch (error) { reject(error); }
+        };
+        video.addEventListener('ended', resolve, { once: true });
+        requestAnimationFrame(sampleFrame);
+      });
+      video.pause();
+      video.currentTime = Math.min(initialTime, duration);
+      if (wasPlaying) await video.play().catch(() => {});
+      STATE.duration = duration;
+      STATE.silence.samples = samples;
+      STATE.silence.envelope = samples.map(sample => Math.min(1, sample.rms * 4));
+      const pad = STATE.silence.padding / 1000;
+      const cuts = [];
+      for (let i = 0; i < samples.length;) {
+        if (20 * Math.log10(Math.max(samples[i].rms, 1e-8)) >= STATE.silence.threshold) { i++; continue; }
+        const startIndex = i;
+        while (i < samples.length && 20 * Math.log10(Math.max(samples[i].rms, 1e-8)) < STATE.silence.threshold) i++;
+        const rawStart = samples[startIndex].time;
+        const rawEnd = i < samples.length ? samples[i].time : duration;
+        if (rawEnd - rawStart < 0.25) continue;
+        const start = Math.max(0, rawStart + pad);
+        const end = Math.min(duration, rawEnd - pad);
+        if (end > start) cuts.push({ start, end, duration: end - start });
+      }
+      STATE.silence.cuts = cuts;
+      STATE.silence.analyzed = true;
+      updateSilenceCutCalculations();
+      showToast(cuts.length ? `اكتمل التحليل: تم العثور على ${cuts.length} فترة صمت.` : 'اكتمل التحليل ولم يتم العثور على سكتات تتجاوز الحد الأدنى.', 'success');
+      STATE.audio.sourceNode.disconnect(analyser);
+      analyser.disconnect();
+      silentGain.disconnect();
+    } catch (error) {
+      console.error('[MickeyMediaStudio] silence analysis failed:', error);
+      showToast(error && error.message ? error.message : 'تعذر تحليل الصوت في هذا الملف.', 'error');
+      const video = document.getElementById('media-editor-video');
+      if (video) video.pause();
+    } finally {
+      if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-waveform-lines"></i><span>تحليل الصوت واكتشاف السكتات</span>'; }
+    }
   }
 
   /**
@@ -934,22 +1057,40 @@
 
   function exportPremiereXml() {
     SFX.playClick();
+    if (STATE.mode === 'silence-cut' && !STATE.silence.analyzed) {
+      showToast('حلّل الصوت أولاً قبل تصدير القطع.', 'error');
+      return;
+    }
+    const sourceDuration = STATE.duration || 0;
+    const keptSegments = [];
+    let cursor = 0;
+    for (const cut of STATE.silence.cuts) {
+      if (cut.start > cursor) keptSegments.push({ start: cursor, end: cut.start });
+      cursor = Math.max(cursor, cut.end);
+    }
+    if (cursor < sourceDuration) keptSegments.push({ start: cursor, end: sourceDuration });
+    const clips = STATE.mode === 'silence-cut' && STATE.silence.analyzed
+      ? keptSegments : [{ start: 0, end: sourceDuration }];
+    let timelineFrame = 0;
+    const clipItems = clips.filter(clip => clip.end > clip.start).map((clip, index) => {
+      const start = Math.round(clip.start * 30);
+      const end = Math.round(clip.end * 30);
+      const timelineStart = timelineFrame;
+      timelineFrame += end - start;
+      return `          <clipitem id="clip-${index + 1}"><name>${escapeHtml(STATE.mediaFile?.name || 'Source Clip')}</name><start>${timelineStart}</start><end>${timelineFrame}</end><in>${start}</in><out>${end}</out></clipitem>`;
+    }).join('\n');
     const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE xmeml>
 <xmeml version="5">
   <sequence>
     <name>Mickey Studio - Timeline Export</name>
-    <duration>${Math.round(STATE.duration * 30)}</duration>
+    <duration>${timelineFrame || Math.round(STATE.duration * 30)}</duration>
     <rate><timebase>30</timebase><ntsc>FALSE</ntsc></rate>
     <media>
       <video>
         <track>
-          <!-- AutoCut Timeline Clips -->
-          <clipitem id="clip-1">
-            <name>Source Clip</name>
-            <start>0</start>
-            <end>${Math.round(STATE.duration * 30)}</end>
-          </clipitem>
+          <!-- Source media must be relinked in Premiere after import. -->
+${clipItems}
         </track>
       </video>
     </media>
@@ -957,7 +1098,9 @@
 </xmeml>`;
 
     downloadBlob(new Blob([xmlContent], { type: 'application/xml;charset=utf-8' }), 'mickey-timeline.xml');
-    showToast('تم تصدير ملف التايملاين لبريمير برو (XML) بنجاح!', 'success');
+    showToast(STATE.mode === 'silence-cut'
+      ? 'تم تصدير مقاطع التايملاين بعد حذف السكتات. أعد ربط الملف الأصلي داخل Premiere عند الطلب.'
+      : 'تم تصدير ملف التايملاين لبريمير برو (XML) بنجاح!', 'success');
   }
 
   function exportTransparentVideo() {

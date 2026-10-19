@@ -3061,8 +3061,14 @@
           <div id="media-panel-silence-cut" class="media-tool-panel space-y-4 hidden">
             <div class="border-b border-white/5 pb-3">
               <h4 class="text-sm font-bold text-white">قص السكتات والوقفات الميتة</h4>
-              <p class="text-[10px] text-zinc-400">تسريع إيقاع الفيديو وحذف الصمت تلقائياً</p>
+              <p class="text-[10px] text-zinc-400">ارفع الفيديو، حلّل الصوت، ثم صدّر التايملاين بعد حذف فترات الصمت.</p>
             </div>
+
+            <button type="button" id="btn-analyze-silence" disabled class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+              <i class="fa-solid fa-waveform-lines"></i>
+              <span>تحليل الصوت واكتشاف السكتات</span>
+            </button>
+            <p class="text-[10px] text-zinc-500">حلّل الملف بعد تحميله. غيّر الحساسية ثم أعد التحليل لتحديث النتائج.</p>
 
             <div class="p-3 rounded-xl bg-white/[0.03] border border-white/5 space-y-1.5">
               <div class="flex items-center justify-between text-xs">
@@ -3076,15 +3082,15 @@
             <div class="grid grid-cols-2 gap-3">
               <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-center">
                 <span class="text-[10px] text-zinc-400 block mb-1">الوقفات المكتشفة:</span>
-                <span id="silence-cuts-count" class="text-base font-bold text-white font-mono">2 وقفات</span>
+                <span id="silence-cuts-count" class="text-base font-bold text-white font-mono">لم يتم التحليل</span>
               </div>
               <div class="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-center">
                 <span class="text-[10px] text-zinc-400 block mb-1">الوقت الموفر:</span>
-                <span id="silence-time-saved" class="text-base font-bold text-teal-400 font-mono">0.7 ثانية</span>
+                <span id="silence-time-saved" class="text-base font-bold text-teal-400 font-mono">—</span>
               </div>
             </div>
 
-            <button type="button" onclick="MickeyMediaStudio.exportPremiereXml()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+            <button type="button" id="btn-export-silence-cuts" disabled onclick="MickeyMediaStudio.exportPremiereXml()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all">
               <i class="fa-solid fa-scissors"></i>
               <span>تصدير القطع لبريمير برو (XML)</span>
             </button>
@@ -3691,7 +3697,7 @@
   <script src="studios/voice-studio.js?v=2.6"></script>
   <script src="studios/transcribe-studio.js?v=2.6"></script>
   <script src="studios/vault-gallery.js?v=2.6"></script>
-  <script src="studios/media-editor.js?v=2.6"></script>
+  <script src="studios/media-editor.js?v=2.7"></script>
   <script src="mickey-tooltip.js?v=3.0"></script>
 </body>
 </html>
