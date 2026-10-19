@@ -1120,41 +1120,32 @@ async function transcribeAudio(ctx) {
     return json({ success: false, error: 'حجم الملف أكبر من الحد المدعوم للتفريغ السحابي (18 ميجابايت). قصّ الملف أو قلّل حجمه ثم أعد المحاولة.' }, 413, ctx.headers);
   }
 
-  // Prefer Whisper when configured. Otherwise use the Gemini key pool already
-  // configured for the site, so transcription does not require a separate key.
+  // Use Cloudflare Workers AI Whisper when Groq is not configured. The AI
+  // binding is already part of this Worker, so no extra provider key is needed.
   if (!groqKey) {
-    const prompt = `Transcribe all spoken words in this audio in the original language. Return ONLY valid JSON in this exact shape: {"segments":[{"start":0.0,"end":1.2,"text":"spoken phrase"}]}. Split into short consecutive speech segments, preserve the spoken wording, and give each segment start/end times in seconds based on the audio. Do not include silence or commentary.`;
+    if (!ctx.env.AI) return json({ success: false, error: 'خدمة التفريغ غير مهيأة: لم يتم ربط Cloudflare Workers AI بهذا الـWorker.' }, 503, ctx.headers);
     try {
-      return await callGeminiWithFailover(ctx, async apiKey => {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [
-              { inlineData: { mimeType, data: audioBase64.replace(/^data:[^,]+,/, '') } },
-              { text: prompt }
-            ] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-          })
-        });
-        const result = await readJson(response);
-        if (!response.ok) {
-          const error = new Error(result.error?.message || `Gemini transcription failed HTTP ${response.status}`);
-          error.status = response.status;
-          throw error;
-        }
-        const text = result.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim() || '';
-        let parsed;
-        try { parsed = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')); }
-        catch (_) { throw new Error('لم تُرجع خدمة Gemini تفريغاً منظماً صالحاً. أعد المحاولة أو أضف GROQ_API_KEY.'); }
-        const segments = (Array.isArray(parsed) ? parsed : parsed.segments || []).map(segment => ({
-          start: Number(segment.start), end: Number(segment.end), text: String(segment.text || '').trim()
-        })).filter(segment => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start && segment.text);
-        if (!segments.length) throw new Error('لم يعثر التفريغ على كلام بتوقيتات صالحة.');
-        return json({ success: true, text: segments.map(segment => segment.text).join(' '), segments, provider: 'Gemini 2.5 Flash' }, 200, ctx.headers);
+      const result = await ctx.env.AI.run('@cf/openai/whisper-large-v3-turbo', {
+        audio: audioBase64.replace(/^data:[^,]+,/, ''),
+        task: 'transcribe'
       });
+      const segments = (Array.isArray(result?.segments) ? result.segments : []).map(segment => ({
+        start: Number(segment.start), end: Number(segment.end), text: String(segment.text || '').trim()
+      })).filter(segment => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start && segment.text);
+      if (!segments.length && typeof result?.vtt === 'string') {
+        const cues = result.vtt.matchAll(/(?:\d+\s*\n)?(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})\s*\n([\s\S]*?)(?=\n\s*\n|$)/g);
+        for (const cue of cues) {
+          const toSeconds = value => { const [h, m, s] = value.split(':'); return Number(h) * 3600 + Number(m) * 60 + Number(s); };
+          const text = cue[3].replace(/<[^>]+>/g, '').trim();
+          if (text) segments.push({ start: toSeconds(cue[1]), end: toSeconds(cue[2]), text });
+        }
+      }
+      const text = String(result?.text || segments.map(segment => segment.text).join(' ')).trim();
+      if (!text) return json({ success: false, error: 'لم يتمكن Whisper من استخراج كلام من الملف.' }, 422, ctx.headers);
+      return json({ success: true, text, segments, provider: 'Cloudflare Workers AI Whisper' }, 200, ctx.headers);
     } catch (error) {
-      return json({ success: false, error: error?.message || 'تعذر التفريغ باستخدام مفاتيح Gemini المتاحة.' }, error?.status || 503, ctx.headers);
+      console.error('[Workers AI transcription error]', error?.message || error);
+      return json({ success: false, error: 'تعذر التفريغ عبر Cloudflare Whisper. تحقق من تفعيل Workers AI لهذا الحساب ثم أعد المحاولة.' }, 503, ctx.headers);
     }
   }
 
