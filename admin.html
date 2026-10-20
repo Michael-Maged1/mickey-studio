@@ -222,7 +222,7 @@
       <!-- ============================================================== -->
       <!-- TAB 1: USERS (إدارة الحسابات، الحظر، الباقات، الأجهزة)          -->
       <!-- ============================================================== -->
-      <section id="tab-content-users" class="space-y-6">
+      <section id="tab-content-users" class="admin-tab-content active space-y-6">
         <!-- Metrics Row -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-[#121216] border border-white/5 rounded-2xl p-5 space-y-2">
@@ -328,7 +328,7 @@
       </section>
 
       <!-- Dynamic tool paywall and per-plan access matrix -->
-      <section id="tab-content-tools" class="hidden space-y-6">
+      <section id="tab-content-tools" class="admin-tab-content hidden space-y-6">
         <div id="tool-access-error" class="hidden"></div>
         <div class="p-6 rounded-3xl border border-cyan-500/20 bg-[#121216] flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div class="space-y-1.5">
@@ -360,7 +360,7 @@
       <!-- ============================================================== -->
       <!-- TAB 2: PLANS & LIMITS (تحكم كامل بالحدود ونمط الاشتراكات)       -->
       <!-- ============================================================== -->
-      <section id="tab-content-plans" class="hidden space-y-6">
+      <section id="tab-content-plans" class="admin-tab-content hidden space-y-6">
         <!-- Error Banner Container for Plans -->
         <div id="plans-error-banner" class="hidden"></div>
 
@@ -546,7 +546,7 @@
       <!-- ============================================================== -->
       <!-- TAB 3: GEMINI MULTI-KEY FAILOVER POOL (حوض التدوير الذكي)       -->
       <!-- ============================================================== -->
-      <section id="tab-content-gemini" class="hidden space-y-6">
+      <section id="tab-content-gemini" class="admin-tab-content hidden space-y-6">
         <!-- Security & Architecture Guarantee Card -->
         <div class="p-6 rounded-3xl border border-cyan-500/30 bg-[#121216] space-y-4 shadow-xl">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
@@ -645,7 +645,7 @@
       <!-- ============================================================== -->
       <!-- TAB 4: STATS & HEALTH & AUDIT LOGS (الإحصائيات وسجل العمليات)   -->
       <!-- ============================================================== -->
-      <section id="tab-content-stats" class="hidden space-y-6">
+      <section id="tab-content-stats" class="admin-tab-content hidden space-y-6">
 
         <!-- Tool Usage Breakdown Cards -->
         <div class="space-y-3">
@@ -1378,12 +1378,12 @@
       tabs.forEach(t => {
         const content = document.getElementById(`tab-content-${t}`);
         const btn = document.getElementById(`tab-btn-${t}`);
-        if (content && btn) {
-          if (t === tabId) {
-            content.classList.remove('hidden');
+        const isActive = t === tabId;
+        if (content) content.classList.toggle('active', isActive);
+        if (btn) {
+          if (isActive) {
             btn.className = 'px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-bold text-xs transition flex items-center gap-2 cursor-pointer shadow-sm';
           } else {
-            content.classList.add('hidden');
             btn.className = 'px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white font-medium text-xs transition flex items-center gap-2 cursor-pointer';
           }
         }

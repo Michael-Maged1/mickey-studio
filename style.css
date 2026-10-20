@@ -33,6 +33,15 @@
   --accent-subtle: rgba(99, 102, 241, 0.12);
 }
 
+/* Admin tabs must remain isolated even when Tailwind's CDN styles are delayed. */
+.admin-tab-content {
+  display: none !important;
+}
+
+.admin-tab-content.active {
+  display: block !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
