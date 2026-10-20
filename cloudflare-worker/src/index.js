@@ -3184,6 +3184,7 @@ async function pairBegin(ctx) {
 async function pairComplete(ctx) {
   const account = await authenticate(ctx);
   const code = String(ctx.body.code || '').trim();
+  const refreshToken = String(ctx.body.refreshToken || '');
   const record = await ctx.env.MICKEY_STATE.get(`pair_code:${code}`, 'json');
   if (!record || record.expiresAt < Date.now()) {
     fail(400, 'رمز الاقتران غير صالح أو منتهي الصلاحية.');
@@ -3192,6 +3193,9 @@ async function pairComplete(ctx) {
   record.uid = account.uid;
   record.email = account.email;
   record.token = account.token;
+  // Keep the durable Firebase credential needed by Premiere to refresh its
+  // short-lived ID token after the initial link completes.
+  record.refreshToken = refreshToken;
   await ctx.env.MICKEY_STATE.put(`pair_session:${record.sessionToken}`, JSON.stringify(record), { expirationTtl: 300 });
   await ctx.env.MICKEY_STATE.delete(`pair_code:${code}`);
   return json({ success: true, message: 'تم ربط الإضافة بالحساب بنجاح.' }, 200, ctx.headers);
@@ -3206,7 +3210,14 @@ async function pairPoll(ctx) {
     await ctx.env.MICKEY_STATE.delete(`pair_session:${sessionToken}`);
     const deviceId = String(ctx.request.headers.get('X-Device-Id') || '').trim();
     if (deviceId) await ctx.env.MICKEY_STATE.put(`device_pair_grant:${record.uid}:${deviceId}`, '1', { expirationTtl: 600 });
-    return json({ success: true, status: 'confirmed', uid: record.uid, email: record.email, idToken: record.token }, 200, ctx.headers);
+    return json({
+      success: true,
+      status: 'confirmed',
+      uid: record.uid,
+      email: record.email,
+      refreshToken: record.refreshToken || '',
+      idToken: record.refreshToken ? undefined : record.token
+    }, 200, ctx.headers);
   }
   return json({ success: true, status: 'pending' }, 200, ctx.headers);
 }
