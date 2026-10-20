@@ -3726,6 +3726,7 @@ window.MickeyStudio = (function () {
 
   // pendingPairCode declared above
   let pendingPair2Code = '';
+  let pairLoginPromptShown = false;
 
   async function completePendingExtensionPair(user) {
     if (pendingPair2Code && user) {
@@ -3757,7 +3758,8 @@ window.MickeyStudio = (function () {
       refreshConnectedDevices();
     } catch (error) {
       console.error('[ExtensionPairing] Could not complete secure pairing:', error);
-      showToast('تعذر إكمال الربط التلقائي. ما زال بإمكانك استخدام كود الربط اليدوي من إعدادات الإضافة.', 'error', 7000);
+      const reason = String(error?.message || '').trim();
+      showToast(`تعذر إكمال الربط التلقائي${reason ? `: ${reason}` : ''}. ما زال بإمكانك استخدام كود الربط اليدوي من إعدادات الإضافة.`, 'error', 9000);
     }
   }
 
@@ -4130,12 +4132,16 @@ window.MickeyStudio = (function () {
           } else {
             STATE.user = null; STATE.userProfile = null; updateAuthUI(null); renderAccountModal();
             fetchUserQuotas();
+            // Wait for Firebase's first resolved auth state before asking the user
+            // to sign in; currentUser can be null while a saved session restores.
+            if ((pendingPairCode || pendingPair2Code) && !pairLoginPromptShown) {
+              pairLoginPromptShown = true;
+              openAccountModal();
+              showToast('سجّل الدخول لإكمال ربط إضافة Premiere.', 'info');
+            }
           }
         });
         firebaseAuthObserverAttached = true;
-      }
-      if ((pendingPairCode || pendingPair2Code) && window.firebase && !firebase.auth().currentUser) {
-        setTimeout(() => { openAccountModal(); showToast('سجّل الدخول لإكمال ربط إضافة Premiere.', 'info'); }, 0);
       }
     } catch (e) {
       console.warn('Firebase init error:', e);
