@@ -1627,7 +1627,12 @@ async function upscaleImage(ctx) {
     if (width * scale > 12000 || height * scale > 12000) return json({ success: false, error: 'الأبعاد الناتجة كبيرة جدًا. جرّب التكبير 2X.' }, 413, ctx.headers);
 
     const transformed = await ctx.env.IMAGES.input(bytes)
-      .transform({ width: width * scale, height: height * scale, fit: 'contain', upscale: 'generate' })
+      // scale-up ensures the requested dimensions enlarge the source; generate
+      // selects Cloudflare's ESRGAN pass instead of ordinary interpolation.
+      // A light second-pass sharpen improves perceived detail without pushing
+      // edges into harsh halos.
+      .transform({ width: width * scale, height: height * scale, fit: 'scale-up', upscale: 'generate' })
+      .transform({ sharpen: 1.5 })
       .output({ format: 'image/png' });
     const response = transformed.response();
     if (!response.ok) throw new Error(`Cloudflare Images returned ${response.status}`);
