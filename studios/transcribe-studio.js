@@ -351,20 +351,6 @@
     return srt.trim();
   }
 
-  function generateSrtFromSegments(segments) {
-    const fmt = (seconds) => {
-      const millis = Math.max(0, Math.round(Number(seconds || 0) * 1000));
-      const hours = Math.floor(millis / 3600000);
-      const minutes = Math.floor((millis % 3600000) / 60000);
-      const secs = Math.floor((millis % 60000) / 1000);
-      const ms = millis % 1000;
-      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
-    };
-    return segments.filter(segment => segment.text).map((segment, index) =>
-      `${index + 1}\n${fmt(segment.start)} --> ${fmt(segment.end)}\n${String(segment.text).trim()}`
-    ).join('\n\n');
-  }
-
   async function processAudioTranscription() {
     if (!STATE.transcribe.audioBlob && !STATE.transcribe.audioBase64) {
       showToast('يرجى اختيار ملف صوتي أو تسجيل صوتك أولاً!', 'warning');
@@ -452,20 +438,8 @@
         const data = await response.json().catch(() => ({}));
         if (data?.quota?.tool) updateQuotaBadge(data.quota.tool, data.quota.remaining, data.quota.limit);
         if (response.status === 429) updateQuotaBadge('transcription', 0);
-        if (response.ok && data.success && (data.data || data.text)) {
-          const timedSegments = Array.isArray(data.segments) ? data.segments : [];
-          parsedResult = data.data || {
-            transcript: data.text || '',
-            srt: timedSegments.length ? generateSrtFromSegments(timedSegments) : '',
-            segments: timedSegments,
-            dialect: dialectLabel,
-            tone: 'تم التفريغ آلياً؛ راجع النص والتوقيتات قبل النشر.',
-            summary: 'اكتمل التفريغ. راجع النص والتوقيتات قبل استخدامه.',
-            key_points: [],
-            words_count: String(data.text || '').trim().split(/\s+/).filter(Boolean).length
-          };
-          providerName = data.provider || 'Groq Whisper';
-          isSuccess = Boolean(parsedResult.transcript || timedSegments.length);
+        if (response.ok && data.success && data.data) {
+          parsedResult = data.data; providerName = data.provider || 'خدمة Mickey Studio'; isSuccess = true;
         } else { lastGeminiError = data.error || `تعذر التفريغ (${response.status}).`; }
       } catch (error) { lastGeminiError = error.message || 'تعذر الاتصال بخادم التفريغ.'; }
     }

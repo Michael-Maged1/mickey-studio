@@ -39,9 +39,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="style.css">
-  <style>
-    .admin-tab-panel[hidden] { display: none !important; }
-  </style>
 
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -206,6 +203,11 @@
           <span>الباقات والحدود (Plans & Quota)</span>
         </button>
 
+        <button onclick="switchTab('tools')" id="tab-btn-tools" class="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white font-medium text-xs transition flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-lock-open"></i>
+          <span>الأدوات والخطط</span>
+        </button>
+
         <button onclick="switchTab('gemini')" id="tab-btn-gemini" class="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white font-medium text-xs transition flex items-center gap-2 cursor-pointer">
           <i class="fa-solid fa-arrows-rotate text-emerald-400"></i>
           <span>مفاتيح الذكاء الاصطناعي (Gemini Pool)</span>
@@ -220,7 +222,7 @@
       <!-- ============================================================== -->
       <!-- TAB 1: USERS (إدارة الحسابات، الحظر، الباقات، الأجهزة)          -->
       <!-- ============================================================== -->
-      <section id="tab-content-users" class="admin-tab-panel space-y-6">
+      <section id="tab-content-users" class="space-y-6">
         <!-- Metrics Row -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-[#121216] border border-white/5 rounded-2xl p-5 space-y-2">
@@ -305,7 +307,7 @@
                 <tr>
                   <th class="py-3 px-4">المستخدم</th>
                   <th class="py-3 px-4">UID</th>
-                  <th class="py-3 px-4">الباقة</th>
+                  <th class="py-3 px-4">الباقة والاشتراك</th>
                   <th class="py-3 px-4">الحالة</th>
                   <th class="py-3 px-4">استهلاك اليوم</th>
                   <th class="py-3 px-4">أجهزة الإضافة</th>
@@ -325,10 +327,40 @@
         </div>
       </section>
 
+      <!-- Dynamic tool paywall and per-plan access matrix -->
+      <section id="tab-content-tools" class="hidden space-y-6">
+        <div id="tool-access-error" class="hidden"></div>
+        <div class="p-6 rounded-3xl border border-cyan-500/20 bg-[#121216] flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div class="space-y-1.5">
+            <h2 class="text-base font-bold text-white">التحكم في الأدوات حسب الخطة</h2>
+            <p class="text-xs text-zinc-400">عند إيقاف المفتاح تبقى كل الأدوات مفتوحة. عند تفعيله تُطبّق المصفوفة فوراً على طلبات الخادم، وتُقفل الأدوات المحلية المقفولة في الواجهة.</p>
+          </div>
+          <label class="flex items-center gap-3 cursor-pointer shrink-0"><span id="paywall-label" class="text-xs font-bold text-zinc-300">جاري القراءة…</span><input id="toggle-paywall" type="checkbox" onchange="handleTogglePaywall(this.checked)" class="w-5 h-5 accent-cyan-400"></label>
+        </div>
+
+        <div class="p-5 rounded-3xl border border-white/10 bg-[#121216] space-y-4">
+          <div><h3 class="text-sm font-bold text-white">مصفوفة صلاحيات الأدوات</h3><p class="text-[11px] text-zinc-400 mt-1">تعديل الوصول والحد بحسب الخطة والأداة، ثم حفظ التغييرات.</p></div>
+          <div class="overflow-x-auto rounded-2xl border border-white/5"><table class="w-full text-right text-xs"><thead id="tool-access-head" class="bg-white/[0.03] text-zinc-300"></thead><tbody id="tool-access-body" class="divide-y divide-white/5"><tr><td class="p-6 text-center text-zinc-500">جاري تحميل إعدادات الأدوات…</td></tr></tbody></table></div>
+          <div class="flex justify-end"><button type="button" onclick="handleSaveToolAccess()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 text-black font-bold text-xs"><i class="fa-solid fa-floppy-disk ml-1"></i>حفظ صلاحيات الأدوات</button></div>
+        </div>
+
+        <div class="p-5 rounded-3xl border border-white/10 bg-[#121216] space-y-4">
+          <div><h3 class="text-sm font-bold text-white">استثناء مستخدم</h3><p class="text-[11px] text-zinc-400 mt-1">منح خطة مختلفة أو فتح/قفل أداة لحساب محدد. اترك أحد الخيارين فارغاً إذا لم ترغب بتغييره.</p></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+            <input id="tool-override-uid" dir="ltr" placeholder="UID المستخدم" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+            <select id="tool-override-plan" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"><option value="">بدون تغيير الخطة</option></select>
+            <select id="tool-override-key" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"><option value="">بدون استثناء أداة</option></select>
+            <select id="tool-override-access" class="bg-[#18181C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white"><option value="full">مفتوحة بالكامل</option><option value="limited">محدودة</option><option value="locked">مقفولة</option></select>
+            <button type="button" onclick="handleSaveToolOverride()" class="rounded-xl bg-cyan-400 text-black font-bold text-xs px-4 py-2">حفظ الاستثناء</button>
+          </div>
+          <div class="overflow-x-auto rounded-2xl border border-white/5"><table class="w-full text-right text-xs"><thead class="bg-white/[0.03] text-zinc-400"><tr><th class="p-3">المسؤول</th><th class="p-3">المستخدم</th><th class="p-3">التغيير</th><th class="p-3">التوقيت</th></tr></thead><tbody id="tool-access-audit" class="divide-y divide-white/5"><tr><td colspan="4" class="p-5 text-center text-zinc-500">جاري تحميل السجل…</td></tr></tbody></table></div>
+        </div>
+      </section>
+
       <!-- ============================================================== -->
       <!-- TAB 2: PLANS & LIMITS (تحكم كامل بالحدود ونمط الاشتراكات)       -->
       <!-- ============================================================== -->
-      <section id="tab-content-plans" class="admin-tab-panel hidden space-y-6" hidden>
+      <section id="tab-content-plans" class="hidden space-y-6">
         <!-- Error Banner Container for Plans -->
         <div id="plans-error-banner" class="hidden"></div>
 
@@ -403,6 +435,9 @@
 
                 <!-- Feature flags -->
                 <div class="pt-2 border-t border-white/5 space-y-2">
+                  <label class="block text-[11px] text-zinc-300">الحد الأقصى للأجهزة
+                    <input id="plan-free-max-devices" type="number" min="1" max="100" value="2" class="mt-1 w-full bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white">
+                  </label>
                   <label class="flex items-center gap-2 text-[11px] text-zinc-300">
                     <input id="plan-free-flag-extension" type="checkbox" class="accent-cyan-400 rounded">
                     <span>السماح بربط إضافة Premiere Pro</span>
@@ -446,6 +481,9 @@
                 </div>
                 <p class="text-[10px] text-zinc-500">تغيير السعر يحفظ إعداد الباقة للمبيعات المستقبلية؛ بوابة الدفع غير مفعلة بعد.</p>
               </div>
+              <label class="block text-[11px] text-zinc-300">الحد الأقصى للأجهزة
+                <input id="plan-pro-max-devices" type="number" min="1" max="100" value="2" class="mt-1 w-full bg-[#18181C] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white">
+              </label>
 
                 <!-- Feature flags -->
                 <div class="pt-2 border-t border-white/5 space-y-2">
@@ -465,6 +503,8 @@
               أولوية معالجة في طابور الذكاء الاصطناعي
             </div>
           </div>
+
+        </div>
 
         <!-- Save Plans Button Bar -->
         <div class="flex justify-end pt-2">
@@ -506,7 +546,7 @@
       <!-- ============================================================== -->
       <!-- TAB 3: GEMINI MULTI-KEY FAILOVER POOL (حوض التدوير الذكي)       -->
       <!-- ============================================================== -->
-      <section id="tab-content-gemini" class="admin-tab-panel hidden space-y-6" hidden>
+      <section id="tab-content-gemini" class="hidden space-y-6">
         <!-- Security & Architecture Guarantee Card -->
         <div class="p-6 rounded-3xl border border-cyan-500/30 bg-[#121216] space-y-4 shadow-xl">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
@@ -605,7 +645,7 @@
       <!-- ============================================================== -->
       <!-- TAB 4: STATS & HEALTH & AUDIT LOGS (الإحصائيات وسجل العمليات)   -->
       <!-- ============================================================== -->
-      <section id="tab-content-stats" class="admin-tab-panel hidden space-y-6" hidden>
+      <section id="tab-content-stats" class="hidden space-y-6">
 
         <!-- Tool Usage Breakdown Cards -->
         <div class="space-y-3">
@@ -712,6 +752,83 @@
       <div class="flex items-center justify-end gap-2 pt-2">
         <button onclick="closeModal('modal-ban-user')" class="px-4 py-2 rounded-xl border border-white/10 text-xs text-zinc-400 hover:text-white">إلغاء</button>
         <button id="modal-ban-confirm-btn" class="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs">تأكيد الإيقاف</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Manage Subscription -->
+  <div id="modal-manage-subscription" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-[#141418] border border-white/10 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-white/5 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-calendar-check text-indigo-400"></i>
+          <span>إدارة واشتراك الحساب</span>
+        </h3>
+        <button onclick="closeModal('modal-manage-subscription')" class="text-zinc-500 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div class="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-1">
+          <div id="modal-sub-user-info" class="text-zinc-200 font-bold"></div>
+          <div id="modal-sub-current-status" class="text-zinc-400 text-[11px]"></div>
+        </div>
+
+        <div>
+          <label class="block text-zinc-300 font-semibold mb-1.5">اختر الباقة المراد تفعيلها / تجديدها:</label>
+          <select id="modal-sub-plan-select" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-400">
+            <option value="pro">الخطة الاحترافية (Pro)</option>
+            <option value="free">الخطة المجانية (Free)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-zinc-300 font-semibold mb-1.5">مدة التفعيل / التجديد (أزرار سريعة):</label>
+          <div class="grid grid-cols-5 gap-1.5">
+            <button type="button" onclick="setSubPresetDays(7)" class="sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition">7 أيام</button>
+            <button type="button" onclick="setSubPresetDays(30)" class="sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition">30 يوم</button>
+            <button type="button" onclick="setSubPresetDays(90)" class="sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition">90 يوم</button>
+            <button type="button" onclick="setSubPresetDays(180)" class="sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition">180 يوم</button>
+            <button type="button" onclick="setSubPresetDays(365)" class="sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition">365 يوم</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">أو عدد أيام مخصص:</label>
+            <input id="modal-sub-custom-days" type="number" min="1" placeholder="مثلاً 45" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-400" oninput="handleSubCustomDaysInput(this.value)">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">أو تاريخ انتهاء محدد:</label>
+            <input id="modal-sub-exact-date" type="datetime-local" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-400" onchange="handleSubExactDateChange(this.value)">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-zinc-400 mb-1">ملاحظات الإدارة (اختياري):</label>
+          <input id="modal-sub-notes" type="text" placeholder="مثال: اشتراك تجريبي / تحويل بنكي / دعم فني" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-400">
+        </div>
+
+        <div class="p-2.5 rounded-xl bg-indigo-950/20 border border-indigo-500/20 text-indigo-300 text-[11px] flex items-start gap-2">
+          <i class="fa-solid fa-circle-info text-xs mt-0.5"></i>
+          <span id="modal-sub-preview-hint">تجديد الاشتراك سيضيف المدة إلى تاريخ الانتهاء الحالي إذا كان الاشتراك لا يزال نشطاً، أو يبدأ من اليوم إذا كان منتهياً أو جديداً.</span>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
+        <button id="modal-sub-cancel-btn" type="button" class="px-3.5 py-2 rounded-xl border border-red-500/30 bg-red-950/20 hover:bg-red-900/40 text-red-400 font-bold text-xs transition">
+          <i class="fa-solid fa-ban mr-1"></i> إلغاء الاشتراك
+        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeModal('modal-manage-subscription')" class="px-4 py-2 rounded-xl text-zinc-400 hover:text-white text-xs">إغلاق</button>
+          <button id="modal-sub-set-expiry-btn" type="button" class="px-3.5 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold text-xs transition">
+            <i class="fa-solid fa-calendar mr-1"></i> تعديل التاريخ
+          </button>
+          <button id="modal-sub-activate-btn" type="button" class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 hover:opacity-90 text-white font-bold text-xs shadow-lg shadow-indigo-500/20 transition">
+            <i class="fa-solid fa-check mr-1"></i> تفعيل / تجديد الاشتراك
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -860,6 +977,7 @@
     let allUsers = [];
     let usersListWarning = '';
     let currentPlans = {};
+    let currentToolAccess = { tools: [], plans: [], planRows: [], audit: [], paywall_enabled: false };
     let currentGeminiPool = [];
     let currentSubscriptionMode = false;
     let isDashboardUnlocked = false;
@@ -1137,12 +1255,12 @@
       document.getElementById('btn-admin-logout')?.classList.remove('hidden');
       document.getElementById('admin-email-text').textContent = 'المشرف المعتمد (Admin)';
       hideAuthError();
-      switchTab('users');
 
       // Load initial dashboard state asynchronously
       loadSystemHealth().catch(() => {});
       loadUsers().catch(() => {});
       loadPlansConfig().catch(() => {});
+      loadToolAccessConfig().catch(() => {});
       loadCoupons().catch(() => {});
       loadGeminiPool().catch(() => {});
       loadStats().catch(() => {});
@@ -1256,15 +1374,12 @@
 
     // Tab Navigation
     function switchTab(tabId) {
-      const tabs = ['users', 'plans', 'gemini', 'stats'];
+      const tabs = ['users', 'plans', 'tools', 'gemini', 'stats'];
       tabs.forEach(t => {
         const content = document.getElementById(`tab-content-${t}`);
         const btn = document.getElementById(`tab-btn-${t}`);
         if (content && btn) {
-          const active = t === tabId;
-          content.hidden = !active;
-          content.classList.toggle('hidden', !active);
-          if (active) {
+          if (t === tabId) {
             content.classList.remove('hidden');
             btn.className = 'px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-bold text-xs transition flex items-center gap-2 cursor-pointer shadow-sm';
           } else {
@@ -1274,6 +1389,67 @@
         }
       });
       if (tabId === 'stats') loadAuditLogs();
+      if (tabId === 'tools') loadToolAccessConfig().catch(() => {});
+    }
+
+    async function loadToolAccessConfig() {
+      const result = await apiAdminRequest('admin_get_tool_access');
+      currentToolAccess = result;
+      const toggle = document.getElementById('toggle-paywall');
+      if (toggle) toggle.checked = Boolean(result.paywall_enabled);
+      const label = document.getElementById('paywall-label');
+      if (label) label.textContent = (result.paywall_enabled || result.subscription_mode) ? 'نمط الاشتراكات (Paywall) مفعّل: يتم تطبيق صلاحيات الأدوات والخطط' : 'نمط الاشتراكات (Paywall) متوقف — كل الأدوات مفتوحة للجميع';
+      const plans = result.plans || [];
+      const tools = result.tools || [];
+      const rows = result.access || [];
+      const head = document.getElementById('tool-access-head');
+      const body = document.getElementById('tool-access-body');
+      if (head) head.innerHTML = `<tr><th class="p-3">الأداة</th>${plans.map(p => `<th class="p-3">${escapeHtml(p.name)}</th>`).join('')}</tr>`;
+      if (body) body.innerHTML = tools.map(tool => `<tr><td class="p-3"><b>${escapeHtml(tool.name_ar)}</b><div class="text-[10px] text-zinc-500">${escapeHtml(tool.key)} · ${escapeHtml(tool.category)}</div></td>${plans.map(plan => {
+        const row = rows.find(item => item.tool_key === tool.key && item.plan_id === plan.id) || {};
+        const access = row.access || (tool.category === 'local' ? 'full' : 'locked');
+        const limit = row.monthly_limit ?? '';
+        const unit = row.limit_unit || 'month';
+        return `<td class="p-3 min-w-48"><select data-tool-access="${escapeHtml(tool.key)}" data-plan="${escapeHtml(plan.id)}" class="w-full bg-[#18181C] border border-white/10 rounded-lg p-2 text-white"><option value="full" ${access === 'full' ? 'selected' : ''}>مفتوحة بالكامل</option><option value="limited" ${access === 'limited' ? 'selected' : ''}>محدودة</option><option value="locked" ${access === 'locked' ? 'selected' : ''}>مقفولة</option></select><div class="flex gap-1 mt-2"><input data-tool-limit="${escapeHtml(tool.key)}" data-plan="${escapeHtml(plan.id)}" type="number" min="0" value="${escapeHtml(String(limit))}" placeholder="بلا حد" class="w-24 bg-[#18181C] border border-white/10 rounded-lg p-2 text-white"><select data-tool-unit="${escapeHtml(tool.key)}" data-plan="${escapeHtml(plan.id)}" class="bg-[#18181C] border border-white/10 rounded-lg p-2 text-white"><option value="month" ${unit === 'month' ? 'selected' : ''}>شهري</option><option value="day" ${unit === 'day' ? 'selected' : ''}>يومي</option></select></div></td>`;
+      }).join('')}</tr>`).join('');
+      const planSelect = document.getElementById('tool-override-plan');
+      if (planSelect) planSelect.innerHTML = '<option value="">بدون تغيير الخطة</option>' + plans.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+      const toolSelect = document.getElementById('tool-override-key');
+      if (toolSelect) toolSelect.innerHTML = '<option value="">بدون استثناء أداة</option>' + tools.map(t => `<option value="${escapeHtml(t.key)}">${escapeHtml(t.name_ar)}</option>`).join('');
+      const audit = document.getElementById('tool-access-audit');
+      if (audit) audit.innerHTML = (result.audit || []).map(item => `<tr><td class="p-3">${escapeHtml(item.actor)}</td><td class="p-3">${escapeHtml(item.target)}</td><td class="p-3">${escapeHtml(item.action)} · ${escapeHtml(item.details_json || '')}</td><td class="p-3">${escapeHtml(item.created_at)}</td></tr>`).join('') || '<tr><td colspan="4" class="p-5 text-center text-zinc-500">لا توجد تغييرات مسجلة.</td></tr>';
+    }
+
+    async function handleTogglePaywall(enabled) {
+      try {
+        const result = await apiAdminRequest('admin_set_paywall', { enabled });
+        showToast(result.message || 'تم تحديث إعداد Paywall.', 'success');
+        await loadToolAccessConfig();
+      } catch (err) {
+        document.getElementById('toggle-paywall').checked = !enabled;
+        showToast(err.message || 'تعذر تحديث إعداد Paywall.', 'error');
+      }
+    }
+
+    async function handleSaveToolAccess() {
+      const rows = [];
+      document.querySelectorAll('[data-tool-access]').forEach(select => {
+        const tool = select.dataset.toolAccess, plan = select.dataset.plan;
+        const limit = document.querySelector(`[data-tool-limit="${tool}"][data-plan="${plan}"]`)?.value;
+        const unit = document.querySelector(`[data-tool-unit="${tool}"][data-plan="${plan}"]`)?.value || 'month';
+        rows.push({ tool_key: tool, plan_id: plan, access: select.value, monthly_limit: limit === '' ? null : Number(limit), limit_unit: unit });
+      });
+      try { await apiAdminRequest('admin_save_tool_access', { access: rows }); showToast('تم حفظ صلاحيات الأدوات.', 'success'); await loadToolAccessConfig(); }
+      catch (err) { showToast(err.message || 'تعذر حفظ الصلاحيات.', 'error'); }
+    }
+
+    async function handleSaveToolOverride() {
+      const user_id = document.getElementById('tool-override-uid').value.trim();
+      const plan_id = document.getElementById('tool-override-plan').value;
+      const tool_key = document.getElementById('tool-override-key').value;
+      const access = document.getElementById('tool-override-access').value;
+      try { await apiAdminRequest('admin_save_tool_override', { user_id, plan_id, tool_key, access }); showToast('تم حفظ استثناء المستخدم.', 'success'); await loadToolAccessConfig(); }
+      catch (err) { showToast(err.message || 'تعذر حفظ استثناء المستخدم.', 'error'); }
     }
 
     // Health Check
@@ -1351,7 +1527,6 @@
 
       tbody.innerHTML = users.map(user => {
         const isBanned = user.status === 'banned' || user.status === 'suspended';
-        const isProtectedAdmin = user.protected === true;
         const planName = { free: 'مجانية', pro: 'احترافية (Pro)' }[user.plan] || user.plan;
         const planBadgeClass = user.plan === 'pro'
           ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
@@ -1369,15 +1544,11 @@
           <tr class="hover:bg-white/[0.02] transition">
             <td class="py-3 px-4">
               <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-full ${isProtectedAdmin ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-zinc-800 border-white/10 text-white'} border flex items-center justify-center font-bold text-xs">
-                  ${isProtectedAdmin ? '<i class="fa-solid fa-user-shield"></i>' : (user.displayName || user.email || 'M').charAt(0).toUpperCase()}
+                <div class="w-7 h-7 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center font-bold text-xs text-white">
+                  ${(user.displayName || user.email || 'M').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div class="font-semibold ${isProtectedAdmin ? 'text-emerald-200' : 'text-white'} flex items-center gap-1.5">
-                    ${isProtectedAdmin
-                      ? '<i class="fa-solid fa-user-shield text-emerald-400" title="المشرف الرئيسي"></i> المشرف الرئيسي (Admin)'
-                      : escapeHtml(user.displayName || 'مستخدم')}
-                  </div>
+                  <div class="font-semibold text-white">${escapeHtml(user.displayName || 'مستخدم')}</div>
                   <div class="text-[11px] text-zinc-400 font-mono" dir="ltr">${escapeHtml(user.email || 'بدون بريد')}</div>
                 </div>
               </div>
@@ -1390,17 +1561,16 @@
             </td>
 
             <td class="py-3 px-4">
-              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[10px] font-medium ${planBadgeClass}">
-                ${escapeHtml(planName)}
-              </span>
+              <div class="space-y-1">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[10px] font-medium ${planBadgeClass}">
+                  ${escapeHtml(planName)}
+                </span>
+                ${renderUserSubscriptionBadge(user)}
+              </div>
             </td>
 
             <td class="py-3 px-4">
-              ${isProtectedAdmin
-                ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold">
-                     <i class="fa-solid fa-shield-halved"></i> مشرف محمي
-                   </span>`
-                : isBanned
+              ${isBanned
                 ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-semibold" title="${escapeHtml(user.banReason || 'بدون سبب مسجل')}">
                      <i class="fa-solid fa-ban text-[8px]"></i> موقوف
                    </span>`
@@ -1427,11 +1597,7 @@
             </td>
 
             <td class="py-3 px-4 text-center">
-              ${isProtectedAdmin
-                ? `<span class="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-[10px] font-semibold text-emerald-300" title="حساب المشرف الأساسي محمي من الحظر والتعديل والحذف والرسوم">
-                     <i class="fa-solid fa-shield-halved"></i> حساب محمي
-                   </span>`
-                : `<div class="flex items-center justify-center gap-1.5">
+              <div class="flex items-center justify-center gap-1.5">
                 ${isBanned
                   ? `<button onclick="openBanModal('${user.uid}', '${escapeHtml(user.email)}', 'unban')" class="px-2.5 py-1 rounded-lg border border-emerald-500/30 bg-emerald-950/20 text-emerald-300 hover:bg-emerald-900/40 text-[10px] transition" title="إلغاء الحظر وتنشيط الحساب">
                        <i class="fa-solid fa-unlock"></i> تفعيل
@@ -1440,6 +1606,10 @@
                        <i class="fa-solid fa-ban"></i> حظر
                      </button>`
                 }
+
+                <button onclick="openSubscriptionModal('${user.uid}', '${escapeHtml(user.email)}', '${user.plan}')" class="px-2.5 py-1 rounded-lg border border-indigo-500/30 bg-indigo-950/20 text-indigo-300 hover:bg-indigo-900/40 text-[10px] transition" title="إدارة اشتراك المستخدم وتجديد المدة">
+                  <i class="fa-solid fa-calendar-check"></i> اشتراك
+                </button>
 
                 <button onclick="openChangePlanModal('${user.uid}', '${escapeHtml(user.email)}', '${user.plan}')" class="px-2.5 py-1 rounded-lg border border-white/10 hover:border-white/20 bg-white/5 text-zinc-300 hover:text-white text-[10px] transition" title="تغيير الباقة">
                   <i class="fa-solid fa-layer-group"></i> الباقة
@@ -1456,12 +1626,14 @@
                 <button onclick="handleRevokeDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 text-[10px] transition" title="إلغاء اقتران أجهزة الإضافة لهذا الحساب">
                   <i class="fa-solid fa-link-slash"></i>
                 </button>
+                <button onclick="showUserDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10 text-[10px] transition" title="عرض أجهزة هذا المستخدم">
+                  <i class="fa-solid fa-desktop"></i> الأجهزة
+                </button>
 
                 <button onclick="handleDeleteUser('${user.uid}')" class="px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 text-[10px] transition" title="حذف الحساب نهائياً">
                   <i class="fa-solid fa-trash-can"></i>
                 </button>
-              </div>`
-              }
+              </div>
             </td>
           </tr>
         `;
@@ -1472,6 +1644,194 @@
     function closeModal(modalId) {
       document.getElementById(modalId)?.classList.add('hidden');
       document.getElementById(modalId)?.classList.remove('flex');
+    }
+
+    let currentSubUid = '';
+    let currentSubTarget = null;
+    let selectedPresetDays = 30;
+
+    function renderUserSubscriptionBadge(user) {
+      const sub = user.subscription;
+      if (!sub || user.plan === 'free') {
+        return `<div class="text-[10px] text-zinc-500 font-mono flex items-center gap-1"><i class="fa-solid fa-infinity text-[8px]"></i> بدون انتهاء</div>`;
+      }
+      if (sub.status === 'cancelled') {
+        return `<div class="text-[10px] text-red-400 font-semibold flex items-center gap-1"><i class="fa-solid fa-ban text-[8px]"></i> اشتراك ملغي</div>`;
+      }
+      if (sub.status === 'expired' || (user.days_left !== null && user.days_left <= 0)) {
+        const expDate = user.expires_at ? new Date(user.expires_at).toLocaleDateString('ar-EG') : '';
+        return `<div class="text-[10px] text-amber-400 font-bold flex items-center gap-1" title="${escapeHtml(user.expires_at || '')}"><i class="fa-solid fa-clock-rotate-left text-[8px]"></i> منتهي ${expDate ? `(${expDate})` : ''}</div>`;
+      }
+      const expDate = user.expires_at ? new Date(user.expires_at).toLocaleDateString('ar-EG') : '';
+      const days = user.days_left ?? sub.days_left;
+      const daysText = days != null ? (days === 1 ? 'باقي يوم' : days === 2 ? 'باقي يومان' : `باقي ${days} يوم`) : '';
+      return `
+        <div class="text-[10px] text-emerald-400 font-bold flex items-center gap-1" title="${escapeHtml(user.expires_at || '')}">
+          <i class="fa-solid fa-circle-check text-[8px]"></i> ${daysText}
+        </div>
+        ${expDate ? `<div class="text-[9px] text-zinc-500 font-mono">حتى ${expDate}</div>` : ''}
+      `;
+    }
+
+    function openSubscriptionModal(uid, email, currentPlan) {
+      const modal = document.getElementById('modal-manage-subscription');
+      const user = allUsers.find(u => u.uid === uid) || { uid, email, plan: currentPlan };
+      currentSubUid = uid;
+      currentSubTarget = user;
+      selectedPresetDays = 30;
+
+      document.getElementById('modal-sub-user-info').textContent = `المستخدم: ${email} (${uid.slice(0, 8)}…)`;
+      const sub = user.subscription || {};
+      const statusStr = sub.status === 'cancelled'
+        ? 'ملغي'
+        : (sub.status === 'expired' ? 'منتهي الصلاحية' : (user.plan === 'free' ? 'حساب مجاني (Free)' : 'نشط (Active)'));
+      const expStr = user.expires_at ? new Date(user.expires_at).toLocaleString('ar-EG') : 'بلا تاريخ انتهاء';
+      const leftStr = user.days_left != null ? `(متبقي: ${user.days_left} يوم)` : '';
+      document.getElementById('modal-sub-current-status').innerHTML = `الباقة الحالية: <b class="text-white">${escapeHtml(user.plan || 'free')}</b> · حالة الاشتراك: <b class="text-white">${statusStr}</b> · تاريخ الانتهاء: <span class="font-mono">${expStr}</span> ${leftStr}`;
+
+      document.getElementById('modal-sub-plan-select').value = user.plan && user.plan !== 'free' ? user.plan : 'pro';
+      document.getElementById('modal-sub-custom-days').value = '';
+      document.getElementById('modal-sub-exact-date').value = '';
+      document.getElementById('modal-sub-notes').value = sub.notes || '';
+
+      setSubPresetDays(30);
+
+      document.getElementById('modal-sub-activate-btn').onclick = handleActivateSubscription;
+      document.getElementById('modal-sub-set-expiry-btn').onclick = handleSetSubscriptionExpiry;
+      document.getElementById('modal-sub-cancel-btn').onclick = handleCancelSubscription;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function setSubPresetDays(days) {
+      selectedPresetDays = days;
+      document.getElementById('modal-sub-custom-days').value = '';
+      document.getElementById('modal-sub-exact-date').value = '';
+      document.querySelectorAll('.sub-preset-btn').forEach(btn => {
+        if (btn.textContent.includes(String(days))) {
+          btn.className = 'sub-preset-btn px-2 py-1.5 rounded-lg border border-indigo-400 bg-indigo-600/40 text-white font-bold font-mono transition';
+        } else {
+          btn.className = 'sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition';
+        }
+      });
+      updateSubPreviewHint();
+    }
+
+    function handleSubCustomDaysInput(val) {
+      const d = Number(val);
+      if (d > 0) {
+        selectedPresetDays = d;
+        document.querySelectorAll('.sub-preset-btn').forEach(btn => {
+          btn.className = 'sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition';
+        });
+        document.getElementById('modal-sub-exact-date').value = '';
+        updateSubPreviewHint();
+      }
+    }
+
+    function handleSubExactDateChange(val) {
+      if (val) {
+        selectedPresetDays = 0;
+        document.querySelectorAll('.sub-preset-btn').forEach(btn => {
+          btn.className = 'sub-preset-btn px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-indigo-600/30 hover:border-indigo-500/50 text-[11px] text-zinc-200 font-mono transition';
+        });
+        document.getElementById('modal-sub-custom-days').value = '';
+        const date = new Date(val);
+        document.getElementById('modal-sub-preview-hint').textContent = `سيتم ضبط تاريخ انتهاء الاشتراك إلى: ${date.toLocaleString('ar-EG')}.`;
+      }
+    }
+
+    function updateSubPreviewHint() {
+      const user = currentSubTarget;
+      const now = Date.now();
+      let base = now;
+      let isExtend = false;
+      if (user && user.expires_at) {
+        const curExp = new Date(user.expires_at).getTime();
+        if (curExp > now) {
+          base = curExp;
+          isExtend = true;
+        }
+      }
+      if (selectedPresetDays > 0) {
+        const targetDate = new Date(base + selectedPresetDays * 86400000);
+        document.getElementById('modal-sub-preview-hint').textContent = isExtend
+          ? `تمديد الاشتراك النشط بـ ${selectedPresetDays} يوم: تاريخ الانتهاء الجديد سيكون ${targetDate.toLocaleDateString('ar-EG')}.`
+          : `تفعيل الاشتراك بـ ${selectedPresetDays} يوم بدءاً من اليوم: تاريخ الانتهاء سيكون ${targetDate.toLocaleDateString('ar-EG')}.`;
+      }
+    }
+
+    async function handleActivateSubscription() {
+      if (!currentSubUid) return;
+      const plan = document.getElementById('modal-sub-plan-select').value;
+      const customDays = Number(document.getElementById('modal-sub-custom-days').value);
+      const exactDate = document.getElementById('modal-sub-exact-date').value;
+      const notes = document.getElementById('modal-sub-notes').value.trim();
+
+      const payload = {
+        target_uid: currentSubUid,
+        plan,
+        notes,
+        source: 'manual_admin'
+      };
+
+      if (exactDate) {
+        payload.expires_at = new Date(exactDate).toISOString();
+      } else if (customDays > 0) {
+        payload.days = customDays;
+      } else if (selectedPresetDays > 0) {
+        payload.days = selectedPresetDays;
+      } else {
+        payload.days = 30;
+      }
+
+      try {
+        const res = await apiAdminRequest('admin_activate_subscription', payload);
+        showToast(res.message || 'تم تفعيل / تجديد الاشتراك بنجاح.', 'success');
+        closeModal('modal-manage-subscription');
+        loadUsers();
+      } catch (err) {
+        showToast(err.message || 'تعذر تفعيل الاشتراك.', 'error');
+      }
+    }
+
+    async function handleSetSubscriptionExpiry() {
+      if (!currentSubUid) return;
+      const exactDate = document.getElementById('modal-sub-exact-date').value;
+      if (!exactDate) {
+        showToast('يرجى اختيار تاريخ ووقت محدد في خانة "تاريخ انتهاء محدد".', 'warning');
+        return;
+      }
+      try {
+        const res = await apiAdminRequest('admin_set_subscription_expiry', {
+          target_uid: currentSubUid,
+          expires_at: new Date(exactDate).toISOString()
+        });
+        showToast(res.message || 'تم تعديل تاريخ انتهاء الاشتراك بنجاح.', 'success');
+        closeModal('modal-manage-subscription');
+        loadUsers();
+      } catch (err) {
+        showToast(err.message || 'تعذر تعديل تاريخ الانتهاء.', 'error');
+      }
+    }
+
+    async function handleCancelSubscription() {
+      if (!currentSubUid) return;
+      const confirmMsg = 'هل أنت متأكد من رغبتك في إلغاء اشتراك هذا المستخدم فورياً وإعادته للباقة المجانية؟';
+      if (!confirm(confirmMsg)) return;
+      const notes = document.getElementById('modal-sub-notes').value.trim();
+      try {
+        const res = await apiAdminRequest('admin_cancel_subscription', {
+          target_uid: currentSubUid,
+          reason: notes || 'إلغاء يدوي من لوحة التحكم'
+        });
+        showToast(res.message || 'تم إلغاء الاشتراك بنجاح.', 'success');
+        closeModal('modal-manage-subscription');
+        loadUsers();
+      } catch (err) {
+        showToast(err.message || 'تعذر إلغاء الاشتراك.', 'error');
+      }
     }
 
     function openBanModal(uid, email, action) {
@@ -1601,6 +1961,16 @@
       } catch (e) { showToast(e.message, 'error'); }
     }
 
+    async function showUserDevices(uid) {
+      try {
+        const result = await apiAdminRequest('admin_get_user_devices', { target_uid: uid });
+        const devices = result.devices || [];
+        if (!devices.length) return showToast('لا توجد أجهزة مسجلة لهذا المستخدم.', 'info');
+        const lines = devices.map((device, index) => `${index + 1}. ${device.name || 'جهاز'} · ${device.platform || 'غير محدد'} · ${device.revoked ? 'ملغي' : 'نشط'} · آخر استخدام: ${device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('ar-EG') : 'غير معروف'}`);
+        alert(lines.join('\n'));
+      } catch (error) { showToast(error.message || 'تعذر تحميل أجهزة المستخدم.', 'error'); }
+    }
+
     async function handleDeleteUser(uid) {
       if (!confirm('تحذير: هل أنت متأكد من حذف هذا الحساب نهائياً من النظام؟ لا يمكن التراجع عن هذا الإجراء.')) return;
       try {
@@ -1639,11 +2009,13 @@
         document.getElementById('plan-free-motion-monthly').value = free.limits?.motion_ai?.monthly ?? 80;
         document.getElementById('plan-free-flag-extension').checked = free.features?.extension_access ?? true;
         document.getElementById('plan-free-flag-watermark').checked = free.features?.watermark_free ?? false;
+        document.getElementById('plan-free-max-devices').value = free.features?.max_devices ?? 2;
 
         const pro = currentPlans.pro || {};
         document.getElementById('plan-pro-price').value = pro.price ?? '';
         document.getElementById('plan-pro-flag-extension').checked = pro.features?.extension_access ?? true;
         document.getElementById('plan-pro-flag-watermark').checked = pro.features?.watermark_free ?? true;
+        document.getElementById('plan-pro-max-devices').value = pro.features?.max_devices ?? 2;
         const banner = document.getElementById('plans-error-banner');
         if (banner) banner.classList.add('hidden');
       } catch (err) {
@@ -1766,7 +2138,8 @@
           },
           features: {
             extension_access: document.getElementById('plan-free-flag-extension').checked,
-            watermark_free: document.getElementById('plan-free-flag-watermark').checked
+            watermark_free: document.getElementById('plan-free-flag-watermark').checked,
+            max_devices: Math.max(1, Math.min(100, Number(document.getElementById('plan-free-max-devices').value) || 2))
           }
         },
         pro: {
@@ -1779,7 +2152,8 @@
           billing_period: 'month',
           features: {
             extension_access: document.getElementById('plan-pro-flag-extension').checked,
-            watermark_free: document.getElementById('plan-pro-flag-watermark').checked
+            watermark_free: document.getElementById('plan-pro-flag-watermark').checked,
+            max_devices: Math.max(1, Math.min(100, Number(document.getElementById('plan-pro-max-devices').value) || 2))
           }
         }
 

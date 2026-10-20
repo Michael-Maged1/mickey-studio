@@ -33,7 +33,7 @@
     {
       "id": "auto-zoom",
       "arabicName": "الزووم التلقائي",
-      "shortBenefit": "تطبيق تقريب مركزي قابل للاختيار على الفيديو",
+      "shortBenefit": "تقريب ديناميكي سينمائي على المتحدث لكسر رتابة المشهد",
       "icon": "zoom-in",
       "group": "المونتاج",
       "requires": [],
@@ -75,9 +75,9 @@
       "badge": null,
       "target": {
         "ext": "page-multicam",
-        "site": null
+        "site": "section-podcast-studio"
       },
-      "availableIn": "ext",
+      "availableIn": "both",
       "order": 4
     },
     {
@@ -170,8 +170,8 @@
     },
     {
       "id": "audio-clean",
-      "arabicName": "تحسين نبرة الصوت",
-      "shortBenefit": "تشكيل نبرة الصوت بمرشحات ومعادل صوتي للمعاينة والتصدير",
+      "arabicName": "تنقية الصوت",
+      "shortBenefit": "عزل الضوضاء والصدى وتحسين العلو بجودة الاستوديو الاحترافية",
       "icon": "sparkles",
       "group": "الصوت",
       "requires": [],

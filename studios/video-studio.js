@@ -391,9 +391,6 @@
       }
       if (SFX?.playSuccess) SFX.playSuccess();
       if (showToast) showToast('اكتمل توليد الفيديو بالذكاء الاصطناعي ويمكن تنزيله الآن.', 'success');
-      if (window.MickeyStudio.recordUsage) {
-        window.MickeyStudio.recordUsage('video').catch(error => console.warn('[Usage metrics] Video usage could not be recorded:', error));
-      }
     } catch (error) {
       console.error('[LTX video generation]', error);
       if (progressPill) {

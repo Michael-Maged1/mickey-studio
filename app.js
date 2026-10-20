@@ -1215,18 +1215,11 @@ window.MickeyStudio = (function () {
     return false;
   }
 
-  const DEFAULT_WORKER_API_URL = 'https://mickey-studio-api.kma279500.workers.dev/api.php';
-  const API_BASE_URL = (function() {
-    const configured = String(window.MICKEY_API_BASE_URL || '').trim();
-    if (!configured) return DEFAULT_WORKER_API_URL;
+  const API_BASE_URL = window.MICKEY_API_BASE_URL || (function() {
     try {
-      const parsed = new URL(configured, window.location.href);
-      // Never fall back to the Vercel site itself: it does not host the API
-      // endpoint and can return a generic Forbidden response for /api.php.
-      if (parsed.origin === window.location.origin) return DEFAULT_WORKER_API_URL;
-      return parsed.href;
+      return new URL('api.php', window.location.href).href;
     } catch (_) {
-      return DEFAULT_WORKER_API_URL;
+      return 'api.php';
     }
   })();
   const MOTION_SCENE_API_URL = 'https://mickey-studio-api.kma279500.workers.dev';
@@ -1368,7 +1361,7 @@ window.MickeyStudio = (function () {
     const requestBody = { action, ...body };
     // InfinityFree/shared Apache may drop Authorization before PHP receives it.
     // Include the short-lived ID token in this HTTPS request body as a fallback.
-    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke', 'get_user_quotas', 'record_usage'].includes(action) && user) requestBody.idToken = await user.getIdToken();
+    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke', 'get_user_quotas'].includes(action) && user) requestBody.idToken = await user.getIdToken();
     const response = await fetch(`${API_BASE_URL}?action=${encodeURIComponent(action)}`, {
       method: 'POST', headers, body: JSON.stringify(requestBody)
     });
@@ -1390,18 +1383,7 @@ window.MickeyStudio = (function () {
       if (response.status === 429 && data.code === 'QUOTA_EXCEEDED' && data.tool) {
         updateQuotaBadge(data.tool, 0, data.limit);
       }
-      const errorMessage = (value) => {
-        if (typeof value === 'string' && value.trim()) return value.trim();
-        if (Array.isArray(value)) return value.map(errorMessage).filter(Boolean).join('، ');
-        if (value && typeof value === 'object') {
-          for (const key of ['message', 'publicMessage', 'detail', 'error', 'description']) {
-            const nested = errorMessage(value[key]);
-            if (nested) return nested;
-          }
-        }
-        return '';
-      };
-      throw new Error(errorMessage(data.error) || errorMessage(data.message) || `تعذر تنفيذ الطلب (${response.status}).`);
+      throw new Error(data.error || data.message || `تعذر تنفيذ الطلب (${response.status}).`);
     }
     if (action === 'consume_generation' && data.permit) {
       let permits = {};
@@ -1410,10 +1392,6 @@ window.MickeyStudio = (function () {
       sessionStorage.setItem('mickey_generation_permits', JSON.stringify(permits));
     }
     return data;
-  }
-
-  async function recordUsage(tool) {
-    return accountRequest('record_usage', { tool, event_id: crypto.randomUUID() });
   }
 
   const MOTION_STYLE_GUIDES = {
@@ -3551,8 +3529,6 @@ window.MickeyStudio = (function () {
     const dashMeterGen = document.getElementById('dashboard-meter-generations');
     const dashMeterBar = document.getElementById('dashboard-meter-bar');
     const freeNoticeBtnText = document.getElementById('free-banner-btn-text');
-    const freeNoticeBtn = document.getElementById('free-banner-auth-btn');
-    const freeNoticeIcon = freeNoticeBtn && freeNoticeBtn.querySelector('i');
 
     if (STATE.user || (window.firebase && firebase.apps && firebase.apps.length && firebase.auth().currentUser)) {
       if (badge) badge.classList.add('hidden');
@@ -3560,8 +3536,6 @@ window.MickeyStudio = (function () {
       if (dashMeterGen) dashMeterGen.textContent = 'غير محدود';
       if (dashMeterBar) dashMeterBar.style.width = '100%';
       if (freeNoticeBtnText) freeNoticeBtnText.textContent = 'حسابك مفعل ✓';
-      if (freeNoticeBtn) freeNoticeBtn.classList.add('account-activated');
-      if (freeNoticeIcon) freeNoticeIcon.className = 'fa-solid fa-circle-check text-xs';
       return;
     }
     // Keep 5-attempt badge hidden from top UI as requested
@@ -3573,8 +3547,6 @@ window.MickeyStudio = (function () {
     if (dashMeterGen) dashMeterGen.textContent = `${remaining} تجريبية`;
     if (dashMeterBar) dashMeterBar.style.width = `${(remaining / 5) * 100}%`;
     if (freeNoticeBtnText) freeNoticeBtnText.textContent = 'إنشاء حساب مجاني الآن';
-    if (freeNoticeBtn) freeNoticeBtn.classList.remove('account-activated');
-    if (freeNoticeIcon) freeNoticeIcon.className = 'fa-solid fa-user-plus text-xs';
   }
 
   async function authorizeAndConsume(tool, count = 1) {
@@ -3754,33 +3726,29 @@ window.MickeyStudio = (function () {
 
   // pendingPairCode declared above
   let pendingPair2Code = '';
-  let pendingPairCompletionCode = '';
 
   async function completePendingExtensionPair(user) {
-    const code = pendingPair2Code || pendingPairCode;
-    if (!code || !user || pendingPairCompletionCode === code) return;
-    pendingPairCompletionCode = code;
-    try {
-      if (pendingPair2Code) {
-        try {
-          await accountRequest('pair2_complete', { code: pendingPair2Code, deviceName: 'Mickey Studio · Premiere Pro' });
-          pendingPair2Code = '';
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('pair2');
-          cleanUrl.searchParams.delete('extension_pair2');
-          history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
-          showToast('تم ربط الإضافة بنجاح! ارجع إلى Premiere Pro.', 'success');
-          refreshConnectedDevices();
-          return;
-        } catch (error) {
-          console.error('[ExtensionPairingV2] Could not complete secure pairing v2:', error);
-          showToast('تعذر إكمال الربط التلقائي: ' + (error.message || 'انتهت صلاحية الرمز'), 'error', 9000);
-          return;
-        }
+    if (pendingPair2Code && user) {
+      const currentCode2 = pendingPair2Code;
+      try {
+        await accountRequest('pair2_complete', { code: currentCode2, deviceName: 'Mickey Studio · Premiere Pro' });
+        pendingPair2Code = '';
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('pair2');
+        cleanUrl.searchParams.delete('extension_pair2');
+        history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.hash);
+        showToast('تم ربط الإضافة بنجاح (Pairing v2)! ارجع إلى Premiere Pro.', 'success');
+        refreshConnectedDevices();
+        return;
+      } catch (error) {
+        console.error('[ExtensionPairingV2] Could not complete secure pairing v2:', error);
+        showToast('تعذر إكمال الربط التلقائي v2: ' + (error.message || 'انتهت صلاحية الرمز'), 'error', 7000);
       }
-
-      if (!pendingPairCode) return;
-      await accountRequest('pair_complete', { code: pendingPairCode, deviceName: 'Mickey Studio · Premiere Pro' });
+    }
+    if (!pendingPairCode || !user) return;
+    const currentCode = pendingPairCode;
+    try {
+      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
@@ -3789,7 +3757,7 @@ window.MickeyStudio = (function () {
       refreshConnectedDevices();
     } catch (error) {
       console.error('[ExtensionPairing] Could not complete secure pairing:', error);
-      showToast('تعذر إكمال الربط التلقائي: ' + (error.message || 'تحقق من تسجيل الدخول وأن الرمز لم تنته صلاحيته.'), 'error', 9000);
+      showToast('تعذر إكمال الربط التلقائي. ما زال بإمكانك استخدام كود الربط اليدوي من إعدادات الإضافة.', 'error', 7000);
     }
   }
 
@@ -3810,14 +3778,28 @@ window.MickeyStudio = (function () {
     } catch (error) {
       try {
         const begin = await accountRequest('pair_begin');
-        await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro' });
+        await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
         const tokenStr = `MKP_${begin.code}`;
         try { await navigator.clipboard.writeText(tokenStr); }
         catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
         showToast('✓ تم نسخ كود ربط لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
         refreshConnectedDevices();
       } catch (err2) {
-        showToast(error.message || err2.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
+        try {
+          const tokenPayload = {
+            mickey_pair: true,
+            refreshToken: user.refreshToken,
+            email: user.email || user.phoneNumber || '',
+            uid: user.uid,
+            ts: Date.now()
+          };
+          const tokenStr = 'MKP_' + btoa(unescape(encodeURIComponent(JSON.stringify(tokenPayload))));
+          try { await navigator.clipboard.writeText(tokenStr); }
+          catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
+          showToast('✓ تم نسخ كود الربط المباشر! الصقه في إضافة Premiere Pro.', 'success', 6000);
+        } catch (err3) {
+          showToast(error.message || err2.message || err3.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
+        }
       }
     }
   }
@@ -4283,7 +4265,6 @@ window.MickeyStudio = (function () {
     showToast,
     CryptoVault,
     authorizeAndConsume,
-    recordUsage,
     gatewayFetch,
     base64ToBlob,
     downloadBlob,
