@@ -433,7 +433,7 @@
       try {
         const response = await gatewayFetch('transcribe_audio', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio_base64: STATE.transcribe.audioBase64, mime_type: cleanMime, dialect })
+          body: JSON.stringify({ audio_base64: STATE.transcribe.audioBase64, mime_type: cleanMime, dialect, include_analysis: true })
         });
         const data = await response.json().catch(() => ({}));
         if (data?.quota?.tool) updateQuotaBadge(data.quota.tool, data.quota.remaining, data.quota.limit);

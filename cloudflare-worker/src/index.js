@@ -1780,43 +1780,161 @@ async function detectCensorWords(ctx) {
 }
 
 async function transcribeAudio(ctx) {
-  const groqKey = ctx.env.GROQ_API_KEY;
-  if (!groqKey) {
-    return json({ success: false, error: 'خدمة التفريغ السحابي Groq Whisper غير مهيأة على السيرفر.' }, 503, ctx.headers);
-  }
-  const audioBase64 = String(ctx.body.audio_base64 || ctx.body.audio || '');
+  const audioBase64 = String(ctx.body.audio_base64 || ctx.body.audio || '').replace(/^data:[^,]+,/, '').trim();
   if (!audioBase64) return json({ success: false, error: 'لم يتم إرسال ملف الصوت للتفريغ.' }, 400, ctx.headers);
 
-  const raw = Uint8Array.from(atob(audioBase64.replace(/^data:[^,]+,/, '')), c => c.charCodeAt(0));
-  const form = new FormData();
-  form.append('file', new Blob([raw], { type: 'audio/wav' }), 'audio.wav');
-  form.append('model', 'whisper-large-v3');
-  form.append('response_format', 'verbose_json');
-  form.append('timestamp_granularities[]', 'word');
-  form.append('timestamp_granularities[]', 'segment');
+  const language = String(ctx.body.language || ctx.body.dialect || 'auto').toLowerCase();
+  const modelLanguage = language === 'auto' ? '' : (/^(ar|arabic|عربي|مصري|مصرية|خليجي|شامي|مغربي)/.test(language) ? 'ar' : language);
+  let result;
+  let provider = 'Cloudflare Workers AI · Whisper Large-v3 Turbo';
+  let cloudflareError = null;
 
-  const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${groqKey}` },
-    body: form
-  });
-  const data = await readJson(resp);
-  if (!resp.ok) return json({ success: false, error: data.error?.message || 'تعذر التفريغ عبر Groq Whisper.' }, resp.status, ctx.headers);
+  // Cloudflare Workers AI uses the project's existing AI binding and free daily
+  // allocation. Audio stays on Mickey Studio infrastructure; no Gemini call or
+  // provider API key is needed for transcription.
+  if (ctx.env.AI?.run) {
+    try {
+      result = await ctx.env.AI.run('@cf/openai/whisper-large-v3-turbo', {
+        audio: audioBase64,
+        task: 'transcribe',
+        ...(modelLanguage ? { language: modelLanguage } : {})
+      });
+    } catch (error) {
+      cloudflareError = error;
+      console.warn('[transcribe_audio] Cloudflare Whisper failed:', error?.message || error);
+    }
+  }
 
-  return json({
-    success: true,
-    text: data.text || '',
-    segments: (data.segments || []).map(s => ({
-      start: s.start,
-      end: s.end,
-      text: s.text?.trim()
-    })),
-    words: (data.words || []).map(w => ({
-      text: (w.word || w.text || '').trim(),
-      start: Number(w.start || 0),
-      end: Number(w.end || 0)
-    }))
-  }, 200, ctx.headers);
+  // Optional provider fallback for accounts that already configured Groq.
+  // Never fall back to Gemini here: doing so would silently spend Gemini credits.
+  if (!result && ctx.env.GROQ_API_KEY) {
+    try {
+      const raw = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
+      const form = new FormData();
+      const mime = String(ctx.body.mime_type || 'audio/wav').split(';')[0];
+      form.append('file', new Blob([raw], { type: mime }), `audio.${mime.split('/')[1] || 'wav'}`);
+      form.append('model', 'whisper-large-v3-turbo');
+      form.append('response_format', 'verbose_json');
+      form.append('timestamp_granularities[]', 'word');
+      form.append('timestamp_granularities[]', 'segment');
+      if (modelLanguage) form.append('language', modelLanguage);
+      const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST', headers: { Authorization: `Bearer ${ctx.env.GROQ_API_KEY}` }, body: form
+      });
+      const data = await readJson(resp);
+      if (!resp.ok) throw new Error(data.error?.message || `Groq HTTP ${resp.status}`);
+      result = data;
+      provider = 'Groq · Whisper Large-v3 Turbo';
+    } catch (error) {
+      console.warn('[transcribe_audio] Groq fallback failed:', error?.message || error);
+    }
+  }
+
+  if (!result) {
+    const message = cloudflareError?.message || 'لم تنجح خدمة التفريغ المجانية حالياً. حاول لاحقاً أو اختر Whisper المحلي.';
+    return json({ success: false, error: message }, 503, ctx.headers);
+  }
+
+  const text = String(result.text || result.transcription_info?.text || '').trim();
+  if (!text) return json({ success: false, error: 'لم يتم التعرف على كلام واضح في الصوت.' }, 422, ctx.headers);
+  const segments = normalizeTranscriptionSegments(result.segments, result.vtt, result.words);
+  const words = normalizeTranscriptionWords(result.words);
+  const srt = segmentsToSrt(segments);
+  const analysis = ctx.body.include_analysis ? await analyzeTranscriptWithWorkersAI(text, ctx.env) : null;
+  const data = {
+    transcript: text,
+    text,
+    srt,
+    dialect: modelLanguage === 'ar' ? 'عربي' : (modelLanguage || 'تلقائي'),
+    tone: analysis?.tone || 'غير محددة',
+    summary: analysis?.summary || text.slice(0, 180),
+    key_points: analysis?.key_points || splitTranscriptPoints(text),
+    words_count: Number(result.word_count) || text.split(/\s+/).filter(Boolean).length,
+    estimated_speed: 'تم حساب التوقيتات من الصوت',
+    segments,
+    words
+  };
+  return json({ success: true, provider, ...data, data }, 200, ctx.headers);
+}
+
+function normalizeTranscriptionWords(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map(word => ({
+    text: String(word.word || word.text || '').trim(),
+    start: Number(word.start || 0),
+    end: Number(word.end || 0),
+    confidence: Number(word.confidence ?? 0.95)
+  })).filter(word => word.text && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start);
+}
+
+function normalizeTranscriptionSegments(items, vtt, words) {
+  const segments = Array.isArray(items) ? items.map(segment => ({
+    start: Number(segment.start || 0), end: Number(segment.end || 0), text: String(segment.text || '').trim()
+  })).filter(segment => segment.text && Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start) : [];
+  if (segments.length) return segments;
+
+  const timestamp = value => {
+    const match = String(value).trim().match(/(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})/);
+    return match ? (Number(match[1] || 0) * 3600 + Number(match[2]) * 60 + Number(match[3]) + Number(match[4]) / 1000) : NaN;
+  };
+  if (typeof vtt === 'string') {
+    const parsed = [];
+    const lines = vtt.replace(/^WEBVTT[^\n]*\n/i, '').split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(/(\d{2}:)?\d{2}:\d{2}[.,]\d{3}\s+-->\s+(\d{2}:)?\d{2}:\d{2}[.,]\d{3}/);
+      if (!match) continue;
+      const [startText, endText] = lines[i].split('-->').map(value => value.trim().split(/\s+/)[0]);
+      const start = timestamp(startText), end = timestamp(endText);
+      const text = [];
+      for (i++; i < lines.length && lines[i].trim(); i++) text.push(lines[i].trim());
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start && text.length) parsed.push({ start, end, text: text.join(' ') });
+    }
+    if (parsed.length) return parsed;
+  }
+  const normalizedWords = normalizeTranscriptionWords(words);
+  const grouped = [];
+  for (let i = 0; i < normalizedWords.length; i += 5) {
+    const group = normalizedWords.slice(i, i + 5);
+    grouped.push({ start: group[0].start, end: group[group.length - 1].end, text: group.map(word => word.text).join(' ') });
+  }
+  return grouped;
+}
+
+function segmentsToSrt(segments) {
+  const stamp = seconds => {
+    const ms = Math.max(0, Math.round(seconds * 1000));
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor(ms % 3600000 / 60000);
+    const secs = Math.floor(ms % 60000 / 1000);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
+  };
+  return segments.map((segment, index) => `${index + 1}\n${stamp(segment.start)} --> ${stamp(segment.end)}\n${segment.text}`).join('\n\n');
+}
+
+function splitTranscriptPoints(text) {
+  return (text.match(/[^.!?؟\n]+[.!?؟]?/g) || []).map(part => part.trim()).filter(Boolean).slice(0, 3);
+}
+
+async function analyzeTranscriptWithWorkersAI(text, env) {
+  if (!env.AI?.run) return null;
+  try {
+    const result = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
+      messages: [
+        { role: 'system', content: 'حلل النص العربي فقط وأعد JSON صالحاً بلا Markdown بالمفاتيح: summary (ملخص من جملتين)، key_points (مصفوفة حتى 3 نقاط)، tone (وصف موجز للنبرة). لا تخمّن اللهجة أو معلومات غير موجودة.' },
+        { role: 'user', content: text.slice(0, 12000) }
+      ], max_tokens: 350, temperature: 0.2
+    });
+    const raw = String(result.response || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(raw);
+    return {
+      summary: String(parsed.summary || '').trim(),
+      key_points: Array.isArray(parsed.key_points) ? parsed.key_points.map(point => String(point).trim()).filter(Boolean).slice(0, 3) : [],
+      tone: String(parsed.tone || '').trim()
+    };
+  } catch (error) {
+    console.warn('[transcribe_audio] Optional transcript-only analysis failed:', error?.message || error);
+    return null;
+  }
 }
 
 async function analyzeVideoSilence(ctx) {
