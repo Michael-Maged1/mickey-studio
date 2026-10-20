@@ -351,6 +351,46 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const ADMIN_USER_STATUS_KEY_PREFIX = 'admin:user-status:';
+
+async function readAdminUserStatusOverride(env, uid) {
+  try {
+    const raw = await env.MICKEY_STATE?.get(`${ADMIN_USER_STATUS_KEY_PREFIX}${uid}`);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    return ['active', 'banned', 'suspended'].includes(value.status) ? value : null;
+  } catch (error) {
+    console.error('[readAdminUserStatusOverride] Could not read status override:', error?.message || error);
+    return null;
+  }
+}
+
+async function writeAdminUserStatusOverride(env, uid, status, reason = '') {
+  try {
+    if (!env.MICKEY_STATE?.put) return false;
+    await env.MICKEY_STATE.put(`${ADMIN_USER_STATUS_KEY_PREFIX}${uid}`, JSON.stringify({
+      status,
+      reason: status === 'active' ? '' : reason,
+      updatedAt: nowIso()
+    }));
+    return true;
+  } catch (error) {
+    console.error('[writeAdminUserStatusOverride] Could not write status override:', error?.message || error);
+    return false;
+  }
+}
+
+async function deleteAdminUserStatusOverride(env, uid) {
+  try {
+    if (!env.MICKEY_STATE?.delete) return false;
+    await env.MICKEY_STATE.delete(`${ADMIN_USER_STATUS_KEY_PREFIX}${uid}`);
+    return true;
+  } catch (error) {
+    console.error('[deleteAdminUserStatusOverride] Could not delete status override:', error?.message || error);
+    return false;
+  }
+}
+
 function evaluateSubscription(sub, basePlan = 'free') {
   const fallbackPlan = basePlan || 'free';
   if (!sub || typeof sub !== 'object') {
@@ -601,8 +641,9 @@ async function authenticate(ctx, adminOnly = false) {
 
   // The designated owner account is a protected system account. Its access must
   // not depend on a mutable profile status or Firebase's disabled flag.
-  const status = isDesignatedAdminEmail ? 'active' : (profile.fields?.status?.stringValue || 'active');
-  const banReason = profile.fields?.banReason?.stringValue || '';
+  const statusOverride = isDesignatedAdminEmail ? null : await readAdminUserStatusOverride(ctx.env, user.localId);
+  const status = isDesignatedAdminEmail ? 'active' : (statusOverride?.status || profile.fields?.status?.stringValue || 'active');
+  const banReason = statusOverride?.reason || profile.fields?.banReason?.stringValue || '';
   if (!isDesignatedAdminEmail && (user.disabled || status === 'banned' || status === 'suspended')) {
     fail(403, banReason
       ? `تم إيقاف حسابك من قبل إدارة Mickey Studio: ${banReason}`
@@ -1956,7 +1997,8 @@ async function adminListUsers(ctx) {
     const email = fields.email?.stringValue || authUser.email || '';
     const displayName = fields.displayName?.stringValue || (email ? email.split('@')[0] : 'مستخدم');
     const isProtectedAdmin = email.toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
-    const status = isProtectedAdmin ? 'active' : (authUser.disabled ? 'banned' : (fields.status?.stringValue || 'active'));
+    const statusOverride = isProtectedAdmin ? null : await readAdminUserStatusOverride(ctx.env, uid);
+    const status = isProtectedAdmin ? 'active' : (authUser.disabled ? 'banned' : (statusOverride?.status || fields.status?.stringValue || 'active'));
     const storedPlan = fields.plan?.stringValue || 'free';
     let subscription = null;
     if (fields.subscriptionJson?.stringValue) {
@@ -1964,7 +2006,7 @@ async function adminListUsers(ctx) {
     }
     const subEval = evaluateSubscription(subscription, storedPlan);
     const plan = subEval.plan;
-    const banReason = fields.banReason?.stringValue || '';
+    const banReason = statusOverride?.reason || fields.banReason?.stringValue || '';
     const authDate = value => {
       if (value == null || value === '') return null;
       const numeric = Number(value);
@@ -2058,20 +2100,25 @@ async function patchFirestoreUserFields(env, uid, fields, updateMaskPaths = []) 
 }
 
 async function setFirebaseAuthUserDisabled(env, uid, disabled) {
-  const adminToken = await firebaseAdminAccessToken(env);
-  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT;
-  const url = `https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/accounts:update`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ localId: uid, disableUser: Boolean(disabled) })
-  });
-  const data = await readJson(response);
-  if (!response.ok) {
-    console.error(`[setFirebaseAuthUserDisabled] Firebase Auth update failed (${response.status}):`, data.error?.message || 'unknown error');
-    return { ok: false, status: response.status };
+  try {
+    const adminToken = await firebaseAdminAccessToken(env);
+    const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT;
+    const url = `https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/accounts:update`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ localId: uid, disableUser: Boolean(disabled) })
+    });
+    const data = await readJson(response);
+    if (!response.ok) {
+      console.error(`[setFirebaseAuthUserDisabled] Firebase Auth update failed (${response.status}):`, data.error?.message || 'unknown error');
+      return { ok: false, status: response.status };
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error('[setFirebaseAuthUserDisabled] Firebase Auth update error:', error?.message || error);
+    return { ok: false, status: error?.status || 0 };
   }
-  return { ok: true };
 }
 
 async function getUser(ctx, identifier) {
@@ -2142,6 +2189,7 @@ async function getUser(ctx, identifier) {
   }
 
   const fields = profileDoc?.fields || {};
+  const statusOverride = await readAdminUserStatusOverride(ctx.env, uid);
   let subscription = null;
   if (fields.subscriptionJson?.stringValue) {
     try { subscription = JSON.parse(fields.subscriptionJson.stringValue); } catch {}
@@ -2159,8 +2207,8 @@ async function getUser(ctx, identifier) {
     uid,
     email: email || String(fields.email?.stringValue || '').toLowerCase(),
     displayName: authUser?.displayName || fields.displayName?.stringValue || '',
-    status: authUser?.disabled ? 'banned' : (fields.status?.stringValue || 'active'),
-    banReason: fields.banReason?.stringValue || '',
+    status: authUser?.disabled ? 'banned' : (statusOverride?.status || fields.status?.stringValue || 'active'),
+    banReason: statusOverride?.reason || fields.banReason?.stringValue || '',
     plan: evaluatedSub.plan,
     storedPlan: basePlan,
     subscription: evaluatedSub,
@@ -2209,6 +2257,7 @@ async function adminUpdateUserStatus(ctx) {
 
   const targetUser = await protectAdminAccountTarget(ctx, account, targetRaw);
   const targetUid = targetUser.uid;
+  const overrideWritten = await writeAdminUserStatusOverride(ctx.env, targetUid, newStatus, reason);
 
   const fields = {
     status: { stringValue: newStatus },
@@ -2217,44 +2266,28 @@ async function adminUpdateUserStatus(ctx) {
   };
 
   const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['status', 'banReason', 'updatedAt']);
-  if (!resp.ok) {
-    if (newStatus !== 'active') {
-      const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, true);
-      if (!authResult.ok) {
-        return json({ success: false, error: 'تعذر تحديث حالة الحساب في قاعدة البيانات أو إيقافه في Firebase Authentication.', code: 'FIRESTORE_AND_AUTH_ERROR' }, 502, ctx.headers);
-      }
-      await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email, firestoreUpdated: false });
-      return json({
-        success: true,
-        degraded: true,
-        error: 'تم حظر الحساب بنجاح عبر Firebase Authentication، لكن تعذر حفظ سبب الحظر في قاعدة البيانات.',
-        code: 'FIRESTORE_ERROR',
-        target_uid: targetUid,
-        status: newStatus
-      }, 200, ctx.headers);
-    }
-    return json({ success: false, error: 'تعذر تحديث حالة الحساب في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
-  }
-
-  if (newStatus !== 'active') {
-    const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, true);
-    if (!authResult.ok) {
-      await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email, authDisabled: false });
-      return json({
-        success: true,
-        degraded: true,
-        error: 'تم حظر الحساب في الموقع والإضافة، لكن تعذر تعطيل تسجيل الدخول عبر Firebase Authentication.',
-        code: 'FIREBASE_AUTH_ERROR',
-        target_uid: targetUid,
-        status: newStatus
-      }, 200, ctx.headers);
-    }
-  }
+  const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, newStatus !== 'active');
 
   if (newStatus === 'active') {
-    const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, false);
-    if (!authResult.ok) {
-      return json({ success: false, error: 'تم تحديث بيانات الحساب، لكن تعذر إعادة تفعيله في Firebase Authentication.', code: 'FIREBASE_AUTH_ERROR' }, 502, ctx.headers);
+    if (!authResult.ok || (!resp.ok && !overrideWritten)) {
+      return json({ success: false, error: 'تعذر إعادة تفعيل الحساب. لم تنجح الكتابة في Firebase أو مخزن Cloudflare.', code: 'FIRESTORE_AND_AUTH_ERROR' }, 502, ctx.headers);
+    }
+    if (resp.ok) await deleteAdminUserStatusOverride(ctx.env, targetUid);
+    if (!resp.ok) {
+      await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email, firestoreUpdated: false, authEnabled: true });
+      return json({ success: true, degraded: true, error: 'تمت إعادة تفعيل الحساب، لكن تعذر تحديث ملفه في Firebase؛ حُفظت الحالة في Cloudflare.', target_uid: targetUid, status: newStatus }, 200, ctx.headers);
+    }
+  } else {
+    if (!resp.ok && !authResult.ok && !overrideWritten) {
+      return json({ success: false, error: 'تعذر تحديث حالة الحساب في Firebase أو حفظها في مخزن Cloudflare.', code: 'FIRESTORE_AUTH_KV_ERROR' }, 502, ctx.headers);
+    }
+    if (resp.ok && authResult.ok) await deleteAdminUserStatusOverride(ctx.env, targetUid);
+    if (!resp.ok || !authResult.ok) {
+      await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email, firestoreUpdated: resp.ok, authDisabled: authResult.ok, cloudflareOverride: overrideWritten });
+      const error = !resp.ok
+        ? (overrideWritten ? 'تم الحظر عبر Cloudflare، لكن تعذر تحديث حالة الحساب في Firebase.' : 'تم حظر الحساب عبر Firebase Authentication، لكن تعذر حفظ سبب الحظر في Firebase أو Cloudflare.')
+        : 'تم حظر الحساب في الموقع والإضافة، لكن تعذر تعطيل تسجيل الدخول عبر Firebase Authentication.';
+      return json({ success: true, degraded: true, error, code: 'STATUS_BACKUP_USED', target_uid: targetUid, status: newStatus }, 200, ctx.headers);
     }
   }
 
