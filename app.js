@@ -1368,7 +1368,7 @@ window.MickeyStudio = (function () {
     const requestBody = { action, ...body };
     // InfinityFree/shared Apache may drop Authorization before PHP receives it.
     // Include the short-lived ID token in this HTTPS request body as a fallback.
-    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke', 'get_user_quotas'].includes(action) && user) requestBody.idToken = await user.getIdToken();
+    if (['pair_complete', 'pair2_complete', 'consume_generation', 'device_list', 'device_revoke', 'get_user_quotas', 'record_usage'].includes(action) && user) requestBody.idToken = await user.getIdToken();
     const response = await fetch(`${API_BASE_URL}?action=${encodeURIComponent(action)}`, {
       method: 'POST', headers, body: JSON.stringify(requestBody)
     });
@@ -1410,6 +1410,10 @@ window.MickeyStudio = (function () {
       sessionStorage.setItem('mickey_generation_permits', JSON.stringify(permits));
     }
     return data;
+  }
+
+  async function recordUsage(tool) {
+    return accountRequest('record_usage', { tool, event_id: crypto.randomUUID() });
   }
 
   const MOTION_STYLE_GUIDES = {
@@ -4279,6 +4283,7 @@ window.MickeyStudio = (function () {
     showToast,
     CryptoVault,
     authorizeAndConsume,
+    recordUsage,
     gatewayFetch,
     base64ToBlob,
     downloadBlob,

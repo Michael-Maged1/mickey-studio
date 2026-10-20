@@ -153,6 +153,8 @@ export default {
           }, 200, headers);
         }
 
+        case 'record_usage': return await recordExternalToolUsage(context);
+
         // === Extension Pairing & Motion Sync ===
         case 'pair_begin': return await pairBegin(context);
         case 'pair_complete': return await pairComplete(context);
@@ -541,10 +543,14 @@ async function getPlansConfig(env) {
   };
 }
 
-function toolCategoryForAction(action) {
+function toolCategoryForAction(action, body = {}) {
   const mapping = {
     generate_image: 'images',
     enhance_prompt: 'images',
+    photolab_bg: 'images',
+    remove_background: 'images',
+    photolab_upscale: 'images',
+    upscale_image: 'images',
     generate_tts: 'voice',
     refine_voiceover: 'voice',
     transcribe_audio: 'transcription',
@@ -552,8 +558,18 @@ function toolCategoryForAction(action) {
     generate_chapters: 'transcription',
     detect_censor_words: 'transcription',
     detect_viral_clips: 'motion_ai',
-    motion_scene_submit: 'motion_ai'
+    motion_scene_submit: 'motion_ai',
+    generate_video: 'video',
+    video_generate: 'video'
   };
+  if (action === 'consume_generation') {
+    const requested = String(body.tool || '').toLowerCase();
+    if (['image', 'images', 'image_generate', 'photolab_bg', 'photolab_upscale'].includes(requested)) return 'images';
+    if (['voice', 'voiceover', 'tts'].includes(requested)) return 'voice';
+    if (['transcription', 'transcribe', 'captions', 'chapters'].includes(requested)) return 'transcription';
+    if (['motion', 'motion_ai', 'broll'].includes(requested)) return 'motion_ai';
+    if (['video', 'video_generate'].includes(requested)) return 'video';
+  }
   return mapping[action] || 'general';
 }
 
@@ -589,18 +605,37 @@ async function recordToolUsageMetric(env, tool, dayKey) {
   } catch (_) {}
 }
 
+async function recordExternalToolUsage(ctx) {
+  const account = await authenticate(ctx, false);
+  const tool = String(ctx.body.tool || '').trim();
+  const eventId = String(ctx.body.event_id || '').trim();
+  if (tool !== 'video' || !/^[0-9a-f-]{36}$/i.test(eventId)) {
+    return json({ success: false, error: 'بيانات تسجيل الاستخدام غير صالحة.' }, 400, ctx.headers);
+  }
+
+  const eventKey = `stats:event:${account.uid}:${eventId}`;
+  if (await ctx.env.MICKEY_STATE.get(eventKey)) {
+    return json({ success: true, duplicate: true }, 200, ctx.headers);
+  }
+  await ctx.env.MICKEY_STATE.put(eventKey, '1', { expirationTtl: 86400 * 30 });
+  await recordToolUsageMetric(ctx.env, 'video', new Date().toISOString().slice(0, 10));
+  return json({ success: true }, 200, ctx.headers);
+}
+
 async function enforcePlanLimits(account, action, ctx) {
-  const tool = toolCategoryForAction(action);
+  const tool = toolCategoryForAction(action, ctx.body);
+  const now = new Date();
+  const dayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // Usage analytics include the owner account too; exemption applies only to
+  // billing and quotas, not to the admin dashboard's usage statistics.
+  await recordToolUsageMetric(ctx.env, tool, dayKey);
+
   // The owner account is exempt from subscription checks, quotas, credits and
   // user-generation counters. This check runs after Firebase token verification.
   if (String(account.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase()) {
     return { enforced: false, subscription_mode: false, tool, remaining: null, unlimited: true };
   }
-  const now = new Date();
-  const dayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-  // Always record usage analytics
-  await recordToolUsageMetric(ctx.env, tool, dayKey);
 
   const sysConfig = await getSystemConfig(ctx.env);
   const subscriptionMode = Boolean(sysConfig.subscription_mode);
@@ -678,6 +713,8 @@ async function enforceGenerationAccess(ctx) {
   if (apiKey.startsWith('mk_')) {
     const keys = await ctx.env.MICKEY_STATE.get('api_keys', 'json') || [];
     if (keys.some(item => item.key === apiKey && item.status !== 'revoked')) {
+      const metricTool = toolCategoryForAction(action, ctx.body);
+      if (metricTool !== 'general') await recordToolUsageMetric(ctx.env, metricTool, new Date().toISOString().slice(0, 10));
       return { account: { plan: 'api_developer', uid: 'developer' }, remaining: null };
     }
     fail(403, 'مفتاح API غير صالح أو تم إلغاؤه.');
@@ -714,6 +751,13 @@ async function enforceGenerationAccess(ctx) {
     fail(429, 'استخدمت محاولات الضيف الخمس المجانية. يرجى تسجيل الدخول أو إنشاء حساب مجاني للمتابعة.');
   }
   state.count = used + count;
+  if (action === 'consume_generation') {
+    const metricTool = toolCategoryForAction(action, ctx.body);
+    if (metricTool !== 'general') {
+      const dayKey = new Date().toISOString().slice(0, 10);
+      for (let i = 0; i < count; i++) await recordToolUsageMetric(ctx.env, metricTool, dayKey);
+    }
+  }
   let permit;
   if (action === 'consume_generation') {
     permit = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
@@ -2116,6 +2160,7 @@ async function submitMotionScene(ctx) {
   const jobId = crypto.randomUUID();
   const record = { jobId, scene, assetsBaseUrl, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000 };
   await ctx.env.MICKEY_STATE.put(`motion_scene:${account.uid}`, JSON.stringify(record), { expirationTtl: 900 });
+  await recordToolUsageMetric(ctx.env, 'motion_ai', new Date().toISOString().slice(0, 10));
   return json({ success: true, jobId, status: 'pending', message: 'المشهد جاهز للاستلام من إضافة Premiere.' }, 200, ctx.headers);
 }
 
