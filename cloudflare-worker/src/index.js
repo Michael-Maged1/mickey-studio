@@ -1652,65 +1652,41 @@ async function removeBackground(ctx) {
   const b64 = String(ctx.body.image_base64 || ctx.body.image || '').replace(/^data:[^,]*,/, '').trim();
   if (!b64) return json({ success: false, error: 'بيانات الصورة مفقودة لعزل الخلفية.' }, 400, ctx.headers);
   const mimeType = String(ctx.body.mime_type || ctx.body.mime || 'image/png').split(';')[0].trim().toLowerCase();
+  if (!/^image\/(png|jpe?g|webp|avif)$/i.test(mimeType)) return json({ success: false, error: 'صيغة الصورة غير مدعومة. استخدم PNG أو JPEG أو WebP.' }, 415, ctx.headers);
+  if (!ctx.env?.IMAGES || typeof ctx.env.IMAGES.input !== 'function') return json({ success: false, error: 'خدمة Cloudflare Images غير مفعّلة على الخادم.' }, 503, ctx.headers);
 
-  // Use the Cloudflare-hosted RMBG model only. Do not silently fall back to Gemini.
-  if (ctx.env && ctx.env.AI && typeof ctx.env.AI.run === 'function') {
-    try {
-      const binary = atob(b64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  try {
+    const binary = atob(b64);
+    if (binary.length > 20 * 1024 * 1024) return json({ success: false, error: 'حجم الصورة أكبر من الحد المدعوم (20 ميجابايت).' }, 413, ctx.headers);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const transformed = await ctx.env.IMAGES.input(bytes)
+      .transform({ segment: 'foreground' })
+      .output({ format: 'image/png' });
+    const response = transformed.response();
+    if (!response.ok) throw new Error(`Cloudflare Images returned ${response.status}`);
 
-      const rmbgModels = ['@cf/briaai/rmbg-1.4', '@cf/bria/bria-rmbg-1.4'];
-      for (const m of rmbgModels) {
-        try {
-          const aiRes = await ctx.env.AI.run(m, { image: [...bytes] });
-          if (aiRes) {
-            let resBytes = null;
-            if (aiRes instanceof Uint8Array) resBytes = aiRes;
-            else if (aiRes instanceof ArrayBuffer) resBytes = new Uint8Array(aiRes);
-            else if (aiRes instanceof Response) resBytes = new Uint8Array(await aiRes.arrayBuffer());
-            else if (aiRes.image) {
-              const outB64 = typeof aiRes.image === 'string' ? aiRes.image : '';
-              if (outB64) {
-                return json({
-                  success: true,
-                  provider: m,
-                  mime_type: 'image/png',
-                  base64Data: outB64.replace(/^data:[^,]*,/, ''),
-                  image_base64: outB64.replace(/^data:[^,]*,/, '')
-                }, 200, ctx.headers);
-              }
-            }
-
-            if (resBytes && resBytes.length > 0) {
-              let binaryOut = '';
-              const chunk = 8192;
-              for (let i = 0; i < resBytes.length; i += chunk) {
-                binaryOut += String.fromCharCode.apply(null, resBytes.subarray(i, i + chunk));
-              }
-              const outB64 = btoa(binaryOut);
-              return json({
-                success: true,
-                provider: m,
-                mime_type: 'image/png',
-                base64Data: outB64,
-                image_base64: outB64
-              }, 200, ctx.headers);
-            }
-          }
-        } catch (mErr) {
-          console.warn(`[Worker AI RMBG] Model ${m} error:`, mErr?.message || mErr);
-        }
-      }
-    } catch (cfAiErr) {
-      console.warn('[Worker AI RMBG] Exception:', cfAiErr?.message || cfAiErr);
+    const output = new Uint8Array(await response.arrayBuffer());
+    if (!output.length) throw new Error('Cloudflare returned an empty cutout.');
+    let binaryOut = '';
+    const chunk = 8192;
+    for (let i = 0; i < output.length; i += chunk) {
+      binaryOut += String.fromCharCode.apply(null, output.subarray(i, i + chunk));
     }
+    const outputBase64 = btoa(binaryOut);
+    return json({
+      success: true,
+      provider: 'cloudflare-images-birefnet',
+      mime_type: 'image/png',
+      base64Data: outputBase64,
+      image_base64: outputBase64
+    }, 200, ctx.headers);
+  } catch (error) {
+    console.error('[Cloudflare Images] Background removal failed:', error?.message || error);
+    return json({
+      success: false,
+      error: `تعذر عزل الخلفية عبر Cloudflare Images: ${error?.message || 'جرّب صورة أصغر أو أعد المحاولة.'}`
+    }, 502, ctx.headers);
   }
-
-  return json({
-    success: false,
-    error: 'تعذر تشغيل نموذج إزالة الخلفية المجاني في Cloudflare. لم يتم استخدام Gemini أو خدمة مدفوعة؛ جرّب لاحقًا.'
-  }, 503, ctx.headers);
 }
 
 async function geminiText(ctx, prompt, maxOutputTokens = 2000) {
