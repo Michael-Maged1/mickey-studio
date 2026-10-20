@@ -1354,6 +1354,19 @@ window.MickeyStudio = (function () {
     return response;
   }
 
+  function accountApiErrorMessage(data, status) {
+    const raw = data?.error ?? data?.message;
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+    if (raw && typeof raw === 'object') {
+      const message = raw.message || raw.error_description || raw.statusMessage || '';
+      const code = raw.code || raw.status || data?.code || '';
+      if (message && code) return `${message} (${code})`;
+      if (message || code) return String(message || code);
+      try { return JSON.stringify(raw); } catch (_) {}
+    }
+    return `تعذر تنفيذ الطلب (${status}).`;
+  }
+
   async function accountRequest(action, body = {}) {
     const user = firebase.auth().currentUser;
     const headers = { 'Content-Type': 'application/json', 'X-Anonymous-ID': getAnonymousId() };
@@ -1383,7 +1396,7 @@ window.MickeyStudio = (function () {
       if (response.status === 429 && data.code === 'QUOTA_EXCEEDED' && data.tool) {
         updateQuotaBadge(data.tool, 0, data.limit);
       }
-      throw new Error(data.error || data.message || `تعذر تنفيذ الطلب (${response.status}).`);
+      throw new Error(accountApiErrorMessage(data, response.status));
     }
     if (action === 'consume_generation' && data.permit) {
       let permits = {};
