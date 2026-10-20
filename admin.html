@@ -1864,8 +1864,8 @@
         btn.onclick = async () => {
           const reason = input.value.trim();
           try {
-            await apiAdminRequest('admin_update_user_status', { target_uid: uid, status: 'banned', reason });
-            showToast('تم إيقاف الحساب بنجاح. سيتم رفض أي طلب من الموقع أو الإضافة فورياً.', 'success');
+            const result = await apiAdminRequest('admin_update_user_status', { target_uid: uid, status: 'banned', reason });
+            showToast(result.degraded ? result.error : 'تم إيقاف الحساب بنجاح. سيتم رفض أي طلب من الموقع أو الإضافة فورياً.', result.degraded ? 'warning' : 'success');
             closeModal('modal-ban-user');
             loadUsers();
           } catch (e) { showToast(e.message, 'error'); }

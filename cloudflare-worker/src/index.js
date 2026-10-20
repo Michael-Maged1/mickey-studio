@@ -1956,7 +1956,7 @@ async function adminListUsers(ctx) {
     const email = fields.email?.stringValue || authUser.email || '';
     const displayName = fields.displayName?.stringValue || (email ? email.split('@')[0] : 'مستخدم');
     const isProtectedAdmin = email.toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
-    const status = isProtectedAdmin ? 'active' : (fields.status?.stringValue || (authUser.disabled ? 'banned' : 'active'));
+    const status = isProtectedAdmin ? 'active' : (authUser.disabled ? 'banned' : (fields.status?.stringValue || 'active'));
     const storedPlan = fields.plan?.stringValue || 'free';
     let subscription = null;
     if (fields.subscriptionJson?.stringValue) {
@@ -2057,6 +2057,23 @@ async function patchFirestoreUserFields(env, uid, fields, updateMaskPaths = []) 
   return resp;
 }
 
+async function setFirebaseAuthUserDisabled(env, uid, disabled) {
+  const adminToken = await firebaseAdminAccessToken(env);
+  const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT;
+  const url = `https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/accounts:update`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ localId: uid, disableUser: Boolean(disabled) })
+  });
+  const data = await readJson(response);
+  if (!response.ok) {
+    console.error(`[setFirebaseAuthUserDisabled] Firebase Auth update failed (${response.status}):`, data.error?.message || 'unknown error');
+    return { ok: false, status: response.status };
+  }
+  return { ok: true };
+}
+
 async function getUser(ctx, identifier) {
   const rawId = String(identifier || '').trim();
   if (!rawId) {
@@ -2142,7 +2159,7 @@ async function getUser(ctx, identifier) {
     uid,
     email: email || String(fields.email?.stringValue || '').toLowerCase(),
     displayName: authUser?.displayName || fields.displayName?.stringValue || '',
-    status: fields.status?.stringValue || (authUser?.disabled ? 'banned' : 'active'),
+    status: authUser?.disabled ? 'banned' : (fields.status?.stringValue || 'active'),
     banReason: fields.banReason?.stringValue || '',
     plan: evaluatedSub.plan,
     storedPlan: basePlan,
@@ -2201,7 +2218,44 @@ async function adminUpdateUserStatus(ctx) {
 
   const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['status', 'banReason', 'updatedAt']);
   if (!resp.ok) {
+    if (newStatus !== 'active') {
+      const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, true);
+      if (!authResult.ok) {
+        return json({ success: false, error: 'تعذر تحديث حالة الحساب في قاعدة البيانات أو إيقافه في Firebase Authentication.', code: 'FIRESTORE_AND_AUTH_ERROR' }, 502, ctx.headers);
+      }
+      await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email, firestoreUpdated: false });
+      return json({
+        success: true,
+        degraded: true,
+        error: 'تم حظر الحساب بنجاح عبر Firebase Authentication، لكن تعذر حفظ سبب الحظر في قاعدة البيانات.',
+        code: 'FIRESTORE_ERROR',
+        target_uid: targetUid,
+        status: newStatus
+      }, 200, ctx.headers);
+    }
     return json({ success: false, error: 'تعذر تحديث حالة الحساب في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
+  }
+
+  if (newStatus !== 'active') {
+    const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, true);
+    if (!authResult.ok) {
+      await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email, authDisabled: false });
+      return json({
+        success: true,
+        degraded: true,
+        error: 'تم حظر الحساب في الموقع والإضافة، لكن تعذر تعطيل تسجيل الدخول عبر Firebase Authentication.',
+        code: 'FIREBASE_AUTH_ERROR',
+        target_uid: targetUid,
+        status: newStatus
+      }, 200, ctx.headers);
+    }
+  }
+
+  if (newStatus === 'active') {
+    const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, false);
+    if (!authResult.ok) {
+      return json({ success: false, error: 'تم تحديث بيانات الحساب، لكن تعذر إعادة تفعيله في Firebase Authentication.', code: 'FIREBASE_AUTH_ERROR' }, 502, ctx.headers);
+    }
   }
 
   await logAdminAudit(ctx, 'update_user_status', targetUid, { newStatus, reason, targetEmail: targetUser.email });
