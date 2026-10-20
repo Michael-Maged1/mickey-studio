@@ -130,6 +130,14 @@
     return false;
   }
 
+  async function photoLabBlobToBase64(blob) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    return btoa(binary);
+  }
+
   async function removeBackground() {
     const STATE = window.MickeyStudio.STATE;
     const SFX = window.MickeyStudio.SFX;
@@ -167,19 +175,40 @@
     const sourceImg = STATE.photoLab.bgSourceImage;
     try {
       if (statusPill) statusPill.textContent = 'جاري الاتصال بنموذج إزالة الخلفية...';
-      const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
-      const client = await Client.connect('ZhengPeng7/BiRefNet_demo');
       const file = await photoLabGradioFile(sourceImg, STATE.photoLab.bgSourceFile, 'photo.png');
-      const result = await client.predict('/image', [await handle_file(file), '1024x1024', 'General']);
-      const sliderImages = result?.data?.[0];
-      const candidates = Array.isArray(sliderImages) ? [...sliderImages].reverse() : [sliderImages];
       let processedBlob = null;
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        const outputBlob = await gradioOutputBlob(candidate);
-        if (await hasTransparentPixels(outputBlob)) {
-          processedBlob = outputBlob;
-          break;
+      if (window.MickeyStudio.gatewayFetch && window.MickeyStudio.base64ToBlob) {
+        try {
+          const imageBase64 = await photoLabBlobToBase64(file);
+          const response = await window.MickeyStudio.gatewayFetch('remove_background', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_base64: imageBase64, mime_type: file.type || 'image/png' })
+          });
+          const data = await response.json().catch(() => ({}));
+          const outputBase64 = data?.base64Data || data?.image_base64;
+          if (response.ok && data?.success && outputBase64) {
+            processedBlob = window.MickeyStudio.base64ToBlob(outputBase64, data.mime_type || 'image/png');
+          } else {
+            console.warn('[PhotoLab] Cloudflare background removal unavailable; trying the free BiRefNet space:', data?.error || response.status);
+          }
+        } catch (cloudflareError) {
+          console.warn('[PhotoLab] Cloudflare background removal failed; trying the free BiRefNet space:', cloudflareError?.message || cloudflareError);
+        }
+      }
+      if (!processedBlob) {
+        const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
+        const client = await Client.connect('ZhengPeng7/BiRefNet_demo');
+        const result = await client.predict('/image', [await handle_file(file), '1024x1024', 'General']);
+        const sliderImages = result?.data?.[0];
+        const candidates = Array.isArray(sliderImages) ? [...sliderImages].reverse() : [sliderImages];
+        for (const candidate of candidates) {
+          if (!candidate) continue;
+          const outputBlob = await gradioOutputBlob(candidate);
+          if (await hasTransparentPixels(outputBlob)) {
+            processedBlob = outputBlob;
+            break;
+          }
         }
       }
       if (!processedBlob) throw new Error('لم يُرجع نموذج إزالة الخلفية صورة شفافة. أعد المحاولة أو استخدم صورة أوضح.');
@@ -306,7 +335,7 @@
     if (emptyState) emptyState.classList.add('hidden');
     if (compareBox) compareBox.classList.add('hidden');
     if (actionsBar) actionsBar.classList.add('opacity-0', 'pointer-events-none');
-    if (statusPill) statusPill.textContent = 'جاري تحسين التفاصيل بنموذج Real-ESRGAN...';
+    if (statusPill) statusPill.textContent = 'جاري تحسين الصورة عبر Cloudflare Images...';
 
     let activeJob = null;
     if (window.MickeyJobQueue) {
@@ -320,11 +349,34 @@
     const src = STATE.photoLab.upscaleSourceImage;
     const mul = STATE.photoLab.upscaleMultiplier || 2;
     try {
-      const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
-      const client = await Client.connect('guetLzy/Real-ESRGAN-Demo');
       const file = await photoLabGradioFile(src, STATE.photoLab.upscaleSourceFile, 'photo.png');
-      const result = await client.predict('/enhance', [await handle_file(file), 'RealESRGAN_x4plus', mul, false]);
-      const outputBlob = await gradioOutputBlob(result?.data?.[0]);
+      let outputBlob = null;
+      if (window.MickeyStudio.gatewayFetch && window.MickeyStudio.base64ToBlob) {
+        try {
+          const imageBase64 = await photoLabBlobToBase64(file);
+          const response = await window.MickeyStudio.gatewayFetch('upscale_image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_base64: imageBase64, mime_type: file.type || 'image/png', scale: mul })
+          });
+          const responseType = response.headers.get('content-type') || '';
+          if (response.ok && responseType.startsWith('image/')) {
+            outputBlob = await response.blob();
+          } else {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data?.error || `Cloudflare Images returned ${response.status}`);
+          }
+        } catch (cloudflareError) {
+          console.warn('[PhotoLab] Cloudflare upscaling unavailable; trying the free Real-ESRGAN space:', cloudflareError?.message || cloudflareError);
+        }
+      }
+      if (!outputBlob) {
+        if (statusPill) statusPill.textContent = 'تعذر Cloudflare مؤقتًا؛ جاري المحاولة عبر Real-ESRGAN...';
+        const { Client, handle_file } = await import('https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js');
+        const client = await Client.connect('guetLzy/Real-ESRGAN-Demo');
+        const result = await client.predict('/enhance', [await handle_file(file), 'RealESRGAN_x4plus', mul, false]);
+        outputBlob = await gradioOutputBlob(result?.data?.[0]);
+      }
       STATE.photoLab.upscaleResultBlob = outputBlob;
       const originalImg = document.getElementById('img-compare-original');
       const upscaledImg = document.getElementById('img-compare-upscaled');

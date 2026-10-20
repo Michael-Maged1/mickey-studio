@@ -1537,6 +1537,30 @@ async function generateImage(ctx) {
   const prompt = String(ctx.body.prompt || '').trim();
   if (!prompt) return json({ success: false, error: 'الوصف فارغ' }, 400, ctx.headers);
 
+  if (ctx.body.provider === 'cloudflare-flux') {
+    if (!ctx.env?.AI || typeof ctx.env.AI.run !== 'function') {
+      return json({ success: false, error: 'محرك Cloudflare AI غير مفعّل على الخادم.' }, 503, ctx.headers);
+    }
+    try {
+      const generated = await ctx.env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+        prompt: prompt.slice(0, 2048),
+        steps: 4,
+        seed: Number.isFinite(Number(ctx.body.seed)) ? Number(ctx.body.seed) : Math.floor(Math.random() * 2147483647)
+      });
+      if (!generated?.image) throw new Error('لم يُرجع FLUX صورة صالحة.');
+      return json({
+        success: true,
+        provider: '@cf/black-forest-labs/flux-1-schnell',
+        mime_type: 'image/jpeg',
+        image_base64: generated.image,
+        base64Data: generated.image
+      }, 200, ctx.headers);
+    } catch (error) {
+      console.error('[Cloudflare FLUX] Image generation failed:', error?.message || error);
+      return json({ success: false, error: `تعذر التوليد عبر FLUX من Cloudflare: ${error?.message || 'حاول مرة أخرى لاحقًا.'}` }, 502, ctx.headers);
+    }
+  }
+
   const aspectRatio = {
     '1:1': 'ASPECT_RATIO_ONE_BY_ONE',
     '16:9': 'ASPECT_RATIO_SIXTEEN_BY_NINE',
@@ -1589,74 +1613,34 @@ async function upscaleImage(ctx) {
   if (!b64) return json({ success: false, error: 'بيانات الصورة مفقودة لتحسين الجودة.' }, 400, ctx.headers);
   const mimeType = String(ctx.body.mime_type || ctx.body.mime || 'image/png').split(';')[0].trim().toLowerCase();
   const scale = Number(ctx.body.scale) === 2 ? 2 : 4;
-  const customPrompt = String(ctx.body.prompt || '').trim();
+  if (!/^image\/(png|jpe?g|webp|avif)$/i.test(mimeType)) return json({ success: false, error: 'صيغة الصورة غير مدعومة. استخدم PNG أو JPEG أو WebP أو AVIF.' }, 415, ctx.headers);
+  if (!ctx.env?.IMAGES || typeof ctx.env.IMAGES.input !== 'function') return json({ success: false, error: 'خدمة Cloudflare Images غير مفعّلة على الخادم.' }, 503, ctx.headers);
 
-  const englishPrompt = `Masterpiece photography, ultra-high resolution, razor sharp clarity. Faithfully upscale, restore, and enhance this exact image by ${scale}X resolution. Crucial instructions: Strictly preserve identical composition, identical subjects, identical human faces, expressions, original color grading, lighting, framing, and aspect ratio without altering or hallucinating any new objects. Eliminate compression noise, blur, and artifacts while enhancing fine textures, edges, and natural definition.` + (customPrompt ? ` Additional focus: ${customPrompt}` : '');
+  try {
+    const binary = atob(b64);
+    if (binary.length > 20 * 1024 * 1024) return json({ success: false, error: 'حجم الصورة أكبر من الحد المدعوم (20 ميجابايت).' }, 413, ctx.headers);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const info = await ctx.env.IMAGES.info(bytes);
+    const width = Number(info?.width);
+    const height = Number(info?.height);
+    if (!width || !height) return json({ success: false, error: 'تعذر قراءة أبعاد الصورة.' }, 422, ctx.headers);
+    if (width * scale > 12000 || height * scale > 12000) return json({ success: false, error: 'الأبعاد الناتجة كبيرة جدًا. جرّب التكبير 2X.' }, 413, ctx.headers);
 
-  const models = [
-    { id: 'gemini-3.1-flash-image', imageSize: scale === 4 ? 'IMAGE_SIZE_FOUR_K' : 'IMAGE_SIZE_TWO_K' },
-    { id: 'gemini-2.5-flash-image', imageSize: 'IMAGE_SIZE_TWO_K' },
-    { id: 'gemini-nano-banana-2.1', imageSize: 'IMAGE_SIZE_TWO_K' }
-  ];
-
-  return await callGeminiWithFailover(ctx, async (apiKey) => {
-    let lastErr = null;
-    for (const model of models) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model.id}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: mimeType.startsWith('image/') ? mimeType : 'image/png',
-                    data: b64
-                  }
-                },
-                { text: englishPrompt }
-              ]
-            }],
-            generationConfig: {
-              responseModalities: ['TEXT', 'IMAGE'],
-              responseFormat: {
-                image: {
-                  ...(model.imageSize ? { imageSize: model.imageSize } : {})
-                }
-              }
-            }
-          })
-        });
-
-        const data = await readJson(response);
-        const finishReason = data.candidates?.[0]?.finishReason;
-        if (finishReason === 'SAFETY') {
-          return json({ success: false, error: 'تم رفض تحسين الصورة من نموذج الذكاء الاصطناعي بسبب سياسات الأمان أو المحتوى.' }, 422, ctx.headers);
-        }
-
-        const imagePart = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data && /^image\//i.test(part.inlineData.mimeType || ''));
-        if (response.ok && imagePart) {
-          return json({
-            success: true,
-            provider: model.id,
-            scale,
-            mime_type: imagePart.inlineData.mimeType || 'image/png',
-            image_base64: imagePart.inlineData.data,
-            base64Data: imagePart.inlineData.data
-          }, 200, ctx.headers);
-        }
-
-        lastErr = new Error(data.error?.message || `Upscale API error (${response.status})`);
-        lastErr.status = response.status;
-        if (response.status === 429 || response.status === 403) throw lastErr;
-      } catch (callErr) {
-        if (callErr.status === 429 || callErr.status === 403) throw callErr;
-        lastErr = callErr;
-      }
-    }
-    throw lastErr || new Error('فشل تحسين الصورة بكافة نماذج الذكاء الاصطناعي.');
-  });
+    const transformed = await ctx.env.IMAGES.input(bytes)
+      .transform({ width: width * scale, height: height * scale, fit: 'contain', upscale: 'generate' })
+      .output({ format: 'image/png' });
+    const response = transformed.response();
+    if (!response.ok) throw new Error(`Cloudflare Images returned ${response.status}`);
+    const output = new Uint8Array(await response.arrayBuffer());
+    const headers = new Headers(ctx.headers);
+    headers.set('Content-Type', 'image/png');
+    headers.set('X-Image-Provider', 'cloudflare-images-esrgan');
+    headers.set('X-Image-Scale', String(scale));
+    return new Response(output, { status: 200, headers });
+  } catch (error) {
+    console.error('[Cloudflare Images] Upscaling failed:', error?.message || error);
+    return json({ success: false, error: `تعذر التكبير عبر Cloudflare Images: ${error?.message || 'حاول صورة أصغر أو أعد المحاولة.'}` }, 502, ctx.headers);
+  }
 }
 
 async function removeBackground(ctx) {
@@ -1664,7 +1648,7 @@ async function removeBackground(ctx) {
   if (!b64) return json({ success: false, error: 'بيانات الصورة مفقودة لعزل الخلفية.' }, 400, ctx.headers);
   const mimeType = String(ctx.body.mime_type || ctx.body.mime || 'image/png').split(';')[0].trim().toLowerCase();
 
-  // Strategy 1: Cloudflare Workers AI RMBG if available
+  // Use the Cloudflare-hosted RMBG model only. Do not silently fall back to Gemini.
   if (ctx.env && ctx.env.AI && typeof ctx.env.AI.run === 'function') {
     try {
       const binary = atob(b64);
@@ -1718,66 +1702,10 @@ async function removeBackground(ctx) {
     }
   }
 
-  // Strategy 2: Gemini with foreground cutout prompt
-  const englishCutoutPrompt = 'Extract and cleanly isolate the foreground subject from the background. Output ONLY the foreground subject with smooth, perfectly cut transparent background (alpha channel PNG). All background elements must be removed completely transparently.';
-  const models = [
-    { id: 'gemini-3.1-flash-image', imageSize: 'IMAGE_SIZE_TWO_K' },
-    { id: 'gemini-2.5-flash-image', imageSize: '' }
-  ];
-
-  return await callGeminiWithFailover(ctx, async (apiKey) => {
-    let lastErr = null;
-    for (const model of models) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model.id}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: mimeType.startsWith('image/') ? mimeType : 'image/png',
-                    data: b64
-                  }
-                },
-                { text: englishCutoutPrompt }
-              ]
-            }],
-            generationConfig: {
-              responseModalities: ['TEXT', 'IMAGE'],
-              responseFormat: { image: { ...(model.imageSize ? { imageSize: model.imageSize } : {}) } }
-            }
-          })
-        });
-
-        const data = await readJson(response);
-        const finishReason = data.candidates?.[0]?.finishReason;
-        if (finishReason === 'SAFETY') {
-          return json({ success: false, error: 'تم رفض إزالة خلفية الصورة من نموذج الذكاء الاصطناعي بسبب سياسات الأمان أو المحتوى.' }, 422, ctx.headers);
-        }
-
-        const imagePart = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data && /^image\//i.test(part.inlineData.mimeType || ''));
-        if (response.ok && imagePart) {
-          return json({
-            success: true,
-            provider: model.id,
-            mime_type: 'image/png',
-            image_base64: imagePart.inlineData.data,
-            base64Data: imagePart.inlineData.data
-          }, 200, ctx.headers);
-        }
-
-        lastErr = new Error(data.error?.message || `Remove BG API error (${response.status})`);
-        lastErr.status = response.status;
-        if (response.status === 429 || response.status === 403) throw lastErr;
-      } catch (geminiErr) {
-        if (geminiErr.status === 429 || geminiErr.status === 403) throw geminiErr;
-        lastErr = geminiErr;
-      }
-    }
-    throw lastErr || new Error('فشل عزل الخلفية بكافة نماذج الذكاء الاصطناعي.');
-  });
+  return json({
+    success: false,
+    error: 'تعذر تشغيل نموذج إزالة الخلفية المجاني في Cloudflare. لم يتم استخدام Gemini أو خدمة مدفوعة؛ جرّب لاحقًا.'
+  }, 503, ctx.headers);
 }
 
 async function geminiText(ctx, prompt, maxOutputTokens = 2000) {

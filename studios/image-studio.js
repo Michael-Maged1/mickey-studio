@@ -11,6 +11,18 @@
     if (STATE?.image) STATE.image.model = modelName;
     const tag = document.getElementById('current-model-tag');
     if (tag) tag.textContent = modelName.toUpperCase();
+    const costBadge = document.getElementById('image-provider-cost');
+    const usageNote = document.getElementById('image-provider-usage-note');
+    if (modelName === 'cloudflare-flux') {
+      if (costBadge) costBadge.textContent = 'حصة Cloudflare المجانية';
+      if (usageNote) usageNote.textContent = 'تتضمن Workers AI حصة مجانية قدرها 10,000 وحدة يوميًا. على الخطة المدفوعة، قد تُحاسب الاستخدامات التي تتجاوزها؛ وعلى المجانية يتوقف التوليد بعد نفاد الحصة.';
+    } else if (modelName === 'nano-banana') {
+      if (costBadge) costBadge.textContent = 'Gemini API';
+      if (usageNote) usageNote.textContent = 'التوليد عبر Gemini يستخدم حصة أو رصيد Gemini المرتبط بالحساب.';
+    } else {
+      if (costBadge) costBadge.textContent = 'مجاني 100%';
+      if (usageNote) usageNote.textContent = 'FLUX.1 يعمل مجانًا عبر الخدمة الحالية.';
+    }
     if (SFX?.playClick) SFX.playClick();
   }
 
@@ -139,19 +151,23 @@
         await window.MickeyJobQueue.updateJob(activeJob.id, { progress: 55, progressText: 'الاتصال بمحرك التوليد عالي الدقة...' });
       }
 
-      // Route 1: Gemini Nano Banana 2.1
-      if (STATE.image.model === 'nano-banana' && window.MickeyStudio.gatewayFetch) {
-        if (statusPill) statusPill.textContent = 'جاري التوليد عبر Google Nano Banana 2.1 (2K)...';
+      // Routes through the protected gateway: Gemini or the Cloudflare-hosted FLUX alternative.
+      if (['nano-banana', 'cloudflare-flux'].includes(STATE.image.model) && window.MickeyStudio.gatewayFetch) {
+        const useCloudflare = STATE.image.model === 'cloudflare-flux';
+        const modelLabel = useCloudflare ? 'Cloudflare FLUX.1 Schnell' : 'Google Nano Banana 2.1';
+        if (statusPill) statusPill.textContent = useCloudflare
+          ? 'جاري التوليد عبر Cloudflare FLUX.1 Schnell...'
+          : 'جاري التوليد عبر Google Nano Banana 2.1 (2K)...';
         const aspectRatioStr = STATE.image.width > STATE.image.height ? '16:9' : STATE.image.height > STATE.image.width ? '9:16' : '1:1';
         const res = await window.MickeyStudio.gatewayFetch('generate_image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: finalPrompt, aspectRatio: aspectRatioStr })
+          body: JSON.stringify({ prompt: finalPrompt, aspectRatio: aspectRatioStr, provider: useCloudflare ? 'cloudflare-flux' : 'gemini' })
         });
         const data = await res.json().catch(() => ({}));
         if (data?.quota?.tool && window.MickeyStudio.updateQuotaBadge) window.MickeyStudio.updateQuotaBadge(data.quota.tool, data.quota.remaining, data.quota.limit);
         if (res.status === 429 && window.MickeyStudio.updateQuotaBadge) window.MickeyStudio.updateQuotaBadge('images', 0);
-        if (!res.ok || !data.success || !data.image_base64) throw new Error(data.error || 'تعذر التوليد عبر Google Nano Banana 2.1.');
+        if (!res.ok || !data.success || !data.image_base64) throw new Error(data.error || `تعذر التوليد عبر ${modelLabel}.`);
         
         const b64 = data.image_base64;
         const mime = data.mime_type || 'image/jpeg';
@@ -160,12 +176,12 @@
         STATE.image.lastGeneratedBlob = blob;
         STATE.image.lastGeneratedUrl = dataUrl;
 
-        renderSingleResult(dataUrl, prompt, resultGrid, laserScanner, actionsBar, statusPill, 'Google Nano Banana 2.1');
+        renderSingleResult(dataUrl, prompt, resultGrid, laserScanner, actionsBar, statusPill, modelLabel);
         if (activeJob && window.MickeyJobQueue) {
           await window.MickeyJobQueue.updateJob(activeJob.id, { status: 'completed', progress: 100, progressText: 'تم التوليد بنجاح', resultUrl: dataUrl });
         }
         if (SFX?.playSuccess) SFX.playSuccess();
-        if (showToast) showToast('تم توليد الصورة عبر Google Nano Banana بنجاح!', 'success');
+        if (showToast) showToast(`تم توليد الصورة عبر ${modelLabel} بنجاح!`, 'success');
         return;
       }
 

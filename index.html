@@ -912,7 +912,7 @@
                 <span class="studio-step-badge">2</span>
                 <span class="text-xs font-bold text-white">المحرك وأسلوب التصوير</span>
               </div>
-              <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">مجاني 100%</span>
+              <span id="image-provider-cost" class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">مجاني 100%</span>
             </div>
 
             <!-- Model Dropdown -->
@@ -921,9 +921,10 @@
               <select id="image-model-select" onchange="MickeyStudio.updateModelTag(this.value)" class="w-full p-2.5 text-xs bg-black/40 border border-white/10 rounded-xl text-zinc-100 font-medium focus:outline-none focus:border-indigo-500/50">
                 <option value="flux" selected>🌟 FLUX.1 Photorealistic (فائق الواقعية — مجاني وسريع)</option>
                 <option value="nano-banana">💎 Google Imagen 3 — دقة 2K فائقة (Gemini API)</option>
-                <option value="cloudflare-flux">☁️ FLUX.1-schnell (Cloudflare AI)</option>
+                <option value="cloudflare-flux">☁️ FLUX.1-schnell (Cloudflare AI — حصة يومية مجانية)</option>
                 <option value="zimage-hf">🚀 Z-Image-Turbo (Hugging Face — سريع وتجريبي)</option>
               </select>
+              <small id="image-provider-usage-note" class="block text-[10px] leading-relaxed text-zinc-500">FLUX.1 يعمل مجانًا عبر الخدمة الحالية.</small>
             </div>
 
             <!-- Photographic Styles Tags -->
