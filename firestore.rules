@@ -16,7 +16,7 @@ service cloud.firestore {
       return signedIn() && (
         request.auth.token.admin == true ||
         request.auth.token.role == 'admin' ||
-        request.auth.token.email.lower() == 'michaelmagednew@gmail.com'
+        request.auth.token.email.lower() in ['michaelmagednew@gmail.com', 'jonmaring012@gmail.com']
       );
     }
 

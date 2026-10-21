@@ -1,6 +1,11 @@
 const FIREBASE_PROJECT = 'mickey-gemini-studio';
 const DEFAULT_FIREBASE_API_KEY = 'AIzaSyAbwmXwJkb5nl2sUDCZ0ing_cWs0lbYAWg';
 const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
+const ADMIN_EMAILS = [ADMIN_EMAIL, 'jonmaring012@gmail.com'];
+function isDesignatedAdminEmail(email, configuredEmails = '') {
+  const allowed = new Set([...ADMIN_EMAILS, ...String(configuredEmails).split(',')].map(value => value.trim().toLowerCase()).filter(Boolean));
+  return allowed.has(String(email || '').trim().toLowerCase());
+}
 const GEMINI_TTS_MODEL = 'gemini-3.8-flash-tts';
 let firebaseAdminTokenCache = null;
 
@@ -625,8 +630,8 @@ async function authenticate(ctx, adminOnly = false) {
     jwtPayload.role === 'admin'
   );
 
-  const isDesignatedAdminEmail = String(user.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
-  const isAdmin = hasAdminClaim || (isDesignatedAdminEmail && customAttributes.admin !== false);
+  const designatedAdmin = isDesignatedAdminEmail(user.email, ctx.env.ADMIN_EMAIL);
+  const isAdmin = hasAdminClaim || (designatedAdmin && customAttributes.admin !== false);
 
   // Strict enforcement: adminOnly actions are rejected at the server level
   if (adminOnly && !isAdmin) {
@@ -641,10 +646,10 @@ async function authenticate(ctx, adminOnly = false) {
 
   // The designated owner account is a protected system account. Its access must
   // not depend on a mutable profile status or Firebase's disabled flag.
-  const statusOverride = isDesignatedAdminEmail ? null : await readAdminUserStatusOverride(ctx.env, user.localId);
-  const status = isDesignatedAdminEmail ? 'active' : (statusOverride?.status || profile.fields?.status?.stringValue || 'active');
+  const statusOverride = designatedAdmin ? null : await readAdminUserStatusOverride(ctx.env, user.localId);
+  const status = designatedAdmin ? 'active' : (statusOverride?.status || profile.fields?.status?.stringValue || 'active');
   const banReason = statusOverride?.reason || profile.fields?.banReason?.stringValue || '';
-  if (!isDesignatedAdminEmail && (user.disabled || status === 'banned' || status === 'suspended')) {
+  if (!designatedAdmin && (user.disabled || status === 'banned' || status === 'suspended')) {
     fail(403, banReason
       ? `تم إيقاف حسابك من قبل إدارة Mickey Studio: ${banReason}`
       : 'تم إيقاف حسابك من قبل إدارة Mickey Studio. يرجى التواصل مع الدعم الفني.');
@@ -1164,7 +1169,7 @@ async function enforcePlanLimits(account, action, ctx) {
 
   // The owner account is exempt from subscription checks, quotas, credits and
   // user-generation counters. This check runs after Firebase token verification.
-  if (String(account.email || '').toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase()) {
+  if (isDesignatedAdminEmail(account.email, ctx.env.ADMIN_EMAIL)) {
     return { enforced: false, subscription_mode: false, tool, remaining: null, unlimited: true };
   }
 
@@ -2023,7 +2028,7 @@ async function adminListUsers(ctx) {
     const fields = profileByUid.get(uid) || {};
     const email = fields.email?.stringValue || authUser.email || '';
     const displayName = fields.displayName?.stringValue || (email ? email.split('@')[0] : 'مستخدم');
-    const isProtectedAdmin = email.toLowerCase() === (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
+    const isProtectedAdmin = isDesignatedAdminEmail(email, ctx.env.ADMIN_EMAIL);
     const statusOverride = isProtectedAdmin ? null : await readAdminUserStatusOverride(ctx.env, uid);
     const status = isProtectedAdmin ? 'active' : (authUser.disabled ? 'banned' : (statusOverride?.status || fields.status?.stringValue || 'active'));
     const storedPlan = fields.plan?.stringValue || 'free';
@@ -2251,7 +2256,6 @@ async function getUser(ctx, identifier) {
 }
 
 async function protectAdminAccountTarget(ctx, account, targetIdentifier) {
-  const adminEmail = (ctx.env.ADMIN_EMAIL || ADMIN_EMAIL).toLowerCase();
   const callerEmail = String(account.email || '').toLowerCase();
 
   const targetUser = await getUser(ctx, targetIdentifier);
@@ -2263,7 +2267,7 @@ async function protectAdminAccountTarget(ctx, account, targetIdentifier) {
   const targetEmail = String(targetUser.email || '').toLowerCase();
   const targetUid = targetUser.uid;
 
-  if (targetEmail === adminEmail || (targetUid === account.uid && callerEmail === adminEmail)) {
+  if (isDesignatedAdminEmail(targetEmail, ctx.env.ADMIN_EMAIL) || (targetUid === account.uid && isDesignatedAdminEmail(callerEmail, ctx.env.ADMIN_EMAIL))) {
     console.error(`[protectAdminAccountTarget] مرفوض (ACTION_FORBIDDEN): محاولة تعديل حساب المسؤول الأساسي. actor="${callerEmail}", target="${targetEmail || targetUid}"`);
     failWithCode(403, 'حساب المسؤول الأساسي محمي ولا يمكن تعديل حالته أو باقته أو رصيده أو أجهزته.', 'ACTION_FORBIDDEN');
   }

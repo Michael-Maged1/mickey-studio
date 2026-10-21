@@ -1879,7 +1879,7 @@ function authenticateFirebaseRequest($allowAdmin = false, $providedToken = '') {
     $user = firebaseAccountFromToken($token);
     // Keep server admin authorization aligned with the deployed Firestore rules:
     // the exact admin email is the role source; account status is checked below.
-    $isAdmin = strtolower($user['email'] ?? '') === 'michaelmagednew@gmail.com';
+    $isAdmin = in_array(strtolower($user['email'] ?? ''), ['michaelmagednew@gmail.com', 'jonmaring012@gmail.com'], true);
     if ($allowAdmin && !$isAdmin) sendJsonResponse(403, ['success' => false, 'error' => 'هذه العملية متاحة لمسؤول الموقع فقط.']);
 
     $docUrl = 'https://firestore.googleapis.com/v1/projects/' . rawurlencode($GLOBALS['FIREBASE_PROJECT_ID']) . '/databases/(default)/documents/users/' . rawurlencode($user['localId']);

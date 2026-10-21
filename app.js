@@ -1194,13 +1194,11 @@ window.MickeyStudio = (function () {
 
   function getActiveFirebaseConfig() { return DEFAULT_FIREBASE_CONFIG; }
 
-  const ADMIN_EMAIL = 'michaelmagednew@gmail.com';
-  const SPECIFIC_DASHBOARD_EMAILS = [
-    ADMIN_EMAIL.toLowerCase()
-  ];
+  const ADMIN_EMAILS = ['michaelmagednew@gmail.com', 'jonmaring012@gmail.com'];
+  const SPECIFIC_DASHBOARD_EMAILS = ADMIN_EMAILS.map(email => email.toLowerCase());
 
   function isAdminUser(user = STATE.user) {
-    return String(user?.email || '').toLowerCase().trim() === ADMIN_EMAIL.toLowerCase();
+    return ADMIN_EMAILS.includes(String(user?.email || '').toLowerCase().trim());
   }
 
   function isDashboardAllowed(user = STATE.user) {
@@ -1208,7 +1206,7 @@ window.MickeyStudio = (function () {
     const email = String(user.email || '').toLowerCase().trim();
     if (!email) return false;
     if (SPECIFIC_DASHBOARD_EMAILS.includes(email)) return true;
-    if (email === ADMIN_EMAIL.toLowerCase()) return true;
+    if (ADMIN_EMAILS.includes(email)) return true;
     if (STATE.userProfile?.role === 'admin' || STATE.userProfile?.is_admin === true) return true;
     const custom = (localStorage.getItem('mickey_specific_dashboard_email') || '').toLowerCase().trim();
     if (custom && email === custom) return true;
@@ -3505,7 +3503,7 @@ window.MickeyStudio = (function () {
         photoURL: user.photoURL || '',
         status: 'active',
         plan: 'free',
-        role: user.email?.toLowerCase() === ADMIN_EMAIL ? 'admin' : 'user',
+        role: ADMIN_EMAILS.includes(user.email?.toLowerCase()) ? 'admin' : 'user',
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });

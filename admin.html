@@ -957,7 +957,7 @@
     }
     const auth = firebase.auth();
     const WORKER_FALLBACK_URL = 'https://mickey-studio-api.kma279500.workers.dev/api.php';
-    const ADMIN_BOOTSTRAP_EMAIL = 'michaelmagednew@gmail.com';
+    const ADMIN_BOOTSTRAP_EMAILS = ['michaelmagednew@gmail.com', 'jonmaring012@gmail.com'];
 
     function resolveApiUrl() {
       if (window.MICKEY_API_BASE_URL && typeof window.MICKEY_API_BASE_URL === 'string' && window.MICKEY_API_BASE_URL.trim()) {
@@ -1287,7 +1287,7 @@
       }
 
       const email = (user.email || '').toLowerCase().trim();
-      const isKnownAdmin = (email === ADMIN_BOOTSTRAP_EMAIL);
+      const isKnownAdmin = ADMIN_BOOTSTRAP_EMAILS.includes(email);
 
       // 1. If this is the known admin account, grant INSTANT access without waiting or failing
       if (isKnownAdmin) {
