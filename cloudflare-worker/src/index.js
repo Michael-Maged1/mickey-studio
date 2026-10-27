@@ -812,8 +812,7 @@ async function adminGetUserDevices(ctx) {
   const targetRaw = String(ctx.body.target_uid || ctx.body.uid || '').trim();
   if (!targetRaw) failWithCode(400, 'معرف المستخدم غير محدد.', 'TARGET_MISSING');
   const targetUser = await protectAdminAccountTarget(ctx, account, targetRaw);
-  const adminToken = await firebaseAdminAccessToken(ctx.env);
-  const devices = await fetchUserDevices(ctx.env, targetUser.uid, adminToken);
+  const devices = await fetchUserDevices(ctx.env, targetUser.uid, account.token);
   return json({ success: true, target_uid: targetUser.uid, devices }, 200, ctx.headers);
 }
 
@@ -824,13 +823,12 @@ async function adminRevokeUserDevice(ctx) {
   if (!targetRaw || !deviceId) failWithCode(400, 'معرف المستخدم والجهاز مطلوبان.', 'PARAMS_MISSING');
   const targetUser = await protectAdminAccountTarget(ctx, account, targetRaw);
   const targetUid = targetUser.uid;
-  const adminToken = await firebaseAdminAccessToken(ctx.env);
-  const devices = await fetchUserDevices(ctx.env, targetUid, adminToken);
+  const devices = await fetchUserDevices(ctx.env, targetUid, account.token);
   const target = devices.find(item => item.deviceId === deviceId && !item.revoked);
   if (!target) failWithCode(404, 'لم يتم العثور على الجهاز النشط.', 'DEVICE_NOT_FOUND');
   target.revoked = true;
   target.lastSeenAt = nowIso();
-  await saveUserDevice(ctx.env, targetUid, adminToken, target);
+  await saveUserDevice(ctx.env, targetUid, account.token, target);
   await logAdminAudit(ctx, 'admin_revoke_user_device', targetUid, { deviceId, targetEmail: targetUser.email });
   return json({ success: true, message: 'تم إلغاء ربط الجهاز بنجاح.', target_uid: targetUid }, 200, ctx.headers);
 }
@@ -2024,11 +2022,16 @@ async function adminListUsers(ctx) {
     const url = 'https://firestore.googleapis.com/v1/projects/' +
       encodeURIComponent(ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT) +
       '/databases/(default)/documents/users?' + params.toString();
-    const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + adminToken } });
+    // Read profiles with the authenticated administrator's Firebase ID token.
+    // Firestore Security Rules then authorize the collection query, avoiding
+    // unnecessary project-wide Firestore IAM permissions on the service account.
+    const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + account.token } });
     const data = await readJson(resp);
     if (!resp.ok) {
       console.error('[Admin list users Firestore error]', resp.status, data.error?.status || '', data.error?.message || '');
-      return json({ success: false, error: 'تم جلب الحسابات من Firebase Authentication، لكن تعذر تحميل ملفات المستخدمين من Firestore.', firestore_status: resp.status }, 502, ctx.headers);
+      return json({ success: false, error: resp.status === 403
+        ? 'تم جلب الحسابات، لكن قواعد Firestore لم تسمح للمشرف بعرض ملفات المستخدمين. تحقق من نشر قواعد Firestore وصلاحية حساب المشرف.'
+        : 'تم جلب الحسابات، لكن تعذر تحميل ملفات المستخدمين من Firestore.', firestore_status: resp.status }, resp.status === 403 ? 403 : 502, ctx.headers);
     }
     for (const doc of (data.documents || [])) {
       profileByUid.set(doc.name.split('/').pop(), doc.fields || {});
@@ -2082,7 +2085,7 @@ async function adminListUsers(ctx) {
     if (fields.pairedDevicesJson?.stringValue) {
       try { pairedDevices = JSON.parse(fields.pairedDevicesJson.stringValue); } catch {}
     }
-    const registeredDevices = await fetchUserDevices(ctx.env, uid, adminToken).catch(() => []);
+    const registeredDevices = await fetchUserDevices(ctx.env, uid, account.token).catch(() => []);
     const activeDevices = registeredDevices.filter(device => !device.revoked);
 
     return {
@@ -2116,8 +2119,8 @@ async function adminListUsers(ctx) {
   }, 200, ctx.headers);
 }
 
-async function patchFirestoreUserFields(env, uid, fields, updateMaskPaths = []) {
-  const adminToken = await firebaseAdminAccessToken(env);
+async function patchFirestoreUserFields(env, uid, fields, updateMaskPaths = [], userToken = '') {
+  const token = userToken || await firebaseAdminAccessToken(env);
   const projectId = env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT;
   const baseUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users/${encodeURIComponent(uid)}`;
 
@@ -2129,7 +2132,7 @@ async function patchFirestoreUserFields(env, uid, fields, updateMaskPaths = []) 
 
   let resp = await fetch(url, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields })
   });
 
@@ -2139,7 +2142,7 @@ async function patchFirestoreUserFields(env, uid, fields, updateMaskPaths = []) 
     const createUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users?documentId=${encodeURIComponent(uid)}`;
     resp = await fetch(createUrl, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields })
     });
   }
@@ -2169,7 +2172,7 @@ async function setFirebaseAuthUserDisabled(env, uid, disabled) {
   }
 }
 
-async function getUser(ctx, identifier) {
+async function getUser(ctx, identifier, firestoreToken = '') {
   const rawId = String(identifier || '').trim();
   if (!rawId) {
     return { found: false, code: 'USER_ID_MISSING', message: 'معرف المستخدم غير محدد' };
@@ -2208,14 +2211,14 @@ async function getUser(ctx, identifier) {
   let firestoreFound = false;
   try {
     const docUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users/${encodeURIComponent(uid)}`;
-    const docResp = await fetch(docUrl, { headers: { Authorization: `Bearer ${adminToken}` } });
+    const docResp = await fetch(docUrl, { headers: { Authorization: `Bearer ${firestoreToken || adminToken}` } });
     if (docResp.ok) {
       profileDoc = await readJson(docResp);
       firestoreFound = true;
     } else if (docResp.status === 404 && isEmail && uid !== rawId) {
       // Legacy fallback: check if document was keyed by raw email
       const legacyResp = await fetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users/${encodeURIComponent(rawId)}`, {
-        headers: { Authorization: `Bearer ${adminToken}` }
+        headers: { Authorization: `Bearer ${firestoreToken || adminToken}` }
       });
       if (legacyResp.ok) {
         profileDoc = await readJson(legacyResp);
@@ -2274,7 +2277,7 @@ async function getUser(ctx, identifier) {
 async function protectAdminAccountTarget(ctx, account, targetIdentifier) {
   const callerEmail = String(account.email || '').toLowerCase();
 
-  const targetUser = await getUser(ctx, targetIdentifier);
+  const targetUser = await getUser(ctx, targetIdentifier, account.token);
   if (!targetUser.found) {
     console.error(`[protectAdminAccountTarget] مرفوض (USER_NOT_FOUND): actor="${callerEmail}", targetIdentifier="${targetIdentifier}"`);
     failWithCode(404, targetUser.message, targetUser.code || 'USER_NOT_FOUND');
@@ -2312,7 +2315,7 @@ async function adminUpdateUserStatus(ctx) {
     updatedAt: { timestampValue: nowIso() }
   };
 
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['status', 'banReason', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['status', 'banReason', 'updatedAt'], account.token);
   const authResult = await setFirebaseAuthUserDisabled(ctx.env, targetUid, newStatus !== 'active');
 
   if (newStatus === 'active') {
@@ -2398,7 +2401,7 @@ async function adminUpdateUserPlan(ctx) {
     updatedAt: { timestampValue: nowIso() }
   };
 
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt'], account.token);
   if (!resp.ok) {
     return json({ success: false, error: 'تعذر تحديث باقة المستخدم في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
   }
@@ -2474,7 +2477,7 @@ async function adminActivateSubscription(ctx) {
     updatedAt: { timestampValue: nowIso() }
   };
 
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt'], account.token);
   if (!resp.ok) {
     return json({ success: false, error: 'تعذر تفعيل الاشتراك في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
   }
@@ -2523,7 +2526,7 @@ async function adminCancelSubscription(ctx) {
     updatedAt: { timestampValue: nowIso() }
   };
 
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt'], account.token);
   if (!resp.ok) {
     return json({ success: false, error: 'تعذر إلغاء الاشتراك في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
   }
@@ -2579,7 +2582,7 @@ async function adminSetSubscriptionExpiry(ctx) {
     updatedAt: { timestampValue: nowIso() }
   };
 
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['plan', 'subscriptionJson', 'updatedAt'], account.token);
   if (!resp.ok) {
     return json({ success: false, error: 'تعذر تعديل تاريخ الانتهاء في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
   }
@@ -2615,7 +2618,7 @@ async function adminSetUserLimits(ctx) {
     updatedAt: { timestampValue: nowIso() }
   };
 
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['limitOverridesJson', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['limitOverridesJson', 'updatedAt'], account.token);
   if (!resp.ok) {
     return json({ success: false, error: 'تعذر حفظ الحدود المخصصة في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
   }
@@ -2635,9 +2638,8 @@ async function adminAddUserCredits(ctx) {
   const targetUser = await protectAdminAccountTarget(ctx, account, targetRaw);
   const targetUid = targetUser.uid;
 
-  const adminToken = await firebaseAdminAccessToken(ctx.env);
   const getUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT)}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}`;
-  const getResp = await fetch(getUrl, { headers: { Authorization: `Bearer ${adminToken}` } });
+  const getResp = await fetch(getUrl, { headers: { Authorization: `Bearer ${account.token}` } });
   const curDoc = getResp.ok ? await readJson(getResp) : {};
   const existing = Number(curDoc.fields?.extraCredits?.integerValue || curDoc.fields?.extraCredits?.doubleValue || 0);
   const total = existing + creditsToAdd;
@@ -2646,7 +2648,7 @@ async function adminAddUserCredits(ctx) {
     extraCredits: { integerValue: String(total) },
     updatedAt: { timestampValue: nowIso() }
   };
-  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['extraCredits', 'updatedAt']);
+  const resp = await patchFirestoreUserFields(ctx.env, targetUid, fields, ['extraCredits', 'updatedAt'], account.token);
   if (!resp.ok) {
     return json({ success: false, error: 'تعذر إضافة الرصيد في قاعدة البيانات', code: 'FIRESTORE_ERROR' }, 502, ctx.headers);
   }
@@ -2663,15 +2665,14 @@ async function adminRevokeUserDevices(ctx) {
   const targetUser = await protectAdminAccountTarget(ctx, account, targetRaw);
   const targetUid = targetUser.uid;
 
-  const adminToken = await firebaseAdminAccessToken(ctx.env);
-  const devices = await fetchUserDevices(ctx.env, targetUid, adminToken);
+  const devices = await fetchUserDevices(ctx.env, targetUid, account.token);
   for (const device of devices.filter(item => !item.revoked)) {
     device.revoked = true;
     device.lastSeenAt = nowIso();
-    await saveUserDevice(ctx.env, targetUid, adminToken, device);
+    await saveUserDevice(ctx.env, targetUid, account.token, device);
   }
 
-  await patchFirestoreUserFields(ctx.env, targetUid, { pairedDevicesJson: { stringValue: '[]' } }, ['pairedDevicesJson']);
+  await patchFirestoreUserFields(ctx.env, targetUid, { pairedDevicesJson: { stringValue: '[]' } }, ['pairedDevicesJson'], account.token);
   await ctx.env.MICKEY_STATE.delete(`motion_scene:${targetUid}`);
 
   await logAdminAudit(ctx, 'revoke_user_devices', targetUid, { targetEmail: targetUser.email });
@@ -2686,11 +2687,10 @@ async function adminDeleteUser(ctx) {
   const targetUser = await protectAdminAccountTarget(ctx, account, targetRaw);
   const targetUid = targetUser.uid;
 
-  const adminToken = await firebaseAdminAccessToken(ctx.env);
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT)}/databases/(default)/documents/users/${encodeURIComponent(targetUid)}`;
   await fetch(url, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${adminToken}` }
+    headers: { Authorization: `Bearer ${account.token}` }
   });
 
   await ctx.env.MICKEY_STATE.delete(`motion_scene:${targetUid}`);
