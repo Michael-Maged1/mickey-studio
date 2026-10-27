@@ -1819,10 +1819,6 @@
                 <button onclick="handleRevokeDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 text-[10px] transition" title="إلغاء اقتران أجهزة الإضافة لهذا الحساب">
                   <i class="fa-solid fa-link-slash"></i>
                 </button>
-                <button onclick="showUserDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10 text-[10px] transition" title="عرض قائمة الأجهزة المرتبطة حالياً، دون تعديل الحد الأقصى">
-                  <i class="fa-solid fa-desktop"></i> الأجهزة
-                </button>
-
                 <button onclick="handleDeleteUser('${user.uid}')" class="px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 text-[10px] transition" title="حذف الحساب نهائياً">
                   <i class="fa-solid fa-trash-can"></i>
                 </button>
@@ -2159,16 +2155,6 @@
         showToast('تم إلغاء اقتران الأجهزة بنجاح.', 'success');
         loadUsers();
       } catch (e) { showToast(e.message, 'error'); }
-    }
-
-    async function showUserDevices(uid) {
-      try {
-        const result = await apiAdminRequest('admin_get_user_devices', { target_uid: uid });
-        const devices = result.devices || [];
-        if (!devices.length) return showToast('لا توجد أجهزة مسجلة لهذا المستخدم.', 'info');
-        const lines = devices.map((device, index) => `${index + 1}. ${device.name || 'جهاز'} · ${device.platform || 'غير محدد'} · ${device.revoked ? 'ملغي' : 'نشط'} · آخر استخدام: ${device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString('ar-EG') : 'غير معروف'}`);
-        alert(lines.join('\n'));
-      } catch (error) { showToast(error.message || 'تعذر تحميل أجهزة المستخدم.', 'error'); }
     }
 
     async function handleDeleteUser(uid) {
