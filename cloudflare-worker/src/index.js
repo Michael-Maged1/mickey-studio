@@ -613,6 +613,18 @@ async function listFirebaseAuthUsers(env, accessToken) {
 }
 
 async function authenticate(ctx, adminOnly = false) {
+  // The device preflight and endpoint handler both authenticate the same
+  // request. Reuse the verified account within this request to avoid repeating
+  // Firebase Auth and Firestore work (motion polling is frequent).
+  if (!ctx.authPromise) ctx.authPromise = authenticateUncached(ctx);
+  const account = await ctx.authPromise;
+  if (adminOnly && !account.isAdmin) {
+    fail(403, 'غير مصرح: هذا الإجراء يتطلب حساب مسؤول معتمد بصلاحية (Admin Claim).');
+  }
+  return account;
+}
+
+async function authenticateUncached(ctx) {
   const token = bearer(ctx.request) || String(ctx.body.idToken || '');
   const user = await firebaseLookup(token, ctx.env);
 
@@ -639,10 +651,18 @@ async function authenticate(ctx, adminOnly = false) {
   }
 
   // Fetch user profile from Firestore
-  const doc = await fetch(`https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(user.localId)}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  const profile = await readJson(doc);
+  const profileCacheKey = `user_profile_cache:${user.localId}`;
+  let profile;
+  try { profile = await ctx.env.MICKEY_STATE.get(profileCacheKey, 'json'); } catch {}
+  if (!profile) {
+    const doc = await fetch(`https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(user.localId)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    profile = await readJson(doc);
+    if (doc.ok) {
+      try { await ctx.env.MICKEY_STATE.put(profileCacheKey, JSON.stringify(profile), { expirationTtl: 60 }); } catch {}
+    }
+  }
 
   // The designated owner account is a protected system account. Its access must
   // not depend on a mutable profile status or Firebase's disabled flag.
@@ -689,6 +709,11 @@ function deviceCollectionUrl(env, uid) {
   return `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(uid)}/devices`;
 }
 
+const DEVICE_REGISTRY_CACHE_TTL_SECONDS = 300;
+const DEVICE_QUOTA_FALLBACK_TTL_SECONDS = 600;
+const deviceRegistryCacheKey = uid => `device_registry_cache:${uid}`;
+const deviceQuotaFallbackKey = uid => `device_registry_quota_fallback:${uid}`;
+
 function decodeDeviceDocument(document) {
   const fields = document.fields || {};
   return {
@@ -704,6 +729,13 @@ function decodeDeviceDocument(document) {
 }
 
 async function fetchUserDevices(env, uid, token) {
+  const cacheKey = deviceRegistryCacheKey(uid);
+  try {
+    const cached = await env.MICKEY_STATE.get(cacheKey, 'json');
+    if (Array.isArray(cached)) return cached;
+  } catch (error) {
+    console.warn('[Device registry] KV cache read failed:', error?.message || error);
+  }
   const url = `${deviceCollectionUrl(env, uid)}?pageSize=100`;
   const readWithToken = async accessToken => {
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -723,9 +755,19 @@ async function fetchUserDevices(env, uid, token) {
   }
   if (!result.response.ok && result.response.status !== 404) {
     console.error('[Device registry] Firestore list failed:', result.response.status, result.data?.error?.status || '', result.data?.error?.message || '');
+    if (result.response.status === 429 || result.data?.error?.status === 'RESOURCE_EXHAUSTED') {
+      failWithCode(503, 'استهلكت قاعدة Firestore حصتها المجانية مؤقتاً.', 'FIRESTORE_QUOTA_EXHAUSTED');
+    }
     fail(503, 'تعذر تحميل قائمة الأجهزة من Firestore بعد المحاولة بحساب المستخدم وحساب الخدمة.');
   }
-  return (result.data.documents || []).map(decodeDeviceDocument);
+  const devices = (result.data.documents || []).map(decodeDeviceDocument);
+  try {
+    await env.MICKEY_STATE.put(cacheKey, JSON.stringify(devices), { expirationTtl: DEVICE_REGISTRY_CACHE_TTL_SECONDS });
+    await env.MICKEY_STATE.delete(deviceQuotaFallbackKey(uid));
+  } catch (error) {
+    console.warn('[Device registry] KV cache write failed:', error?.message || error);
+  }
+  return devices;
 }
 
 function deviceFirestoreFields(device) {
@@ -757,6 +799,18 @@ async function saveUserDevice(env, uid, token, device) {
     console.error('[Device registry] Firestore save failed:', response.status, data?.error?.status || '', data?.error?.message || '');
     fail(503, 'تعذر حفظ بيانات الجهاز في Firestore.');
   }
+  try {
+    const cacheKey = deviceRegistryCacheKey(uid);
+    const devices = await env.MICKEY_STATE.get(cacheKey, 'json');
+    if (Array.isArray(devices)) {
+      const index = devices.findIndex(item => item.deviceId === device.deviceId);
+      if (index < 0) devices.push(device);
+      else devices[index] = device;
+      await env.MICKEY_STATE.put(cacheKey, JSON.stringify(devices), { expirationTtl: DEVICE_REGISTRY_CACHE_TTL_SECONDS });
+    }
+  } catch (error) {
+    console.warn('[Device registry] KV cache update failed:', error?.message || error);
+  }
 }
 
 async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
@@ -764,10 +818,37 @@ async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
   if (!rawId || rawId.length > 80) return;
   const deviceId = rawId;
   const token = useAdminToken ? await firebaseAdminAccessToken(ctx.env) : account.token;
-  const devices = await fetchUserDevices(ctx.env, account.uid, token);
   const deviceName = String(ctx.request.headers.get('X-Device-Name') || '').trim().slice(0, 160);
   const devicePlatform = String(ctx.request.headers.get('X-Platform') || '').trim().slice(0, 80);
   const normalize = value => String(value || '').trim().toLocaleLowerCase();
+  let devices;
+  let quotaFallback = false;
+  const emergencyKey = deviceQuotaFallbackKey(account.uid);
+  try {
+    const emergency = await ctx.env.MICKEY_STATE.get(emergencyKey, 'json');
+    if (Array.isArray(emergency?.devices)) {
+      devices = emergency.devices;
+      quotaFallback = true;
+    }
+  } catch (error) {
+    console.warn('[Device registry] Emergency cache read failed:', error?.message || error);
+  }
+  if (!devices) {
+    try {
+      devices = await fetchUserDevices(ctx.env, account.uid, token);
+    } catch (error) {
+      if (error?.code !== 'FIRESTORE_QUOTA_EXHAUSTED') throw error;
+      quotaFallback = true;
+      devices = [{
+        id: deviceId, deviceId, name: deviceName || 'جهاز Premiere Pro',
+        platform: devicePlatform || 'unknown',
+        appVersion: String(ctx.request.headers.get('X-Plugin-Version') || '').slice(0, 40),
+        firstSeenAt: nowIso(), lastSeenAt: nowIso(), revoked: false
+      }];
+      await ctx.env.MICKEY_STATE.put(emergencyKey, JSON.stringify({ devices }), { expirationTtl: DEVICE_QUOTA_FALLBACK_TTL_SECONDS });
+      console.warn('[Device registry] Using a short-lived, device-count-limited KV fallback while Firestore quota recovers.', account.uid);
+    }
+  }
   // UXP secure storage can be reset after a plugin/runtime update. Reuse the
   // account's active record for the same host and OS instead of counting that
   // recreated UUID as an additional physical device.
@@ -781,12 +862,37 @@ async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
   if (existing?.revoked && !canReactivate) {
     failWithCode(403, 'تم إلغاء ربط هذا الجهاز. احذف الجهاز من الإضافة ثم أعد ربط الحساب.', 'DEVICE_REVOKED');
   }
+  if (quotaFallback) {
+    if (existing && !existing.revoked) return;
+    const activeFallback = devices.filter(item => !item.revoked);
+    const temporaryLimit = Math.max(1, Math.min(100, Number(account.limitOverrides?.max_devices) || 2));
+    if (activeFallback.length >= temporaryLimit) {
+      failWithCode(403, 'تعذر التحقق من قائمة الأجهزة حالياً بسبب استهلاك الحصة المجانية لـ Firestore. أعد المحاولة بعد استعادة الخدمة.', 'DEVICE_REGISTRY_TEMPORARILY_UNAVAILABLE', activeFallback);
+    }
+    devices.push({
+      id: deviceId, deviceId, name: deviceName || 'جهاز Premiere Pro',
+      platform: devicePlatform || 'unknown',
+      appVersion: String(ctx.request.headers.get('X-Plugin-Version') || '').slice(0, 40),
+      firstSeenAt: nowIso(), lastSeenAt: nowIso(), revoked: false
+    });
+    await ctx.env.MICKEY_STATE.put(emergencyKey, JSON.stringify({ devices }), { expirationTtl: DEVICE_QUOTA_FALLBACK_TTL_SECONDS });
+    return;
+  }
   if (existing && !existing.revoked) {
-    existing.lastSeenAt = now;
-    existing.name = deviceName || existing.name;
-    existing.platform = devicePlatform || existing.platform;
-    existing.appVersion = String(ctx.request.headers.get('X-Plugin-Version') || existing.appVersion).slice(0, 40);
-    await saveUserDevice(ctx.env, account.uid, token, existing);
+    const nowMs = Date.now();
+    const lastSeenMs = Date.parse(existing.lastSeenAt || '');
+    const nextName = deviceName || existing.name;
+    const nextPlatform = devicePlatform || existing.platform;
+    const nextVersion = String(ctx.request.headers.get('X-Plugin-Version') || existing.appVersion).slice(0, 40);
+    const needsSync = !Number.isFinite(lastSeenMs) || nowMs - lastSeenMs >= 15 * 60 * 1000 ||
+      existing.name !== nextName || existing.platform !== nextPlatform || existing.appVersion !== nextVersion;
+    if (needsSync) {
+      existing.lastSeenAt = now;
+      existing.name = nextName;
+      existing.platform = nextPlatform;
+      existing.appVersion = nextVersion;
+      await saveUserDevice(ctx.env, account.uid, token, existing);
+    }
     return;
   }
   const active = devices.filter(item => !item.revoked);
