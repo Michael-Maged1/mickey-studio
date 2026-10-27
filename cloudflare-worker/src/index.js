@@ -734,7 +734,16 @@ async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
   const deviceId = rawId;
   const token = useAdminToken ? await firebaseAdminAccessToken(ctx.env) : account.token;
   const devices = await fetchUserDevices(ctx.env, account.uid, token);
-  const existing = devices.find(item => item.deviceId === deviceId);
+  const deviceName = String(ctx.request.headers.get('X-Device-Name') || '').trim().slice(0, 160);
+  const devicePlatform = String(ctx.request.headers.get('X-Platform') || '').trim().slice(0, 80);
+  const normalize = value => String(value || '').trim().toLocaleLowerCase();
+  // UXP secure storage can be reset after a plugin/runtime update. Reuse the
+  // account's active record for the same host and OS instead of counting that
+  // recreated UUID as an additional physical device.
+  const existing = devices.find(item => item.deviceId === deviceId) || devices.find(item =>
+    !item.revoked && normalize(item.name) === normalize(deviceName) &&
+    normalize(item.platform) === normalize(devicePlatform) && deviceName && devicePlatform
+  );
   const now = nowIso();
   const reactivationKey = `device_pair_grant:${account.uid}:${deviceId}`;
   const canReactivate = existing?.revoked && await ctx.env.MICKEY_STATE.get(reactivationKey);
@@ -743,8 +752,8 @@ async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
   }
   if (existing && !existing.revoked) {
     existing.lastSeenAt = now;
-    existing.name = String(ctx.request.headers.get('X-Device-Name') || existing.name).slice(0, 160);
-    existing.platform = String(ctx.request.headers.get('X-Platform') || existing.platform).slice(0, 80);
+    existing.name = deviceName || existing.name;
+    existing.platform = devicePlatform || existing.platform;
     existing.appVersion = String(ctx.request.headers.get('X-Plugin-Version') || existing.appVersion).slice(0, 40);
     await saveUserDevice(ctx.env, account.uid, token, existing);
     return;
@@ -766,8 +775,8 @@ async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
   if (canReactivate) await ctx.env.MICKEY_STATE.delete(reactivationKey);
   await saveUserDevice(ctx.env, account.uid, token, {
     deviceId,
-    name: String(ctx.request.headers.get('X-Device-Name') || 'جهاز Premiere Pro').slice(0, 160),
-    platform: String(ctx.request.headers.get('X-Platform') || 'unknown').slice(0, 80),
+    name: deviceName || 'جهاز Premiere Pro',
+    platform: devicePlatform || 'unknown',
     appVersion: String(ctx.request.headers.get('X-Plugin-Version') || '').slice(0, 40),
     firstSeenAt: existing?.firstSeenAt || now,
     lastSeenAt: now,
@@ -1634,18 +1643,25 @@ async function upscaleImage(ctx) {
     const transformed = await ctx.env.IMAGES.input(bytes)
       // scale-up ensures the requested dimensions enlarge the source; generate
       // selects Cloudflare's ESRGAN pass instead of ordinary interpolation.
-      // A light second-pass sharpen improves perceived detail without pushing
-      // edges into harsh halos.
+      // ESRGAN generates new detail at the requested resolution. Apply a
+      // moderate edge sharpen so the improvement remains visible after the
+      // extension inserts the image at its original on-screen size.
       .transform({ width: width * scale, height: height * scale, fit: 'scale-up', upscale: 'generate' })
-      .transform({ sharpen: 1.5 })
+      .transform({ sharpen: 2.2 })
       .output({ format: 'image/png' });
     const response = transformed.response();
     if (!response.ok) throw new Error(`Cloudflare Images returned ${response.status}`);
     const output = new Uint8Array(await response.arrayBuffer());
+    const outputInfo = await ctx.env.IMAGES.info(output);
+    if (Number(outputInfo?.width) !== width * scale || Number(outputInfo?.height) !== height * scale) {
+      throw new Error('Cloudflare Images did not return the requested AI-upscaled dimensions');
+    }
     const headers = new Headers(ctx.headers);
     headers.set('Content-Type', 'image/png');
     headers.set('X-Image-Provider', 'cloudflare-images-esrgan');
     headers.set('X-Image-Scale', String(scale));
+    headers.set('X-Image-Width', String(width * scale));
+    headers.set('X-Image-Height', String(height * scale));
     return new Response(output, { status: 200, headers });
   } catch (error) {
     console.error('[Cloudflare Images] Upscaling failed:', error?.message || error);
