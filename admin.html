@@ -957,6 +957,12 @@
     }
     const auth = firebase.auth();
     const WORKER_FALLBACK_URL = 'https://mickey-studio-api.kma279500.workers.dev/api.php';
+    const FIRESTORE_ACCOUNT_ACTIONS = new Set([
+      'admin_list_users', 'admin_update_user_status', 'admin_update_user_plan',
+      'admin_activate_subscription', 'admin_set_subscription_expiry',
+      'admin_cancel_subscription', 'admin_set_user_limits', 'admin_add_user_credits',
+      'admin_revoke_user_devices', 'admin_get_user_devices', 'admin_delete_user'
+    ]);
     const ADMIN_BOOTSTRAP_EMAILS = ['michaelmagednew@gmail.com', 'jonmaring012@gmail.com'];
 
     function resolveApiUrl() {
@@ -990,6 +996,16 @@
         err.status = 401;
         err.action = action;
         throw err;
+      }
+      if (FIRESTORE_ACCOUNT_ACTIONS.has(action)) {
+        try { return await firebaseAdminAccountRequest(action, payload, user); }
+        catch (err) {
+          if (err?.code === 'permission-denied') { err.status = 403; err.message = 'رفضت قواعد Firestore العملية. تأكد من نشر قواعد المشرف ومن استخدام البريد المعتمد.'; }
+          else if (err?.code === 'unauthenticated') { err.status = 401; }
+          err.action = action;
+          err.url = 'Firebase Firestore';
+          throw err;
+        }
       }
       const idToken = await user.getIdToken();
 
@@ -1067,6 +1083,156 @@
       return data;
     }
 
+    function firestoreDate(value) {
+      if (!value) return null;
+      if (typeof value.toDate === 'function') return value.toDate().toISOString();
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+
+    function firestoreJson(value, fallback) {
+      if (value && typeof value === 'object') return value;
+      if (typeof value !== 'string' || !value) return fallback;
+      try { return JSON.parse(value); } catch (_) { return fallback; }
+    }
+
+    function evaluateProfileSubscription(subscription, storedPlan) {
+      const plan = subscription?.plan || storedPlan || 'free';
+      const expiry = Date.parse(subscription?.expires_at || '');
+      const expired = Number.isFinite(expiry) && expiry <= Date.now();
+      const inactive = subscription?.status === 'cancelled' || subscription?.status === 'expired' || expired;
+      return {
+        plan: inactive ? 'free' : (plan || 'free'),
+        storedPlan: plan || 'free',
+        status: subscription?.status || (expired ? 'expired' : 'active'),
+        started_at: subscription?.started_at || null,
+        expires_at: subscription?.expires_at || null,
+        days_left: Number.isFinite(expiry) ? Math.max(0, Math.ceil((expiry - Date.now()) / 86400000)) : null,
+        source: subscription?.source || 'default', notes: subscription?.notes || '', is_active: !inactive
+      };
+    }
+
+    async function firebaseAdminAccountRequest(action, payload = {}, caller = auth.currentUser) {
+      const email = String(caller?.email || '').toLowerCase();
+      let claims = {};
+      try { claims = (await caller.getIdTokenResult()).claims || {}; } catch (_) {}
+      const isAdmin = ADMIN_BOOTSTRAP_EMAILS.includes(email) || claims.admin === true || claims.role === 'admin';
+      if (!caller || !isAdmin) throw Object.assign(new Error('هذا الحساب غير مخول لإدارة المستخدمين.'), { status: 403, action });
+      const db = firebase.firestore();
+      const nowIso = new Date().toISOString();
+      const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp();
+      const targetUid = String(payload.target_uid || payload.uid || '').trim();
+      const ownEmail = email;
+      const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status, action }); };
+      const getTarget = async () => {
+        if (!targetUid) fail('معرف المستخدم غير محدد.');
+        if (targetUid === caller.uid && ownEmail === 'michaelmagednew@gmail.com') fail('حساب المالك الأساسي محمي ولا يمكن تعديله.', 403);
+        const ref = db.collection('users').doc(targetUid);
+        const snap = await ref.get();
+        if (!snap.exists) fail('لم يتم العثور على ملف المستخدم في Firestore.', 404);
+        const profile = snap.data() || {};
+        if (String(profile.email || '').toLowerCase() === 'michaelmagednew@gmail.com') fail('حساب المالك الأساسي محمي ولا يمكن تعديله.', 403);
+        return { ref, profile };
+      };
+      const done = (extra = {}) => ({ success: true, ...extra });
+      const saveSubscription = async (ref, plan, subscription) => ref.set({ plan, subscriptionJson: JSON.stringify(subscription), updatedAt: serverTimestamp }, { merge: true });
+
+      if (action === 'admin_list_users') {
+        const snapshot = await db.collection('users').limit(1000).get();
+        const users = snapshot.docs.map(doc => {
+          const p = doc.data() || {};
+          const sub = firestoreJson(p.subscriptionJson, null);
+          const evaluated = evaluateProfileSubscription(sub, p.plan);
+          const paired = firestoreJson(p.pairedDevicesJson, []);
+          const devices = Array.isArray(paired) ? paired : [];
+          return {
+            uid: doc.id, email: p.email || '', displayName: p.displayName || p.email?.split('@')[0] || 'مستخدم',
+            status: p.status || 'active', plan: evaluated.plan, storedPlan: p.plan || 'free', subscription: evaluated,
+            expires_at: evaluated.expires_at, days_left: evaluated.days_left, banReason: p.banReason || '',
+            createdAt: firestoreDate(p.createdAt), lastLoginAt: firestoreDate(p.lastLoginAt),
+            extraCredits: Number(p.extraCredits || 0), limitOverrides: firestoreJson(p.limitOverridesJson, {}),
+            todayUsage: null, devicesCount: devices.filter(d => !d?.revoked).length,
+            pairedDevices: devices.filter(d => !d?.revoked)
+          };
+        }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        return done({ count: users.length, users, source: 'firestore_profiles', warning: 'يعرض هذا الجدول ملفات المستخدمين المسجلة في Firestore. عداد استهلاك اليوم غير متاح هنا.' });
+      }
+
+      if (action === 'admin_get_user_devices') {
+        const { ref } = await getTarget();
+        const snap = await ref.collection('devices').limit(100).get();
+        return done({ target_uid: targetUid, devices: snap.docs.map(d => {
+          const x = d.data() || {};
+          return { id: d.id, deviceId: x.deviceId || d.id, name: x.deviceName || x.name || 'جهاز Premiere Pro', platform: x.platform || '', appVersion: x.appVersion || '', firstSeenAt: firestoreDate(x.firstSeenAt) || x.firstSeenAt || '', lastSeenAt: firestoreDate(x.lastSeenAt) || x.lastSeenAt || '', revoked: x.revoked === true };
+        }) });
+      }
+
+      const { ref, profile } = await getTarget();
+      if (action === 'admin_update_user_status') {
+        const status = String(payload.status || '');
+        if (!['active', 'banned', 'suspended'].includes(status)) fail('حالة الحساب غير صالحة.');
+        await ref.set({ status, banReason: status === 'active' ? '' : String(payload.reason || '').slice(0, 500), updatedAt: serverTimestamp }, { merge: true });
+        return done({ target_uid: targetUid, status, message: 'تم تحديث حالة ملف الحساب. قد يظل تسجيل الدخول إلى Firebase متاحاً، لكن الموقع والإضافة سيرفضان الحساب الموقوف.' });
+      }
+      if (action === 'admin_update_user_plan' || action === 'admin_activate_subscription' || action === 'admin_set_subscription_expiry' || action === 'admin_cancel_subscription') {
+        const existing = firestoreJson(profile.subscriptionJson, {});
+        let plan = String(payload.plan || existing.plan || 'pro').toLowerCase();
+        if (!/^[a-z0-9_-]{1,40}$/.test(plan)) fail('معرّف الباقة غير صالح.');
+        let subscription;
+        if (action === 'admin_cancel_subscription') {
+          subscription = { user_id: targetUid, plan: 'free', started_at: existing.started_at || nowIso, expires_at: nowIso, status: 'cancelled', source: 'manual_admin', notes: String(payload.reason || 'إلغاء يدوي من لوحة التحكم') };
+          plan = 'free';
+        } else {
+          let expiry = payload.expires_at || existing.expires_at || null;
+          if (action === 'admin_activate_subscription' && payload.expires_at) {
+            const explicitExpiry = Date.parse(payload.expires_at);
+            if (!Number.isFinite(explicitExpiry)) fail('تاريخ الانتهاء المحدد غير صالح.');
+            expiry = new Date(explicitExpiry).toISOString();
+          } else if (action === 'admin_activate_subscription') {
+            const days = Math.max(1, Number(payload.days) || 30);
+            const oldExpiry = Date.parse(existing.expires_at || '');
+            expiry = new Date(Math.max(Date.now(), Number.isFinite(oldExpiry) ? oldExpiry : 0) + days * 86400000).toISOString();
+          }
+          if (action === 'admin_set_subscription_expiry' && !Number.isFinite(Date.parse(payload.expires_at || ''))) fail('تاريخ الانتهاء غير صالح.');
+          if (action === 'admin_set_subscription_expiry' && plan === 'free' && Date.parse(payload.expires_at) > Date.now()) plan = 'pro';
+          if (action === 'admin_update_user_plan' && plan === 'free') expiry = null;
+          if (action === 'admin_update_user_plan' && plan !== 'free' && (!expiry || Date.parse(expiry) <= Date.now())) expiry = new Date(Date.now() + 30 * 86400000).toISOString();
+          subscription = { ...existing, user_id: targetUid, plan, started_at: existing.started_at || nowIso, expires_at: expiry, status: 'active', source: payload.source || 'manual_admin', notes: payload.notes || existing.notes || '' };
+        }
+        await saveSubscription(ref, plan, subscription);
+        return done({ target_uid: targetUid, plan, subscription: evaluateProfileSubscription(subscription, plan), message: action === 'admin_cancel_subscription' ? 'تم إلغاء الاشتراك.' : 'تم حفظ الاشتراك في Firestore.' });
+      }
+      if (action === 'admin_set_user_limits') {
+        const allowed = ['images', 'voice', 'transcription', 'motion_ai', 'video'];
+        const clean = {};
+        for (const key of allowed) if (payload.overrides?.[key] != null && payload.overrides[key] !== '') {
+          const n = Number(payload.overrides[key]); if (!Number.isFinite(n) || n < 0 || n > 1000000) fail('توجد قيمة حد غير صالحة.'); clean[key] = n;
+        }
+        await ref.set({ limitOverridesJson: JSON.stringify(clean), updatedAt: serverTimestamp }, { merge: true });
+        return done({ message: 'تم حفظ الحدود المخصصة.' });
+      }
+      if (action === 'admin_add_user_credits') {
+        const amount = Number(payload.credits);
+        if (!Number.isInteger(amount) || amount < 1 || amount > 1000000) fail('اكتب عدد أرصدة صحيحاً.');
+        let total = 0;
+        await db.runTransaction(async tx => { const snap = await tx.get(ref); total = Number(snap.data()?.extraCredits || 0) + amount; tx.set(ref, { extraCredits: total, updatedAt: serverTimestamp }, { merge: true }); });
+        return done({ message: `تمت إضافة ${amount} رصيد. الرصيد الجديد: ${total}` });
+      }
+      if (action === 'admin_revoke_user_devices') {
+        const snap = await ref.collection('devices').limit(400).get();
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.set(doc.ref, { revoked: true, lastSeenAt: nowIso }, { merge: true }));
+        batch.set(ref, { pairedDevicesJson: '[]', updatedAt: serverTimestamp }, { merge: true });
+        await batch.commit();
+        return done({ message: 'تم إلغاء اقتران الأجهزة.' });
+      }
+      if (action === 'admin_delete_user') {
+        await ref.set({ status: 'banned', banReason: 'تم تعطيل الملف عبر لوحة الإدارة', updatedAt: serverTimestamp }, { merge: true });
+        return done({ target_uid: targetUid, message: 'تم تعطيل ملف الحساب في الموقع والإضافة. حذف حساب Firebase Auth بالكامل يحتاج خادماً موثوقاً.' });
+      }
+      fail('إجراء إدارة الحسابات غير معروف.', 404);
+    }
+
     // Format errors into clear Arabic diagnoses with technical details
     function formatApiError(err, actionName = '') {
       const status = Number(err?.status) || 0;
@@ -1078,24 +1244,36 @@
 
       if (isNetworkOrCors) {
         title = 'تعذر الاتصال بالخادم (Network / CORS Failure)';
-        friendlyMsg = 'فشل الاتصال بخادم Cloudflare Worker بسبب انقطاع الاتصال أو حظر المتصفح لعدم تطابق قيود CORS.';
-        hint = 'الحل: تأكد من نشر تحديث Worker المرفق الذي يسمح بنطاق localhost والنطاق الحالي، أو تحقق من اتصال الإنترنت.';
+        friendlyMsg = err.action && FIRESTORE_ACCOUNT_ACTIONS.has(err.action)
+          ? 'تعذر الاتصال بـ Firebase Firestore لإدارة الحسابات.'
+          : 'تعذر الاتصال بخادم المنصة بسبب انقطاع الاتصال أو قيود المتصفح.';
+        hint = err.action && FIRESTORE_ACCOUNT_ACTIONS.has(err.action)
+          ? 'تحقق من تسجيل الدخول وصلاحيات المشرف وقواعد Firestore.'
+          : 'تحقق من اتصال الإنترنت ثم أعد المحاولة.';
       } else if (status === 401) {
         title = 'جلسة غير صالحة (401 Unauthorized)';
         friendlyMsg = 'انتهت صلاحية جلسة تسجيل الدخول الحالية أو أن رمز التوثيق غير صالح.';
         hint = 'الحل: سجّل الخروج ثم أعد تسجيل الدخول بحساب Google المعتمد للمشرف.';
       } else if (status === 403) {
         title = 'تم رفض الوصول (403 Forbidden)';
-        friendlyMsg = 'الحساب الحالي غير مصرّح له بالإشراف (صلاحية Admin Custom Claim مفقودة أو غير مفعلة).';
-        hint = 'الحل: شغّل سكريبت set-admin-claim.js لتفعيل صلاحية المشرف لهذا البريد.';
+        friendlyMsg = err.message || 'الحساب الحالي غير مخول أو أن قواعد Firestore لم تُحدّث.';
+        hint = 'سجّل الدخول ببريد المشرف المعتمد، وتأكد من نشر قواعد Firestore الموجودة في المشروع.';
       } else if (status === 404) {
-        title = 'الإجراء غير منشور على الخادم (404 Not Deployed)';
-        friendlyMsg = `الإجراء المطلوب (${actionName || 'Action'}) غير متوفر في نسخة Cloudflare Worker المنشورة حالياً.`;
-        hint = 'الحل: يجب نشر التحديث الجديد للخادم عبر تشغيل الأمر: npx wrangler deploy في مجلد Worker.';
+        if (err.action && FIRESTORE_ACCOUNT_ACTIONS.has(err.action)) {
+          title = 'ملف الحساب غير موجود في Firestore (404)';
+          friendlyMsg = 'تعذر العثور على ملف المستخدم المطلوب في قاعدة البيانات.';
+          hint = 'تأكد من أن المستخدم لديه ملف داخل مجموعة users.';
+        } else {
+          title = 'الإجراء غير منشور على الخادم (404)';
+          friendlyMsg = `الإجراء المطلوب (${actionName || 'Action'}) غير متوفر على الخادم الحالي.`;
+          hint = 'تأكد من نشر تحديث الخادم ثم أعد المحاولة.';
+        }
       } else if (status >= 500) {
-        title = `خطأ في الخادم (${status} Internal Server Error)`;
-        friendlyMsg = err.message || 'حدث خطأ غير متوقع أثناء معالجة الطلب داخل Cloudflare Worker.';
-        hint = 'الحل: راجع سجلات أخطاء Cloudflare Worker عبر wrangler tail أو لوحة تحكم Cloudflare.';
+        title = `خطأ في الخادم (${status})`;
+        friendlyMsg = err.message || 'حدث خطأ أثناء معالجة الطلب.';
+        hint = err.action && FIRESTORE_ACCOUNT_ACTIONS.has(err.action)
+          ? 'تحقق من قواعد Firestore واتصال Firebase.'
+          : 'راجع سجلات الخادم في لوحة الخدمة.';
       } else {
         title = `خطأ في العملية (${status})`;
         friendlyMsg = err.message || 'تعذر إتمام الإجراء المطلوب.';
@@ -1476,7 +1654,7 @@
     // ==============================================================
     async function loadUsers() {
       const tbody = document.getElementById('users-table-body');
-      tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner fa-spin text-cyan-400 mr-2"></i> جاري جلب المستخدمين من خادم Mickey Studio…</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner fa-spin text-cyan-400 mr-2"></i> جاري جلب الحسابات من Firebase…</td></tr>`;
       try {
         const data = await apiAdminRequest('admin_list_users');
         allUsers = data.users || [];
@@ -1493,12 +1671,13 @@
       const total = allUsers.length;
       const active = allUsers.filter(u => u.status === 'active').length;
       const banned = allUsers.filter(u => u.status === 'banned' || u.status === 'suspended').length;
-      const todayTotal = allUsers.reduce((sum, u) => sum + (u.todayUsage || 0), 0);
+      const hasDailyUsage = allUsers.some(u => typeof u.todayUsage === 'number' && Number.isFinite(u.todayUsage));
+      const todayTotal = allUsers.reduce((sum, u) => sum + (typeof u.todayUsage === 'number' ? u.todayUsage : 0), 0);
 
       document.getElementById('stat-total-users').textContent = total;
       document.getElementById('stat-active-users').textContent = active;
       document.getElementById('stat-banned-users').textContent = banned;
-      document.getElementById('stat-today-usage').textContent = todayTotal;
+      document.getElementById('stat-today-usage').textContent = hasDailyUsage ? todayTotal : '—';
     }
 
     function filterUsers() {
@@ -1581,8 +1760,8 @@
             </td>
 
             <td class="py-3 px-4 font-mono text-zinc-300">
-              <span class="px-2 py-0.5 rounded bg-white/5 font-bold ${user.todayUsage > 0 ? 'text-cyan-300' : 'text-zinc-500'}">
-                ${user.todayUsage || 0}
+              <span class="px-2 py-0.5 rounded bg-white/5 font-bold ${user.todayUsage > 0 ? 'text-cyan-300' : 'text-zinc-500'}" title="${user.todayUsage == null ? 'عداد الاستهلاك اليومي ما زال في خدمة الاستخدام الحالية.' : ''}">
+                ${user.todayUsage == null ? '—' : user.todayUsage}
               </span>
             </td>
 
@@ -1972,7 +2151,7 @@
     }
 
     async function handleDeleteUser(uid) {
-      if (!confirm('تحذير: هل أنت متأكد من حذف هذا الحساب نهائياً من النظام؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+      if (!confirm('سيتم تعطيل ملف الحساب في الموقع والإضافة. لن يُحذف حساب تسجيل الدخول من Firebase. هل تريد المتابعة؟')) return;
       try {
         await apiAdminRequest('admin_delete_user', { target_uid: uid });
         showToast('تم حذف الحساب بنجاح.', 'success');

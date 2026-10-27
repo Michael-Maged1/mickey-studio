@@ -649,7 +649,7 @@ async function authenticate(ctx, adminOnly = false) {
   const statusOverride = designatedAdmin ? null : await readAdminUserStatusOverride(ctx.env, user.localId);
   const status = designatedAdmin ? 'active' : (statusOverride?.status || profile.fields?.status?.stringValue || 'active');
   const banReason = statusOverride?.reason || profile.fields?.banReason?.stringValue || '';
-  if (!designatedAdmin && (user.disabled || status === 'banned' || status === 'suspended')) {
+  if (!designatedAdmin && (user.disabled || status === 'banned' || status === 'suspended' || status === 'deleted')) {
     fail(403, banReason
       ? `تم إيقاف حسابك من قبل إدارة Mickey Studio: ${banReason}`
       : 'تم إيقاف حسابك من قبل إدارة Mickey Studio. يرجى التواصل مع الدعم الفني.');
@@ -3510,19 +3510,11 @@ export class MickeyCoordinatorDO {
           const uid = String(body.uid || '');
           const configuredPlan = String(body.planId || '');
           const planOverride = sql.exec('SELECT plan_id FROM user_plan_overrides WHERE user_id=?', uid).toArray()[0];
-          let activePlan = planOverride?.plan_id || configuredPlan;
-          try {
-            const subRow = sql.exec('SELECT plan, expires_at, status FROM user_subscriptions WHERE user_id=?', uid).toArray()[0];
-            if (subRow) {
-              const isExpired = subRow.expires_at && Date.now() > new Date(subRow.expires_at).getTime();
-              if (subRow.status === 'cancelled' || isExpired) {
-                activePlan = 'free';
-              } else if (subRow.status === 'active' && subRow.plan) {
-                activePlan = subRow.plan;
-              }
-            }
-          } catch (_) {}
-          const planId = planOverride?.plan_id || activePlan;
+          // The authenticated profile's subscription is evaluated by the API
+          // before this call. Treat that Firestore-backed plan as authoritative
+          // so direct Firestore account edits are not shadowed by a stale
+          // per-user subscription copy in this coordinator.
+          const planId = planOverride?.plan_id || configuredPlan;
           const evaluate = toolKey => {
             const catalog = sql.exec('SELECT name_ar, category FROM tools WHERE key=?', toolKey).toArray()[0] || {};
             const row = sql.exec('SELECT access, monthly_limit, limit_unit FROM plan_tool_access WHERE plan_id=? AND tool_key=?', planId, toolKey).toArray()[0];
