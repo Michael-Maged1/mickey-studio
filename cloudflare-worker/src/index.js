@@ -760,15 +760,19 @@ async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
   }
   const active = devices.filter(item => !item.revoked);
   let plan = account.plan || 'free';
+  let maxDevicesOverride = account.limitOverrides?.max_devices;
   if (useAdminToken) {
     const profileUrl = `https://firestore.googleapis.com/v1/projects/${ctx.env.FIREBASE_PROJECT_ID || FIREBASE_PROJECT}/databases/(default)/documents/users/${encodeURIComponent(account.uid)}`;
     const profile = await fetch(profileUrl, { headers: { Authorization: `Bearer ${token}` } });
     const profileData = await readJson(profile);
     plan = profileData.fields?.plan?.stringValue || 'free';
+    if (profileData.fields?.limitOverridesJson?.stringValue) {
+      try { maxDevicesOverride = JSON.parse(profileData.fields.limitOverridesJson.stringValue)?.max_devices; } catch {}
+    }
   }
   const plans = await getPlansConfig(ctx.env);
   const features = plans[plan]?.features || plans.free?.features || {};
-  const maxDevices = Math.max(1, Math.min(100, Number(features.max_devices) || 2));
+  const maxDevices = Math.max(1, Math.min(100, Number(maxDevicesOverride) || Number(features.max_devices) || 2));
   if (active.length >= maxDevices) {
     failWithCode(403, 'وصلت إلى الحد الأقصى للأجهزة المرتبطة. ألغِ ربط جهاز من قسم «أجهزتي» للمتابعة.', 'DEVICE_LIMIT_REACHED', active.map(({ name, lastSeenAt, platform }) => ({ name, lastSeenAt, platform })));
   }

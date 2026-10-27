@@ -894,6 +894,10 @@
             <label class="block text-zinc-400 text-[10px] mb-1">حد الموشن اليومي:</label>
             <input id="override-motion" type="number" min="0" placeholder="افتراضي" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white">
           </div>
+          <div>
+            <label class="block text-zinc-400 text-[10px] mb-1">أقصى عدد للأجهزة:</label>
+            <input id="override-max-devices" type="number" min="1" max="100" placeholder="حسب الباقة" class="w-full bg-[#1A1A1F] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white">
+          </div>
         </div>
       </div>
 
@@ -1126,12 +1130,13 @@
       const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status, action }); };
       const getTarget = async () => {
         if (!targetUid) fail('معرف المستخدم غير محدد.');
-        if (targetUid === caller.uid && ownEmail === 'michaelmagednew@gmail.com') fail('حساب المالك الأساسي محمي ولا يمكن تعديله.', 403);
+        const deviceLimitOnly = action === 'admin_set_user_limits';
+        if (!deviceLimitOnly && targetUid === caller.uid && ownEmail === 'michaelmagednew@gmail.com') fail('حساب المالك الأساسي محمي ولا يمكن تعديله.', 403);
         const ref = db.collection('users').doc(targetUid);
         const snap = await ref.get();
         if (!snap.exists) fail('لم يتم العثور على ملف المستخدم في Firestore.', 404);
         const profile = snap.data() || {};
-        if (String(profile.email || '').toLowerCase() === 'michaelmagednew@gmail.com') fail('حساب المالك الأساسي محمي ولا يمكن تعديله.', 403);
+        if (!deviceLimitOnly && String(profile.email || '').toLowerCase() === 'michaelmagednew@gmail.com') fail('حساب المالك الأساسي محمي ولا يمكن تعديله.', 403);
         return { ref, profile };
       };
       const done = (extra = {}) => ({ success: true, ...extra });
@@ -1207,6 +1212,11 @@
         const clean = {};
         for (const key of allowed) if (payload.overrides?.[key] != null && payload.overrides[key] !== '') {
           const n = Number(payload.overrides[key]); if (!Number.isFinite(n) || n < 0 || n > 1000000) fail('توجد قيمة حد غير صالحة.'); clean[key] = n;
+        }
+        if (payload.overrides?.max_devices != null && payload.overrides.max_devices !== '') {
+          const maxDevices = Number(payload.overrides.max_devices);
+          if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) fail('عدد الأجهزة يجب أن يكون بين 1 و100.');
+          clean.max_devices = maxDevices;
         }
         await ref.set({ limitOverridesJson: JSON.stringify(clean), updatedAt: serverTimestamp }, { merge: true });
         return done({ message: 'تم حفظ الحدود المخصصة.' });
@@ -1798,6 +1808,10 @@
                   <i class="fa-solid fa-sliders"></i> حدود
                 </button>
 
+                <button onclick="openOverridesModal('${user.uid}', '${escapeHtml(user.email)}')" class="px-2.5 py-1 rounded-lg border border-cyan-500/20 bg-cyan-950/20 text-cyan-300 hover:bg-cyan-900/30 text-[10px] transition" title="تعديل الحد الأقصى للأجهزة لهذا الحساب، بما في ذلك حسابات المشرفين">
+                  <i class="fa-solid fa-desktop"></i> حد الأجهزة
+                </button>
+
                 <button onclick="openCreditsModal('${user.uid}', '${escapeHtml(user.email)}')" class="px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-950/20 text-amber-300 hover:bg-amber-900/40 text-[10px] transition" title="إضافة رصيد إضافي">
                   <i class="fa-solid fa-plus"></i> رصيد
                 </button>
@@ -1805,7 +1819,7 @@
                 <button onclick="handleRevokeDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 text-[10px] transition" title="إلغاء اقتران أجهزة الإضافة لهذا الحساب">
                   <i class="fa-solid fa-link-slash"></i>
                 </button>
-                <button onclick="showUserDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10 text-[10px] transition" title="عرض أجهزة هذا المستخدم">
+                <button onclick="showUserDevices('${user.uid}')" class="px-2 py-1 rounded-lg border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/10 text-[10px] transition" title="عرض قائمة الأجهزة المرتبطة حالياً، دون تعديل الحد الأقصى">
                   <i class="fa-solid fa-desktop"></i> الأجهزة
                 </button>
 
@@ -2086,6 +2100,7 @@
       document.getElementById('override-voice').value = ov.voice || '';
       document.getElementById('override-transcription').value = ov.transcription || '';
       document.getElementById('override-motion').value = ov.motion_ai || '';
+      document.getElementById('override-max-devices').value = ov.max_devices ?? '';
 
       btn.onclick = async () => {
         const overrides = {};
@@ -2093,10 +2108,16 @@
         const vc = Number(document.getElementById('override-voice').value);
         const tr = Number(document.getElementById('override-transcription').value);
         const mo = Number(document.getElementById('override-motion').value);
+        const maxDevicesInput = document.getElementById('override-max-devices').value.trim();
+        const maxDevices = Number(maxDevicesInput);
         if (img > 0) overrides.images = img;
         if (vc > 0) overrides.voice = vc;
         if (tr > 0) overrides.transcription = tr;
         if (mo > 0) overrides.motion_ai = mo;
+        if (maxDevicesInput) {
+          if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) return showToast('عدد الأجهزة يجب أن يكون بين 1 و100.', 'warning');
+          overrides.max_devices = maxDevices;
+        }
 
         try {
           await apiAdminRequest('admin_set_user_limits', { target_uid: uid, overrides });
