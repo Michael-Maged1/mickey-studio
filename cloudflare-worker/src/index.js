@@ -704,10 +704,28 @@ function decodeDeviceDocument(document) {
 }
 
 async function fetchUserDevices(env, uid, token) {
-  const response = await fetch(`${deviceCollectionUrl(env, uid)}?pageSize=100`, { headers: { Authorization: `Bearer ${token}` } });
-  const data = await readJson(response);
-  if (!response.ok && response.status !== 404) fail(503, 'تعذر تحميل قائمة الأجهزة من الخادم.');
-  return (data.documents || []).map(decodeDeviceDocument);
+  const url = `${deviceCollectionUrl(env, uid)}?pageSize=100`;
+  const readWithToken = async accessToken => {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    return { response, data: await readJson(response) };
+  };
+  let result = await readWithToken(token);
+  if (!result.response.ok && result.response.status !== 404 && token) {
+    // The user token remains the primary credential. If Firestore rules reject
+    // listing this user's own subcollection, retry the exact UID using the
+    // Worker's service credential after Firebase Auth has verified the caller.
+    try {
+      const adminToken = await firebaseAdminAccessToken(env);
+      if (adminToken !== token) result = await readWithToken(adminToken);
+    } catch (error) {
+      console.error('[Device registry] Admin read fallback unavailable:', error?.message || error);
+    }
+  }
+  if (!result.response.ok && result.response.status !== 404) {
+    console.error('[Device registry] Firestore list failed:', result.response.status, result.data?.error?.status || '', result.data?.error?.message || '');
+    fail(503, 'تعذر تحميل قائمة الأجهزة من Firestore بعد المحاولة بحساب المستخدم وحساب الخدمة.');
+  }
+  return (result.data.documents || []).map(decodeDeviceDocument);
 }
 
 function deviceFirestoreFields(device) {
@@ -724,8 +742,21 @@ function deviceFirestoreFields(device) {
 
 async function saveUserDevice(env, uid, token, device) {
   const url = `${deviceCollectionUrl(env, uid)}/${encodeURIComponent(device.deviceId)}`;
-  const response = await fetch(url, { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(deviceFirestoreFields(device)) });
-  if (!response.ok) fail(503, 'تعذر حفظ بيانات الجهاز على الخادم.');
+  const saveWithToken = accessToken => fetch(url, { method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(deviceFirestoreFields(device)) });
+  let response = await saveWithToken(token);
+  if (!response.ok && token) {
+    try {
+      const adminToken = await firebaseAdminAccessToken(env);
+      if (adminToken !== token) response = await saveWithToken(adminToken);
+    } catch (error) {
+      console.error('[Device registry] Admin write fallback unavailable:', error?.message || error);
+    }
+  }
+  if (!response.ok) {
+    const data = await readJson(response);
+    console.error('[Device registry] Firestore save failed:', response.status, data?.error?.status || '', data?.error?.message || '');
+    fail(503, 'تعذر حفظ بيانات الجهاز في Firestore.');
+  }
 }
 
 async function enforceDeviceLimit(account, ctx, useAdminToken = false) {
