@@ -654,11 +654,6 @@ async function authenticateUncached(ctx) {
   const designatedAdmin = isDesignatedAdminEmail(user.email, ctx.env.ADMIN_EMAIL);
   const isAdmin = hasAdminClaim || (designatedAdmin && customAttributes.admin !== false);
 
-  // Strict enforcement: adminOnly actions are rejected at the server level
-  if (adminOnly && !isAdmin) {
-    fail(403, 'غير مصرح: هذا الإجراء يتطلب حساب مسؤول معتمد بصلاحية (Admin Claim).');
-  }
-
   // Fetch user profile from Firestore
   const profileCacheKey = `user_profile_cache:${user.localId}`;
   let profile;
