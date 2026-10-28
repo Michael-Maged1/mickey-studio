@@ -3781,39 +3781,18 @@ window.MickeyStudio = (function () {
       return;
     }
     try {
-      const start = await accountRequest('pair2_start');
-      await accountRequest('pair2_complete', { code: start.code, deviceName: 'Mickey Studio · Premiere Pro' });
-      const tokenStr = `MKP2_${start.code}`;
+      // The deployed gateway supports v1 pairing. Its short code is for the
+      // website to confirm; the extension must receive the opaque session token.
+      const begin = await accountRequest('pair_begin');
+      if (!begin.sessionToken) throw new Error('لم تُنشأ جلسة ربط صالحة. أعد المحاولة.');
+      await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+      const tokenStr = `MKP_${begin.sessionToken}`;
       try { await navigator.clipboard.writeText(tokenStr); }
       catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
-      showToast('✓ تم نسخ كود ربط آمن (v2) لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
+      showToast('✓ تم نسخ كود ربط آمن لمرة واحدة وصالح لدقائق. الصقه في إضافة Premiere Pro.', 'success', 6000);
       refreshConnectedDevices();
     } catch (error) {
-      try {
-        const begin = await accountRequest('pair_begin');
-        await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
-        const tokenStr = `MKP_${begin.code}`;
-        try { await navigator.clipboard.writeText(tokenStr); }
-        catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
-        showToast('✓ تم نسخ كود ربط لمرة واحدة وصالح لدقيقتين. الصقه في إضافة Premiere Pro.', 'success', 6000);
-        refreshConnectedDevices();
-      } catch (err2) {
-        try {
-          const tokenPayload = {
-            mickey_pair: true,
-            refreshToken: user.refreshToken,
-            email: user.email || user.phoneNumber || '',
-            uid: user.uid,
-            ts: Date.now()
-          };
-          const tokenStr = 'MKP_' + btoa(unescape(encodeURIComponent(JSON.stringify(tokenPayload))));
-          try { await navigator.clipboard.writeText(tokenStr); }
-          catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
-          showToast('✓ تم نسخ كود الربط المباشر! الصقه في إضافة Premiere Pro.', 'success', 6000);
-        } catch (err3) {
-          showToast(error.message || err2.message || err3.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
-        }
-      }
+      showToast(error.message || 'تعذر إنشاء كود الربط اليدوي.', 'error');
     }
   }
 

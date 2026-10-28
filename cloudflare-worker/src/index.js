@@ -3361,7 +3361,7 @@ function apiDocs(ctx) {
 // EXTENSION PAIRING & MOTION SCENE SYNC
 // ======================================================================
 async function pairBegin(ctx) {
-  const sessionToken = crypto.randomUUID().replaceAll('-', '');
+  const sessionToken = Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('');
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const record = { code, sessionToken, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 10 * 60 * 1000 };
   await ctx.env.MICKEY_STATE.put(`pair_code:${code}`, JSON.stringify(record), { expirationTtl: 600 });
@@ -3390,7 +3390,9 @@ async function pairComplete(ctx) {
 }
 
 async function pairPoll(ctx) {
-  const sessionToken = String(ctx.body.sessionToken || ctx.url.searchParams.get('sessionToken') || '');
+  // The extension's manual-code flow sends the MKP_ payload in `code`, while
+  // automatic pairing sends it as `sessionToken`. Accept both during rollout.
+  const sessionToken = String(ctx.body.sessionToken || ctx.url.searchParams.get('sessionToken') || ctx.body.code || '');
   if (!sessionToken) fail(400, 'معرف الجلسة مطلوب.');
   const record = await ctx.env.MICKEY_STATE.get(`pair_session:${sessionToken}`, 'json');
   if (!record) return json({ success: true, status: 'expired' }, 200, ctx.headers);
@@ -3400,10 +3402,12 @@ async function pairPoll(ctx) {
     if (deviceId) await ctx.env.MICKEY_STATE.put(`device_pair_grant:${record.uid}:${deviceId}`, '1', { expirationTtl: 600 });
     return json({
       success: true,
-      status: 'confirmed',
       uid: record.uid,
       email: record.email,
       refreshToken: record.refreshToken || '',
+      // Legacy manual pairing clients expect these names/status values.
+      status: 'complete',
+      deviceToken: record.refreshToken || record.token || '',
       idToken: record.refreshToken ? undefined : record.token
     }, 200, ctx.headers);
   }
