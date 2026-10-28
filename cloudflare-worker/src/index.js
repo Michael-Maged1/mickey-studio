@@ -79,12 +79,13 @@ export default {
   async fetch(request, env) {
     const cors = corsHeaders(request, env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    let action = 'status';
     try {
       const url = new URL(request.url);
       const queryAction = url.searchParams.get('action') || '';
       const isBinarySilenceRequest = request.method === 'POST' && queryAction === 'analyze_video_silence' && /^(?:video|audio)\//i.test(request.headers.get('Content-Type') || '');
       const body = request.method === 'POST' && !isBinarySilenceRequest ? await request.json().catch(() => ({})) : {};
-      let action = queryAction || body.action || 'status';
+      action = queryAction || body.action || 'status';
       if (request.method === 'GET' && url.pathname === '/api/me') action = 'me';
       if (url.pathname === '/generate' && !queryAction && !body.action) action = 'generate_image';
       const deviceRoute = url.pathname.match(/^\/api\/devices(?:\/([^/]+))?\/?$/);
