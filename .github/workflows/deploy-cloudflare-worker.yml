@@ -1,0 +1,26 @@
+name: Deploy Mickey Studio API Worker
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - cloudflare-worker/**
+      - .github/workflows/deploy-cloudflare-worker.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Deploy Cloudflare Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 00e7984edffb8586e68afbfa3906f57f
+          workingDirectory: cloudflare-worker
+          command: deploy
