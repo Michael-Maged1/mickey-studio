@@ -1394,7 +1394,10 @@ window.MickeyStudio = (function () {
       if (response.status === 429 && data.code === 'QUOTA_EXCEEDED' && data.tool) {
         updateQuotaBadge(data.tool, 0, data.limit);
       }
-      throw new Error(accountApiErrorMessage(data, response.status));
+      const error = new Error(accountApiErrorMessage(data, response.status));
+      error.status = response.status;
+      error.code = data.code || '';
+      throw error;
     }
     if (action === 'consume_generation' && data.permit) {
       let permits = {};
@@ -3785,7 +3788,16 @@ window.MickeyStudio = (function () {
       // website to confirm; the extension must receive the opaque session token.
       const begin = await accountRequest('pair_begin');
       if (!begin.sessionToken) throw new Error('لم تُنشأ جلسة ربط صالحة. أعد المحاولة.');
-      await accountRequest('pair_complete', { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+      const confirmation = { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' };
+      try {
+        await accountRequest('pair_complete', confirmation);
+      } catch (firstError) {
+        if (firstError.status < 500 || firstError.status >= 600) throw firstError;
+        // Confirmation is idempotent on the gateway. Retry once if the response
+        // was lost or the Worker had a transient failure while completing it.
+        await new Promise(resolve => setTimeout(resolve, 700));
+        await accountRequest('pair_complete', confirmation);
+      }
       const tokenStr = `MKP_${begin.sessionToken}`;
       try { await navigator.clipboard.writeText(tokenStr); }
       catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }

@@ -3377,6 +3377,9 @@ async function pairComplete(ctx) {
   if (!record || record.expiresAt < Date.now()) {
     fail(400, 'رمز الاقتران غير صالح أو منتهي الصلاحية.');
   }
+  if (record.status === 'confirmed' && record.uid !== account.uid) {
+    fail(409, 'تم تأكيد رمز الاقتران مسبقًا لحساب آخر. أنشئ رمزًا جديدًا.');
+  }
   record.status = 'confirmed';
   record.uid = account.uid;
   record.email = account.email;
@@ -3384,8 +3387,11 @@ async function pairComplete(ctx) {
   // Keep the durable Firebase credential needed by Premiere to refresh its
   // short-lived ID token after the initial link completes.
   record.refreshToken = refreshToken;
+  // Keep the code record briefly so a website retry after a lost 5xx response
+  // can safely confirm the same session again. The extension poll remains
+  // one-time because pair_session is still deleted when consumed.
+  await ctx.env.MICKEY_STATE.put(`pair_code:${code}`, JSON.stringify(record), { expirationTtl: 600 });
   await ctx.env.MICKEY_STATE.put(`pair_session:${record.sessionToken}`, JSON.stringify(record), { expirationTtl: 300 });
-  await ctx.env.MICKEY_STATE.delete(`pair_code:${code}`);
   return json({ success: true, message: 'تم ربط الإضافة بالحساب بنجاح.' }, 200, ctx.headers);
 }
 
