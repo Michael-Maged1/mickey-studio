@@ -286,6 +286,14 @@ export default {
           return json({ success: false, error: `الإجراء غير مدعوم: ${action}` }, 404, headers);
       }
     } catch (error) {
+      console.error('[Worker request failed]', {
+        action,
+        ray: request.headers.get('cf-ray') || '',
+        status: error?.status || 500,
+        code: error?.code || '',
+        name: error?.name || 'Error',
+        message: String(error?.message || error || '').slice(0, 300)
+      });
       const headers = { ...cors, 'Cache-Control': 'no-store' };
       return json({
         success: false,
@@ -3374,6 +3382,13 @@ async function pairComplete(ctx) {
   const code = String(ctx.body.code || '').trim();
   const refreshToken = String(ctx.body.refreshToken || '');
   const record = await ctx.env.MICKEY_STATE.get(`pair_code:${code}`, 'json');
+  console.info('[Pairing] confirmation lookup', {
+    ray: ctx.request.headers.get('cf-ray') || '',
+    codeLength: code.length,
+    found: Boolean(record),
+    state: record?.status || 'missing',
+    hasSession: Boolean(record?.sessionToken)
+  });
   if (!record || record.expiresAt < Date.now()) {
     fail(400, 'رمز الاقتران غير صالح أو منتهي الصلاحية.');
   }
@@ -3401,6 +3416,12 @@ async function pairPoll(ctx) {
   const sessionToken = String(ctx.body.sessionToken || ctx.url.searchParams.get('sessionToken') || ctx.body.code || '');
   if (!sessionToken) fail(400, 'معرف الجلسة مطلوب.');
   const record = await ctx.env.MICKEY_STATE.get(`pair_session:${sessionToken}`, 'json');
+  console.info('[Pairing] poll lookup', {
+    ray: ctx.request.headers.get('cf-ray') || '',
+    tokenLength: sessionToken.length,
+    found: Boolean(record),
+    state: record?.status || 'missing'
+  });
   if (!record) return json({ success: true, status: 'expired' }, 200, ctx.headers);
   if (record.status === 'confirmed') {
     await ctx.env.MICKEY_STATE.delete(`pair_session:${sessionToken}`);
