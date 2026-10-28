@@ -3742,6 +3742,20 @@ window.MickeyStudio = (function () {
   let pendingPair2Code = '';
   let pairLoginPromptShown = false;
 
+  async function confirmExtensionPair(confirmation) {
+    try {
+      return await accountRequest('pair_complete', confirmation);
+    } catch (error) {
+      // Network failures and 5xx responses can happen after the Worker has
+      // already stored the confirmation. pair_complete is idempotent for the
+      // same account, so retrying once safely recovers a lost response.
+      const status = Number(error?.status || 0);
+      if (status && (status < 500 || status >= 600)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 700));
+      return await accountRequest('pair_complete', confirmation);
+    }
+  }
+
   async function completePendingExtensionPair(user) {
     if (pendingPair2Code && user) {
       const currentCode2 = pendingPair2Code;
@@ -3763,7 +3777,7 @@ window.MickeyStudio = (function () {
     if (!pendingPairCode || !user) return;
     const currentCode = pendingPairCode;
     try {
-      await accountRequest('pair_complete', { code: currentCode, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
+      await confirmExtensionPair({ code: currentCode, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' });
 
       pendingPairCode = '';
       const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('extension_pair');
@@ -3789,15 +3803,7 @@ window.MickeyStudio = (function () {
       const begin = await accountRequest('pair_begin');
       if (!begin.sessionToken) throw new Error('لم تُنشأ جلسة ربط صالحة. أعد المحاولة.');
       const confirmation = { code: begin.code, deviceName: 'Mickey Studio · Premiere Pro', refreshToken: user.refreshToken, email: user.email || user.phoneNumber || '' };
-      try {
-        await accountRequest('pair_complete', confirmation);
-      } catch (firstError) {
-        if (firstError.status < 500 || firstError.status >= 600) throw firstError;
-        // Confirmation is idempotent on the gateway. Retry once if the response
-        // was lost or the Worker had a transient failure while completing it.
-        await new Promise(resolve => setTimeout(resolve, 700));
-        await accountRequest('pair_complete', confirmation);
-      }
+      await confirmExtensionPair(confirmation);
       const tokenStr = `MKP_${begin.sessionToken}`;
       try { await navigator.clipboard.writeText(tokenStr); }
       catch (_) { prompt('انسخ كود الربط التالي والصقه في إضافة بريمير:', tokenStr); }
