@@ -1,0 +1,94 @@
+{
+  "version": 2,
+  "id": "quote_podcast_highlight",
+  "name": "مقتطف بودكاست مميز (Podcast Highlight)",
+  "nameEn": "Podcast Highlight Quote Box",
+  "category": "quote_cards",
+  "description": "كارت مخصص لمقتطفات الحوارات الصوتية والبودكاست مع تمييز ضوئي.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5.5,
+  "background": {
+    "type": "color",
+    "color": "#11131f"
+  },
+  "layers": [
+    {
+      "id": "pod_box",
+      "type": "shape",
+      "name": "صندوق البودكاست",
+      "start": 0.2,
+      "duration": 5.3,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 1300,
+        "h": 480,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.secondary",
+        "strokeWidth": 3,
+        "radius": 24,
+        "glow": {
+          "color": "brand.secondary",
+          "blur": 20
+        }
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideUp",
+          "dur": 0.6,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "pod_quote",
+      "type": "text",
+      "name": "كلام الضيف",
+      "start": 0.6,
+      "duration": 4.9,
+      "transform": {
+        "x": 960,
+        "y": 520,
+        "w": 1150,
+        "h": 200,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 54,
+        "fontWeight": 800,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "«البداية الصعبة تصنع صانع محتوى لا يُقهر!»",
+        "textEn": "Hard beginnings forge unstoppable creators!"
+      },
+      "presets": {
+        "in": {
+          "name": "highlight_sweep",
+          "dur": 0.8
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "version": 2,
+  "id": "bg_cyber_neon",
+  "name": "خلفية سايبر نيون التقنية (Cyber Neon Grid)",
+  "nameEn": "Cyber Neon Tech Grid Background",
+  "category": "aurora_backgrounds",
+  "description": "خلفية داكنة مع عناصر نيون دائرية وأشكال هندسية تقنية.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "color",
+    "color": "#090a10"
+  },
+  "layers": [
+    {
+      "id": "neon_grid_ring",
+      "type": "shape",
+      "name": "حلقة سايبر نيون",
+      "start": 0,
+      "duration": 6,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 800,
+        "h": 800,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.35
+      },
+      "style": {
+        "stroke": "brand.secondary",
+        "strokeWidth": 2,
+        "radius": 400,
+        "glow": {
+          "color": "brand.secondary",
+          "blur": 30
+        }
+      },
+      "content": {
+        "shape": "donut",
+        "innerRadius": 360
+      },
+      "presets": {
+        "loop": {
+          "name": "spin",
+          "speed": 0.08
+        }
+      }
+    },
+    {
+      "id": "cyber_title",
+      "type": "text",
+      "name": "عنوان التقنية",
+      "start": 0.5,
+      "duration": 5.5,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 1000,
+        "h": 100,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "Readex Pro",
+        "fontSize": 64,
+        "fontWeight": 900,
+        "align": "center"
+      },
+      "content": {
+        "text": "NEXT GENERATION MOTION",
+        "textAr": "الجيل القادم من الموشن جرافيك"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.6,
+          "sfx": "impact"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 2
+        }
+      }
+    }
+  ]
+}

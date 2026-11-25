@@ -1,0 +1,19 @@
+{
+  "name": "Mickey Studio — منصة الذكاء الاصطناعي والمونتاج",
+  "short_name": "Mickey Studio",
+  "description": "منصة إبداعية سحابية لتوليد الصور والفيديو والموشن جرافيك ومكتبة فلاتر الـ LUTs والتعليق الصوتي العربي.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#09090B",
+  "theme_color": "#09090B",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "assets/mickey-studio-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "id": "social_instagram_square",
+  "name": "كارت انستغرام مربع 1:1 (Square Profile)",
+  "nameEn": "Instagram Square Social Card",
+  "category": "social_cards",
+  "description": "كارت منشور مربع لتسليط الضوء على إحصائية أو نصيحة احترافية.",
+  "width": 1080,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "color",
+    "color": "#0f1422"
+  },
+  "layers": [
+    {
+      "id": "card_box",
+      "type": "shape",
+      "name": "إطار الكارت الزجاجي",
+      "start": 0.2,
+      "duration": 4.8,
+      "transform": {
+        "x": 540,
+        "y": 540,
+        "w": 840,
+        "h": 620,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.primary",
+        "strokeWidth": 2,
+        "radius": 24
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.6,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "sq_text",
+      "type": "text",
+      "name": "النصيحة أو الاقتباس",
+      "start": 0.5,
+      "duration": 4.5,
+      "transform": {
+        "x": 540,
+        "y": 520,
+        "w": 740,
+        "h": 240,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 50,
+        "fontWeight": 700,
+        "align": "center",
+        "direction": "rtl",
+        "lineHeight": 1.4
+      },
+      "content": {
+        "text": "القصّات المتقنة تصنع قصة لا تُنسى في ذهن المشاهد.",
+        "textEn": "Precise cuts create an unforgettable story."
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 0.6
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mickey Studio // محرر الموشن الاحترافي (Motion Editor v2)</title>
+  <meta name="description" content="محرر موشن جرافيك حتمي واحترافي لإنتاج وتعديل المشاهد المتحركة والنصوص والرسوم البيانية لبريمير والسوشيال ميديا.">
+  <link rel="icon" type="image/png" href="assets/mickey-studio-logo.png?v=1">
+
+  <!-- Google Fonts & FontAwesome 6 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Readex+Pro:wght@300;400;500;600;700&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Bundled OFL Fonts -->
+  <link rel="stylesheet" href="shared/fonts/fonts.css">
+
+  <!-- Motion Editor Styles -->
+  <link rel="stylesheet" href="motion-editor.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div class="motion-app">
+    <!-- ===================================================================
+         1. TOP NAVIGATION BAR
+         =================================================================== -->
+    <header class="top-nav">
+      <div class="nav-brand">
+        <a href="index.html" class="nav-logo" title="العودة للاستوديو الرئيسي">M</a>
+        <div>
+          <div class="nav-title">محرر الموشن الاحترافي</div>
+        </div>
+        <input type="text" id="projectTitleInput" class="project-title-input" value="مشهد ترويجي جديد" title="انقر لتعديل اسم المشهد">
+      </div>
+
+      <div class="nav-group">
+        <!-- Preset Ratio Selector -->
+        <label style="font-size: 11px; color: var(--text-muted);">المقاس:</label>
+        <select id="aspectPresetSelector" class="form-input" style="width: auto; padding: 3px 8px; font-size: 11px;">
+          <option value="16:9">عرضي 16:9 (1920×1080)</option>
+          <option value="9:16">طولي Reels / Shorts 9:16 (1080×1920)</option>
+          <option value="1:1">مربع 1:1 (1080×1080)</option>
+          <option value="4:5">منشور 4:5 (1080×1350)</option>
+          <option value="custom">مخصص (Custom)...</option>
+        </select>
+
+        <div style="width: 1px; height: 18px; background: var(--border-subtle); margin: 0 4px;"></div>
+
+        <!-- Undo / Redo -->
+        <button id="btnUndo" class="icon-btn" title="تراجع (Ctrl+Z)" disabled>
+          <i class="fa-solid fa-arrow-rotate-left"></i>
+        </button>
+        <button id="btnRedo" class="icon-btn" title="إعادة (Ctrl+Y)" disabled>
+          <i class="fa-solid fa-arrow-rotate-right"></i>
+        </button>
+
+        <!-- Save Indicator -->
+        <div id="saveStatusIndicator" class="status-badge" title="حالة الحفظ التلقائي">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span id="saveStatusText">محفوظ تلقائياً</span>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <!-- Brand Kit Button -->
+        <button id="btnBrandKit" class="btn" title="الهوية البصرية للمشروع (Brand Kit)">
+          <i class="fa-solid fa-palette text-indigo-400"></i>
+          <span>الهوية البصرية</span>
+        </button>
+
+        <!-- Save As Template Button -->
+        <button id="btnSaveAsTemplate" class="btn" title="حفظ المشهد الحالي كنموذج خاص">
+          <i class="fa-regular fa-bookmark text-emerald-400"></i>
+          <span>حفظ كنموذج</span>
+        </button>
+
+        <!-- Help Shortcuts -->
+        <button id="btnShortcutsHelp" class="btn" title="اختصارات لوحة المفاتيح (?)">
+          <i class="fa-regular fa-keyboard"></i>
+          <span>المساعد</span>
+        </button>
+
+        <!-- Motion Builder Link -->
+        <a href="index.html" class="btn" title="العودة للمساعد التلقائي في الموقع">
+          <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+          <span>المساعد التلقائي</span>
+        </a>
+
+        <!-- Export JSON / Scene -->
+        <button id="btnExportScene" class="btn btn-primary" title="تصدير مشهد JSON v2">
+          <i class="fa-solid fa-download"></i>
+          <span>تصدير JSON</span>
+        </button>
+
+        <!-- Version History Button -->
+        <button id="btnVersionHistory" class="btn" title="سجل الإصدارات والتراجع (20 إصدار)">
+          <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i>
+          <span>الإصدارات <span id="currentVersionBadge" style="background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700;">v1</span></span>
+        </button>
+
+        <!-- Update in Premiere Button (N+1) -->
+        <button id="btnUpdatePremiere" class="btn" title="تحديث المشهد في بريمير مع استبدال المقاطع تلقائياً وحفظ نسخة احتياطية (vN+1)" style="display:none; background:#059669; border:1px solid #10b981; color:#ffffff;">
+          <i class="fa-solid fa-rotate"></i>
+          <span>تحديث في بريمير (<span id="nextVersionPill">v2</span>)</span>
+        </button>
+
+        <!-- Toggle Mobile Simplified Mode Button -->
+        <button id="btnToggleMobileMode" class="btn" title="تبديل وضع الهاتف المبسط (معاينة + تعديل نصوص وألوان فقط)">
+          <i class="fa-solid fa-mobile-screen text-indigo-400"></i>
+          <span id="mobileModeToggleText">وضع الهاتف المبسط</span>
+        </button>
+
+        <!-- Send to Premiere -->
+        <button id="btnSendPremiere" class="btn btn-amber" title="إرسال المشهد إلى إضافة بريمير المرتبطة بحسابك">
+          <i class="fa-solid fa-paper-plane"></i>
+          <span>إرسال لـ Premiere</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===================================================================
+         MOBILE SIMPLIFIED WORKSPACE (Phones: Preview + Edit Text/Colors Only)
+         =================================================================== -->
+    <div id="motionMobileSimplifiedContainer" style="display:none; flex-direction:column; width:100%; height:calc(100vh - 54px); overflow-y:auto; padding:12px; gap:14px; background:#09090B;">
+      <!-- Sticky Preview Header Card -->
+      <div style="position:sticky; top:0; z-index:25; background:rgba(18, 18, 21, 0.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:11px; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-play text-indigo-400"></i> معاينة المشهد
+          </span>
+          <span id="mobileTimecodeDisplay" style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#38bdf8;">00:00 / 00:05</span>
+        </div>
+        <div id="mobileCanvasDock" style="width:100%; max-height:220px; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <!-- Active canvas docked here on phones -->
+        </div>
+        <!-- Mobile Playback Controls -->
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+          <button id="btnMobilePlayPause" class="btn" style="width:38px; height:38px; border-radius:50%; background:#6366F1; color:#fff; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0;">
+            <i class="fa-solid fa-play text-xs"></i>
+          </button>
+          <input type="range" id="mobileTimelineScrubber" min="0" max="5" step="0.01" value="0" style="flex:1; accent-color:#6366F1; height:6px; cursor:pointer;">
+        </div>
+      </div>
+
+      <!-- Section 1: Edit Texts -->
+      <div style="background:#121215; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <h4 style="font-size:12px; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-font text-cyan-400"></i> تعديل نصوص المشهد
+          </h4>
+          <span style="font-size:10px; color:#A1A1AA;">تعديل فوري</span>
+        </div>
+        <div id="mobileTextLayersList" style="display:flex; flex-direction:column; gap:10px;">
+          <!-- Dynamically populated text cards -->
+        </div>
+      </div>
+
+      <!-- Section 2: Edit Colors & Background -->
+      <div style="background:#121215; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <h4 style="font-size:12px; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-palette text-indigo-400"></i> تعديل الألوان والخلفية
+          </h4>
+          <span style="font-size:10px; color:#A1A1AA;">تطبيق لحظي</span>
+        </div>
+        <div id="mobileColorControlsList" style="display:flex; flex-direction:column; gap:10px;">
+          <!-- Dynamically populated color pickers -->
+        </div>
+      </div>
+
+      <!-- Primary Action Buttons for Mobile -->
+      <div style="display:flex; flex-direction:column; gap:8px; padding-bottom:30px;">
+        <button id="btnMobileUpdatePremiere" class="btn" style="width:100%; min-height:46px; background:#059669; color:#fff; font-weight:700; font-size:13px; border-radius:10px; justify-content:center;">
+          <i class="fa-solid fa-rotate ms-1.5"></i> تحديث في بريمير برو (vN+1)
+        </button>
+        <button id="btnMobileSendPremiere" class="btn btn-amber" style="width:100%; min-height:46px; font-weight:700; font-size:13px; border-radius:10px; justify-content:center;">
+          <i class="fa-solid fa-paper-plane ms-1.5"></i> إرسال المشهد إلى بريمير
+        </button>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         2. WORKSPACE BODY (3 Columns + Bottom Timeline)
+         =================================================================== -->
+    <main class="workspace-body">
+      <!-- ---------------------------------------------------------------
+           LEFT PANEL: LAYERS & TEMPLATES
+           --------------------------------------------------------------- -->
+      <aside class="panel panel-left">
+        <div class="panel-header">
+          <div class="panel-tabs">
+            <button id="tabBtnLayers" class="panel-tab active">الطبقات</button>
+            <button id="tabBtnPresets" class="panel-tab">مكتبة الحركات</button>
+            <button id="tabBtnTemplates" class="panel-tab">النماذج</button>
+            <button id="tabBtnAi" class="panel-tab"><i class="fa-solid fa-wand-magic-sparkles text-amber-400 ml-1"></i>المساعد AI</button>
+          </div>
+          <div class="nav-group">
+            <button id="btnAddLayerBtn" class="icon-btn" title="إضافة طبقة جديدة">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Add Layer Menu Dropdown (Hidden by default) -->
+        <div id="addLayerDropdown" style="display:none; position:absolute; top:40px; right:10px; z-index:40; background:#181b28; border:1px solid var(--border-subtle); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.6); padding:6px; min-width:210px; max-height:80vh; overflow-y:auto;">
+          <div style="font-size:10px; color:var(--text-dim); padding:4px 8px; font-weight:700;">نصوص وأشكال</div>
+          <div class="layer-dropdown-item" data-type="text" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-font text-cyan-400"></i> نص عربي (Text)
+          </div>
+          <div class="layer-dropdown-item" data-type="shape-rounded" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-regular fa-square text-indigo-400"></i> مستطيل مستدير (Rounded Rect)
+          </div>
+          <div class="layer-dropdown-item" data-type="shape-circle" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-regular fa-circle text-indigo-300"></i> دائرة كاملة (Circle)
+          </div>
+          <div class="layer-dropdown-item" data-type="shape-donut" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-regular fa-circle-dot text-amber-400"></i> حلقة دونات (Donut)
+          </div>
+          <div class="layer-dropdown-item" data-type="shape-arrow" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-arrow-left text-amber-300"></i> سهم توجيهي (Arrow)
+          </div>
+          <div class="layer-dropdown-item" data-type="shape-star" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-regular fa-star text-yellow-400"></i> نجمة / مضلع (Star)
+          </div>
+
+          <div style="font-size:10px; color:var(--text-dim); padding:8px 8px 4px 8px; font-weight:700; border-top:1px solid #232738; margin-top:4px;">بيانات ورسوم تفاعلية</div>
+          <div class="layer-dropdown-item" data-type="counter" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-stopwatch-20 text-emerald-400"></i> عداد أرقام صاعد (Counter)
+          </div>
+          <div class="layer-dropdown-item" data-type="progressBar" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-bars-progress text-cyan-400"></i> شريط تقدم (Progress Bar)
+          </div>
+          <div class="layer-dropdown-item" data-type="progressRing" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-circle-notch text-teal-400"></i> حلقة تقدم دائرية (Progress Ring)
+          </div>
+          <div class="layer-dropdown-item" data-type="chart-bar" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-chart-column text-violet-400"></i> رسم بياني أعمدة (Bar Chart)
+          </div>
+          <div class="layer-dropdown-item" data-type="chart-line" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-chart-line text-pink-400"></i> رسم بياني خطي (Line Chart)
+          </div>
+          <div class="layer-dropdown-item" data-type="chart-pie" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-chart-pie text-orange-400"></i> رسم بياني دائري (Pie Chart)
+          </div>
+
+          <div style="font-size:10px; color:var(--text-dim); padding:8px 8px 4px 8px; font-weight:700; border-top:1px solid #232738; margin-top:4px;">وسائط وصور</div>
+          <div class="layer-dropdown-item" data-type="image-upload" style="padding:6px 10px; font-size:12px; cursor:pointer; border-radius:4px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-regular fa-image text-blue-400"></i> رفع صورة (Image Layer)
+          </div>
+        </div>
+
+        <!-- Layers Tab View -->
+        <div id="layersTabView" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+          <div class="search-box-row">
+            <input type="text" id="layerSearchInput" class="search-input" placeholder="بحث في الطبقات...">
+          </div>
+          <div class="layers-list" id="layersListContainer">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Presets Library Tab View -->
+        <div id="presetsTabView" class="presets-grid" style="display:none;">
+          <div style="display:flex; gap:4px; margin-bottom:6px;">
+            <button class="btn btn-primary preset-filter-btn active" data-filter="all" style="padding:2px 8px; font-size:10px;">الكل</button>
+            <button class="btn preset-filter-btn" data-filter="in" style="padding:2px 8px; font-size:10px;">دخول (In)</button>
+            <button class="btn preset-filter-btn" data-filter="out" style="padding:2px 8px; font-size:10px;">خروج (Out)</button>
+            <button class="btn preset-filter-btn" data-filter="loop" style="padding:2px 8px; font-size:10px;">مستمر (Loop)</button>
+          </div>
+          <div id="presetsCardsList" style="display:flex; flex-direction:column; gap:8px;">
+            <!-- Populated dynamically from shared/presets.json -->
+          </div>
+        </div>
+
+        <!-- Templates Tab View -->
+        <div id="templatesTabView" class="templates-tab-view" style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+          <!-- Search & Filter Controls -->
+          <div class="search-box-row" style="flex-shrink:0;">
+            <input type="text" id="templateSearchInput" class="search-input" placeholder="بحث في القوالب والنماذج...">
+          </div>
+
+          <!-- Category Pills -->
+          <div class="template-category-pills" id="templateCategoryPills">
+            <button class="tpl-cat-btn active" data-cat="all">الكل (24+)</button>
+            <button class="tpl-cat-btn" data-cat="my_templates"><i class="fa-solid fa-star text-amber-400 ml-1"></i>قوالبي</button>
+            <button class="tpl-cat-btn" data-cat="lower_thirds">أشرطة تعريفية</button>
+            <button class="tpl-cat-btn" data-cat="titles_intros">عناوين ومقدمات</button>
+            <button class="tpl-cat-btn" data-cat="social_cards">سوشيال ميديا</button>
+            <button class="tpl-cat-btn" data-cat="quote_cards">اقتباسات</button>
+            <button class="tpl-cat-btn" data-cat="subscribe_cta">اشتراك وتفاعل</button>
+            <button class="tpl-cat-btn" data-cat="countdown_counters">عدادات وأرقام</button>
+            <button class="tpl-cat-btn" data-cat="data_charts">مخططات بيانية</button>
+            <button class="tpl-cat-btn" data-cat="news_ticker">شريط إخباري</button>
+            <button class="tpl-cat-btn" data-cat="listicles">قوائم وخطوات</button>
+            <button class="tpl-cat-btn" data-cat="outro_endscreens">شاشات ختامية</button>
+            <button class="tpl-cat-btn" data-cat="transitions">انتقالات</button>
+            <button class="tpl-cat-btn" data-cat="aurora_backgrounds">خلفيات متحركة</button>
+          </div>
+
+          <!-- Language toggle & Quick Action -->
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 10px; font-size:11px; border-bottom:1px solid var(--border-subtle); flex-shrink:0; background:rgba(255,255,255,0.02);">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="color:var(--text-muted);">اللغة:</span>
+              <button id="btnTplLangAr" class="btn btn-primary" style="padding:1px 6px; font-size:10px;">عربي</button>
+              <button id="btnTplLangEn" class="btn" style="padding:1px 6px; font-size:10px;">English</button>
+            </div>
+            <button id="btnQuickSaveTemplate" class="icon-btn" title="حفظ المشهد الحالي كنموذج" style="font-size:11px; padding:2px 6px;">
+              <i class="fa-solid fa-plus text-emerald-400"></i> حفظ الحالي
+            </button>
+          </div>
+
+          <!-- Templates Cards List -->
+          <div class="templates-list-scroll" id="templatesListContainer">
+            <!-- Dynamically populated from templates index & My Templates -->
+          </div>
+        </div>
+
+        <!-- AI Assistant Tab View -->
+        <div id="aiTabView" class="ai-tab-view" style="display:none; flex-direction:column; flex:1; overflow-y:auto; padding:12px; gap:14px;">
+          <!-- Quota Banner -->
+          <div class="ai-quota-card" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <i class="fa-solid fa-bolt-lightning text-amber-400"></i>
+              <span style="font-size:12px; font-weight:600; color:var(--text-main);">رصيد الموشن اليومي:</span>
+            </div>
+            <span id="aiMotionQuotaBadge" class="quota-pill" style="font-size:11px; font-weight:700; color:#38bdf8; background:rgba(56,189,248,0.12); padding:2px 8px; border-radius:12px; border:1px solid rgba(56,189,248,0.3);">جاري التحقق...</span>
+          </div>
+
+          <!-- Section 1: Prompt to Scene -->
+          <div class="ai-card" style="background:#131624; border:1px solid var(--border-subtle); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:13px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                <span>توليد مشهد كامل من الفكرة</span>
+              </div>
+              <span style="font-size:10px; color:var(--text-muted); background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px;">Gemini AI</span>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <textarea id="aiPromptInput" class="form-input" rows="3" placeholder="اكتب فكرة المشهد... (مثال: شريط تعريفي فخم لقناة تقنية باللون الكحلي والذهبي مع حركة سلايد ناعمة)" style="width:100%; resize:vertical; font-size:12px; line-height:1.6;"></textarea>
+            </div>
+
+            <!-- Options Row -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="color:var(--text-muted);">الأبعاد:</span>
+                <select id="aiAspectSelector" class="form-input" style="width:auto; padding:2px 6px; font-size:11px;">
+                  <option value="16:9">16:9 أفقي</option>
+                  <option value="9:16">9:16 طولي</option>
+                  <option value="1:1">1:1 مربع</option>
+                  <option value="4:5">4:5 سوشيال</option>
+                </select>
+              </div>
+
+              <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-muted); font-size:11px;">
+                <input type="checkbox" id="aiUseBrandKit" checked style="accent-color:var(--accent-primary);">
+                <span>تطبيق الهوية</span>
+              </label>
+            </div>
+
+            <!-- Quick Ideas Chips -->
+            <div style="display:flex; flex-wrap:wrap; gap:4px;">
+              <button class="ai-chip-btn" data-prompt="شريط تعريفي احترافي لقناة وثائقية باسم المتحدث ووظيفته">شريط تعريفي</button>
+              <button class="ai-chip-btn" data-prompt="مقدمة فيديو بعنوان قوي جذاب باللون البنفسجي وحركة تكبير ناعمة">مقدمة فيديو</button>
+              <button class="ai-chip-btn" data-prompt="كارت اقتباس أنيق على خلفية داكنة مع حركة ظهور ناعمة للنص">اقتباس ملهم</button>
+              <button class="ai-chip-btn" data-prompt="شاشة ختامية لليوتيوب مع زر اشترك وفعل الجرس">شاشة ختامية</button>
+            </div>
+
+            <button id="btnAiGenerateScene" class="btn btn-primary" style="width:100%; justify-content:center; padding:8px 12px; gap:8px; font-size:12px;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>توليد المشهد بالذكاء الاصطناعي</span>
+            </button>
+          </div>
+
+          <!-- Section 2: Edit by Chat -->
+          <div class="ai-card" style="background:#131624; border:1px solid var(--border-subtle); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:13px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                <i class="fa-regular fa-comment-dots text-cyan-400"></i>
+                <span>محرر المشهد بالمحادثة (Chat Edit)</span>
+              </div>
+              <span style="font-size:10px; color:var(--text-muted);">يدعم التراجع Ctrl+Z</span>
+            </div>
+
+            <!-- Chat messages container -->
+            <div id="aiChatMessages" class="ai-chat-box" style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; padding:8px; background:rgba(0,0,0,0.25); border-radius:6px; border:1px solid rgba(255,255,255,0.04); font-size:12px;">
+              <div class="chat-msg assistant" style="background:rgba(255,255,255,0.05); padding:6px 10px; border-radius:8px; color:var(--text-main);">
+                مرحباً! يمكنك أن تطلب مني أي تعديل على المشهد الحالي؛ مثل: "خلي العنوان أكبر"، "غيّر الخلفية للأزرق"، أو "أضف شريط سفلي".
+              </div>
+            </div>
+
+            <!-- Chat input row -->
+            <div style="display:flex; gap:6px;">
+              <input type="text" id="aiChatInput" class="form-input" placeholder="اكتب طلب التعديل هنا..." style="flex:1; font-size:12px;">
+              <button id="btnAiSendChat" class="btn btn-primary" style="padding:6px 12px; font-size:12px;" title="إرسال التعديل">
+                <i class="fa-solid fa-paper-plane"></i>
+              </button>
+            </div>
+
+            <!-- Quick Edit Suggestions Chips -->
+            <div style="display:flex; flex-wrap:wrap; gap:4px;">
+              <button class="ai-edit-chip-btn" data-edit="خلي العنوان أكبر بمقدار 20% واجعله بلون أبيض ناصع">تكبير العنوان</button>
+              <button class="ai-edit-chip-btn" data-edit="غيّر لون الخلفية إلى أزرق داكن فخم">خلفية زرقاء</button>
+              <button class="ai-edit-chip-btn" data-edit="طبّق ألوان الهوية البصرية الرئيسية على النصوص والأشكال">تطبيق الهوية</button>
+              <button class="ai-edit-chip-btn" data-edit="اجعل حركة الدخول لجميع النصوص أسرع">تسريع الحركة</button>
+            </div>
+          </div>
+
+          <!-- Section 3: Smart Audit & Design Suggestions -->
+          <div class="ai-card" style="background:#131624; border:1px solid var(--border-subtle); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:13px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-list-check text-emerald-400"></i>
+                <span>فحص التصميم واقتراحات التحسين</span>
+              </div>
+            </div>
+
+            <p style="font-size:11px; color:var(--text-muted); margin:0;">
+              فحص برمجي دقيق لتباين الألوان (WCAG)، مقاسات الخط للشاشات الصغيرة، منطقة الأمان (Safe Area)، وسرعة قراءة النصوص.
+            </p>
+
+            <button id="btnAiAuditScene" class="btn" style="width:100%; justify-content:center; padding:8px 12px; gap:8px; font-size:12px; border:1px solid var(--border-subtle);">
+              <i class="fa-solid fa-magnifying-glass-chart text-emerald-400"></i>
+              <span>فحص واقتراحات التحسين</span>
+            </button>
+
+            <!-- Suggestions Results List -->
+            <div id="aiSuggestionsList" style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Technical Error Section (Expandable Details) -->
+          <div id="aiErrorBox" style="display:none; flex-direction:column; gap:6px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:10px;">
+            <div style="display:flex; align-items:center; gap:8px; color:#f87171; font-size:12px; font-weight:600;">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span id="aiErrorFriendlyMsg">حدث خطأ أثناء معالجة الطلب.</span>
+            </div>
+            <details style="font-size:11px; color:var(--text-muted); cursor:pointer;">
+              <summary style="user-select:none; color:var(--text-dim); margin-top:4px;">عرض التفاصيل التقنية للخطأ</summary>
+              <pre id="aiErrorTechDetails" style="background:#0b0d14; padding:8px; border-radius:6px; overflow-x:auto; margin-top:6px; font-size:10px; color:#fca5a5; white-space:pre-wrap;"></pre>
+            </details>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ---------------------------------------------------------------
+           CENTER VIEWPORT: CANVAS & STAGE
+           --------------------------------------------------------------- -->
+      <section class="panel-center">
+        <!-- Canvas Viewport Controls -->
+        <div class="canvas-toolbar">
+          <div class="toolbar-group">
+            <select id="canvasZoomSelector" class="form-input" style="width:auto; padding:2px 6px; font-size:11px;">
+              <option value="fit">ملء الشاشة (Fit)</option>
+              <option value="0.25">25%</option>
+              <option value="0.5">50%</option>
+              <option value="0.75">75%</option>
+              <option value="1" selected>100%</option>
+              <option value="1.5">150%</option>
+              <option value="2">200%</option>
+            </select>
+
+            <button id="btnToggleSnap" class="icon-btn active" title="المحاذاة الذكية والحواف (Snap)">
+              <i class="fa-solid fa-magnet"></i>
+            </button>
+            <button id="btnToggleGrid" class="icon-btn" title="شبكة الإرشاد (Grid)">
+              <i class="fa-solid fa-border-all"></i>
+            </button>
+            <button id="btnToggleSafeZone" class="icon-btn" title="مناطق الأمان للسوشيال ميديا (Safe Zone)">
+              <i class="fa-solid fa-crop-simple"></i>
+            </button>
+            <button id="btnToggleCheckerboard" class="icon-btn active" title="خلفية الشفافية (Checkerboard)">
+              <i class="fa-solid fa-chess-board"></i>
+            </button>
+          </div>
+
+          <!-- Alignment & Distribution Controls -->
+          <div class="toolbar-group">
+            <button id="btnAlignLeft" class="icon-btn" title="محاذاة لليسار"><i class="fa-solid fa-align-left"></i></button>
+            <button id="btnAlignCenterH" class="icon-btn" title="محاذاة للمنتصف أفقياً"><i class="fa-solid fa-align-center"></i></button>
+            <button id="btnAlignRight" class="icon-btn" title="محاذاة لليمين"><i class="fa-solid fa-align-right"></i></button>
+            <button id="btnAlignTop" class="icon-btn" title="محاذاة للأعلى"><i class="fa-solid fa-arrows-up-to-line"></i></button>
+            <button id="btnAlignCenterV" class="icon-btn" title="محاذاة للمنتصف رأسياً"><i class="fa-solid fa-grip-lines"></i></button>
+            <button id="btnAlignBottom" class="icon-btn" title="محاذاة للأسفل"><i class="fa-solid fa-arrows-down-to-line"></i></button>
+
+            <div style="width: 1px; height: 16px; background: var(--border-subtle); margin: 0 4px;"></div>
+
+            <button id="btnDuplicateLayer" class="icon-btn" title="تكرار الطبقة (Ctrl+D)"><i class="fa-regular fa-clone"></i></button>
+            <button id="btnGroupLayers" class="icon-btn" title="تجميع / فك تجميع الطبقات (Ctrl+G)"><i class="fa-solid fa-object-group"></i></button>
+            <button id="btnStaggerLayers" class="icon-btn" title="توزيع زمني متتابع للطبقات (Stagger)"><i class="fa-solid fa-layer-group"></i></button>
+            <button id="btnDeleteLayer" class="icon-btn text-danger" title="حذف الطبقة (Delete)"><i class="fa-regular fa-trash-can"></i></button>
+          </div>
+        </div>
+
+        <!-- Canvas Viewport Stage -->
+        <div class="canvas-container" id="canvasContainer">
+          <div class="viewport-stage" id="viewportStage">
+            <!-- Native Canvas (Rendered via shared/motion-engine.js) -->
+            <div id="canvasCheckerWrap" class="canvas-checkerboard">
+              <canvas id="mainCanvas" width="1920" height="1080"></canvas>
+            </div>
+
+            <!-- Overlays -->
+            <div id="gridOverlay" class="grid-overlay"></div>
+            <div id="safeZoneOverlay" class="safe-zone-overlay">
+              <div class="safe-action-box" title="Action Safe 93%"></div>
+              <div class="safe-title-box" title="Title Safe 90%"></div>
+            </div>
+
+            <!-- Interactive Transform Handles Box -->
+            <div id="transformBox" class="transform-box" style="display:none;">
+              <div class="transform-handle handle-nw" data-handle="nw"></div>
+              <div class="transform-handle handle-n"  data-handle="n"></div>
+              <div class="transform-handle handle-ne" data-handle="ne"></div>
+              <div class="transform-handle handle-e"  data-handle="e"></div>
+              <div class="transform-handle handle-se" data-handle="se"></div>
+              <div class="transform-handle handle-s"  data-handle="s"></div>
+              <div class="transform-handle handle-sw" data-handle="sw"></div>
+              <div class="transform-handle handle-w"  data-handle="w"></div>
+
+              <div class="handle-rot-line"></div>
+              <div class="handle-rot" data-handle="rot" title="تدوير العنصر"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------------
+           RIGHT PANEL: PROPERTIES & ATTRIBUTES
+           --------------------------------------------------------------- -->
+      <aside class="panel panel-properties">
+        <div class="panel-header">
+          <span>خصائص العنصر</span>
+          <span id="selectedLayerBadge" style="font-size:10px; color:var(--text-muted); font-weight:normal;">لا يوجد تحديد</span>
+        </div>
+
+        <div class="props-scroll" id="propsContainer">
+          <!-- 1. Transform Section -->
+          <div class="prop-section">
+            <div class="prop-header">التحويل والموضع (Transform)</div>
+            <div class="prop-body">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" title="اسحب يميناً أو يساراً للتعديل السريع">الموضع X</label>
+                  <input type="number" id="propX" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" title="اسحب يميناً أو يساراً للتعديل السريع">الموضع Y</label>
+                  <input type="number" id="propY" class="form-input">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">العرض W</label>
+                  <input type="number" id="propW" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">الارتفاع H</label>
+                  <input type="number" id="propH" class="form-input">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">الدوران (°)</label>
+                  <input type="number" id="propRot" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">الشفافية (%)</label>
+                  <input type="number" id="propOpacity" min="0" max="100" class="form-input">
+                </div>
+              </div>
+              <div class="form-group" style="margin-top:6px;">
+                <label class="form-label">الطبقة الأم (Parent)</label>
+                <select id="propParentId" class="form-input">
+                  <option value="">بدون أب (مستقلة)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Appearance & Style Section -->
+          <div class="prop-section">
+            <div class="prop-header">المظهر والنمط (Style)</div>
+            <div class="prop-body">
+              <div class="form-group">
+                <label class="form-label">لون التعبئة (Fill)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="propFillPicker" class="color-swatch-btn">
+                  <input type="text" id="propFillText" class="form-input" style="font-family:var(--font-mono); font-size:11px;">
+                  <button id="btnEyedropper" class="icon-btn" title="التقاط لون من الشاشة (Eyedropper)">
+                    <i class="fa-solid fa-eye-dropper"></i>
+                  </button>
+                </div>
+                <!-- Brand Color Swatches -->
+                <div class="brand-swatches">
+                  <div class="brand-swatch" style="background:#6366f1;" data-color="#6366f1" title="Mickey Indigo"></div>
+                  <div class="brand-swatch" style="background:#06b6d4;" data-color="#06b6d4" title="Cyan Accent"></div>
+                  <div class="brand-swatch" style="background:#10b981;" data-color="#10b981" title="Emerald Green"></div>
+                  <div class="brand-swatch" style="background:#f59e0b;" data-color="#f59e0b" title="Amber Orange"></div>
+                  <div class="brand-swatch" style="background:#ef4444;" data-color="#ef4444" title="Red Flame"></div>
+                  <div class="brand-swatch" style="background:#ffffff;" data-color="#ffffff" title="Pure White"></div>
+                  <div class="brand-swatch" style="background:#141724;" data-color="#141724" title="Dark Slate"></div>
+                  <div class="brand-swatch" style="background:#000000;" data-color="#000000" title="Pure Black"></div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">لون الإطار (Stroke)</label>
+                  <div class="color-input-wrap">
+                    <input type="color" id="propStrokePicker" class="color-swatch-btn">
+                    <input type="number" id="propStrokeWidth" min="0" max="40" placeholder="0px" class="form-input">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">استدارة الحواف</label>
+                  <input type="number" id="propRadius" min="0" max="500" class="form-input">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">الظل الخارجي (Shadow)</label>
+                <div class="form-row">
+                  <input type="number" id="propShadowBlur" min="0" max="100" placeholder="التمويه" class="form-input">
+                  <input type="number" id="propShadowY" min="-100" max="100" placeholder="الإزاحة Y" class="form-input">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Text Section (Conditional) -->
+          <div class="prop-section" id="propSectionText" style="display:none;">
+            <div class="prop-header">خصائص النص (Typography)</div>
+            <div class="prop-body">
+              <div class="form-group">
+                <label class="form-label">محتوى النص</label>
+                <textarea id="propTextContent" rows="3" class="form-input" style="resize:vertical;"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">نوع الخط (Bundled OFL Fonts)</label>
+                <select id="propFontFamily" class="form-input">
+                  <option value="Cairo" style="font-family:'Cairo';">Cairo — واضح وعريض</option>
+                  <option value="Tajawal" style="font-family:'Tajawal';">Tajawal — خفيف وأنيق</option>
+                  <option value="Almarai" style="font-family:'Almarai';">Almarai — هندسي دقيق</option>
+                  <option value="Noto Kufi Arabic" style="font-family:'Noto Kufi Arabic';">Noto Kufi — كوفي كلاسيكي</option>
+                  <option value="Readex Pro" style="font-family:'Readex Pro';">Readex Pro — تقني عصري</option>
+                  <option value="Inter" style="font-family:'Inter';">Inter — لاتيني وأرقام</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">الحجم (px)</label>
+                  <input type="number" id="propFontSize" min="8" max="300" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">المحاذاة</label>
+                  <select id="propTextAlign" class="form-input">
+                    <option value="right">يمين (Right)</option>
+                    <option value="center">وسط (Center)</option>
+                    <option value="left">يسار (Left)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Text Effect: Gradient -->
+              <div style="border-top:1px solid #232738; padding-top:8px; margin-top:8px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" id="propTextGradToggle">
+                  <span style="font-weight:700;">تدرج لوني للنص (Gradient Fill)</span>
+                </label>
+                <div id="propTextGradControls" style="display:none; margin-top:6px; gap:6px;" class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">اللون الأول</label>
+                    <input type="color" id="propTextGradColor1" value="#6366f1" class="color-swatch-btn">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">اللون الثاني</label>
+                    <input type="color" id="propTextGradColor2" value="#06b6d4" class="color-swatch-btn">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">الزاوية (°)</label>
+                    <input type="number" id="propTextGradAngle" value="45" min="0" max="360" class="form-input">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Text Effect: Glow -->
+              <div style="border-top:1px solid #232738; padding-top:8px; margin-top:8px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" id="propTextGlowToggle">
+                  <span style="font-weight:700;">توهج ضوئي (Neon Glow)</span>
+                </label>
+                <div id="propTextGlowControls" style="display:none; margin-top:6px;" class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">لون التوهج</label>
+                    <input type="color" id="propTextGlowColor" value="#06b6d4" class="color-swatch-btn">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">المدى (Blur)</label>
+                    <input type="number" id="propTextGlowBlur" value="20" min="2" max="60" class="form-input">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Text Effect: Background Box -->
+              <div style="border-top:1px solid #232738; padding-top:8px; margin-top:8px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" id="propTextBgBoxToggle">
+                  <span style="font-weight:700;">خلفية لكامل النص (Background Box)</span>
+                </label>
+                <div id="propTextBgBoxControls" style="display:none; margin-top:6px;" class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">اللون</label>
+                    <input type="color" id="propTextBgBoxColor" value="#1e293b" class="color-swatch-btn">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">الهامش (Pad)</label>
+                    <input type="number" id="propTextBgBoxPadding" value="12" min="0" max="60" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">الاستدارة</label>
+                    <input type="number" id="propTextBgBoxRadius" value="8" min="0" max="40" class="form-input">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Text Effect: Per-Line Background (Lower-Third) -->
+              <div style="border-top:1px solid #232738; padding-top:8px; margin-top:8px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" id="propTextPerLineBgToggle">
+                  <span style="font-weight:700;">خلفية منفصلة لكل سطر (Lower-Third Pill)</span>
+                </label>
+                <div id="propTextPerLineBgControls" style="display:none; margin-top:6px;" class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">اللون</label>
+                    <input type="color" id="propTextPerLineBgColor" value="#0f172a" class="color-swatch-btn">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">الهامش</label>
+                    <input type="number" id="propTextPerLineBgPadding" value="8" min="0" max="40" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">الاستدارة</label>
+                    <input type="number" id="propTextPerLineBgRadius" value="6" min="0" max="30" class="form-input">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Counter Section (Conditional) -->
+          <div class="prop-section" id="propSectionCounter" style="display:none;">
+            <div class="prop-header">خصائص العداد الرقمي (Counter)</div>
+            <div class="prop-body">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">القيمة الأولى</label>
+                  <input type="number" id="propCounterStart" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">القيمة النهائية</label>
+                  <input type="number" id="propCounterEnd" class="form-input">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">بادئة (Prefix)</label>
+                  <input type="text" id="propCounterPrefix" placeholder="$ أو +" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">لاحقة (Suffix)</label>
+                  <input type="text" id="propCounterSuffix" placeholder="% أو ج.م" class="form-input">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Shape Section (Conditional) -->
+          <div class="prop-section" id="propSectionShape" style="display:none;">
+            <div class="prop-header">خصائص الشكل والرسم (Shape & Trim)</div>
+            <div class="prop-body">
+              <div class="form-group">
+                <label class="form-label">نوع الشكل</label>
+                <select id="propShapeType" class="form-input">
+                  <option value="rounded-rect">مستطيل مستدير</option>
+                  <option value="circle">دائرة كاملة</option>
+                  <option value="donut">حلقة دونات</option>
+                  <option value="arrow">سهم توجيهي</option>
+                  <option value="star">نجمة</option>
+                  <option value="polygon">مضلع منتظم</option>
+                </select>
+              </div>
+              <div class="form-group" id="propShapeSidesGroup" style="display:none;">
+                <label class="form-label">عدد الأضلاع / الرؤوس</label>
+                <input type="number" id="propShapeSides" min="3" max="12" value="5" class="form-input">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">قص المسار بداية (%)</label>
+                  <input type="number" id="propTrimStart" min="0" max="100" value="0" class="form-input" title="Trim Path Start %">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">قص المسار نهاية (%)</label>
+                  <input type="number" id="propTrimEnd" min="0" max="100" value="100" class="form-input" title="Trim Path End %">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. Progress Section (Conditional) -->
+          <div class="prop-section" id="propSectionProgress" style="display:none;">
+            <div class="prop-header">خصائص شريط / حلقة التقدم</div>
+            <div class="prop-body">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">نسبة التقدم (%)</label>
+                  <input type="number" id="propProgressValue" min="0" max="100" value="75" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">سُمك المسار (px)</label>
+                  <input type="number" id="propProgressThickness" min="2" max="60" value="12" class="form-input">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">لون مسار الخلفية (Track)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="propProgressTrackPicker" value="#232738" class="color-swatch-btn">
+                  <input type="text" id="propProgressTrackText" value="#232738" class="form-input" style="font-family:var(--font-mono); font-size:11px;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 7. Chart Section (Conditional) -->
+          <div class="prop-section" id="propSectionChart" style="display:none;">
+            <div class="prop-header">خصائص المخطط البياني (Chart)</div>
+            <div class="prop-body">
+              <div class="form-group">
+                <label class="form-label">نوع المخطط</label>
+                <select id="propChartType" class="form-input">
+                  <option value="bar">أعمدة (Bar Chart)</option>
+                  <option value="line">خطي (Line Chart)</option>
+                  <option value="pie">دائري (Pie Chart)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">البيانات (الاسم: القيمة مفصولة بفواصل)</label>
+                <input type="text" id="propChartDataRaw" placeholder="السبت:30, الأحد:60, الإثنين:95" class="form-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- 8. Image Section (Conditional) -->
+          <div class="prop-section" id="propSectionImage" style="display:none;">
+            <div class="prop-header">خصائص الصورة والوسائط (Image)</div>
+            <div class="prop-body">
+              <div class="form-group">
+                <button id="btnChangeImageFile" class="btn btn-primary" style="width:100%;">
+                  <i class="fa-regular fa-image"></i>
+                  <span>تغيير / رفع صورة جديدة</span>
+                </button>
+              </div>
+              <div class="form-group">
+                <label class="form-label">قناع القص (Mask)</label>
+                <select id="propImageMask" class="form-input">
+                  <option value="none">بدون قناع (كامل الصورة)</option>
+                  <option value="circle">قص دائري (Circle)</option>
+                  <option value="rounded">قص مستطيل مستدير (Rounded)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input type="checkbox" id="propImageKenBurns">
+                  <span>تأثير Ken Burns السينمائي (تكبير وتحريك بطيء)</span>
+                </label>
+              </div>
+              <div class="form-group" style="margin-top:6px;">
+                <button id="btnRemoveImageBg" class="btn" style="width:100%; font-size:11px;">
+                  <i class="fa-solid fa-wand-magic text-cyan-400"></i>
+                  <span>إزالة الخلفية الذكية (Photo Lab)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Animation Presets Section -->
+          <div class="prop-section">
+            <div class="prop-header">الحركات التلقائية والمؤثرات (Presets & Audio)</div>
+            <div class="prop-body">
+              <div class="form-group">
+                <label class="form-label">حركة الدخول (In Animation)</label>
+                <div class="form-row">
+                  <select id="presetInName" class="form-input">
+                    <option value="none">بدون حركة (None)</option>
+                    <option value="pop">تكبير نطّاط (Pop)</option>
+                    <option value="slideUp">انزلاق للأعلى (Slide Up)</option>
+                    <option value="slideDown">انزلاق للأسفل (Slide Down)</option>
+                    <option value="fade">تلاشي ناعم (Fade In)</option>
+                    <option value="typewriter">آلة كاتبة (Typewriter)</option>
+                    <option value="bounce">ارتداد نطاط (Bounce)</option>
+                    <option value="blurIn">ظهور بتمويه (Blur In)</option>
+                  </select>
+                  <input type="number" id="presetInDur" step="0.1" min="0.1" max="5.0" placeholder="المدة (ث)" class="form-input">
+                </div>
+              </div>
+
+              <!-- SFX Sound Effect -->
+              <div class="form-group">
+                <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                  <span>مؤثر صوتي مجاني (SFX)</span>
+                  <span style="font-size:9px; color:var(--accent-cyan); font-weight:normal;"><i class="fa-solid fa-certificate"></i> CC0 مجاني 100%</span>
+                </label>
+                <div class="form-row">
+                  <select id="presetInSFX" class="form-input">
+                    <option value="">بدون صوت (None)</option>
+                    <option value="whoosh">صوت انزلاق هوائي (Whoosh)</option>
+                    <option value="pop">صوت فقاعة بوب (Pop)</option>
+                    <option value="click">نقرة دقيقة (Crisp Click)</option>
+                    <option value="riser">تصاعد حماسي (Tension Riser)</option>
+                    <option value="impact">صدمة قوية (Bass Impact)</option>
+                  </select>
+                  <button id="btnPreviewSFX" class="icon-btn" title="معاينة الصوت فوراً">
+                    <i class="fa-solid fa-volume-high text-cyan-400"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">حركة مستمرة (Loop)</label>
+                <select id="presetLoopName" class="form-input">
+                  <option value="none">بدون تكرار (None)</option>
+                  <option value="float">تعويم هادئ (Float)</option>
+                  <option value="pulse">نبض نابض (Pulse)</option>
+                  <option value="spin">دوران مستمر (Spin)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ---------------------------------------------------------------
+           BOTTOM PANEL: TIMELINE & KEYFRAMES
+           --------------------------------------------------------------- -->
+      <footer class="panel panel-timeline">
+        <!-- Multi-Scene Switcher Bar -->
+        <div class="scene-switcher-bar">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-weight:700; color:var(--text-muted);"><i class="fa-solid fa-film text-indigo-400 ml-1"></i> المشاهد:</span>
+            <div class="scene-tabs-list" id="sceneTabsList"></div>
+            <button id="btnAddSceneBtn" class="icon-btn" title="إضافة مشهد جديد"><i class="fa-solid fa-plus"></i></button>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="color:var(--text-muted);">الانتقال للمشهد التالي:</label>
+            <select id="sceneTransitionSelector" class="form-input" style="width:auto; padding:2px 6px; font-size:11px;">
+              <option value="cut">قطع مباشر (Cut)</option>
+              <option value="fade">تلاشي ناعم (Fade)</option>
+              <option value="slide">انزلاق جانبي (Slide)</option>
+              <option value="wipe">مسح ستائري (Wipe)</option>
+            </select>
+            <input type="number" id="sceneTransitionDur" min="0.1" max="2.0" step="0.1" value="0.5" style="width:55px; padding:2px 6px; font-size:11px;" class="form-input" title="مدة الانتقال بالثواني">
+            <button id="btnPlayAllScenes" class="btn btn-amber" style="padding:3px 10px; font-size:11px;" title="تشغيل كافة مشاهد المشروع بتأثيرات الانتقال">
+              <i class="fa-solid fa-clapperboard"></i>
+              <span>تشغيل الكل</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls & Timecode Bar -->
+        <div class="timeline-controls-bar">
+          <div class="nav-group">
+            <button id="btnPlayPause" class="btn btn-primary" title="تشغيل / إيقاف مؤقت (المسافة Space)">
+              <i class="fa-solid fa-play" id="playPauseIcon"></i>
+              <span id="playPauseText">تشغيل</span>
+            </button>
+            <button id="btnStopTimeline" class="icon-btn" title="العودة للصفر">
+              <i class="fa-solid fa-stop"></i>
+            </button>
+            <button id="btnPrevKeyframe" class="icon-btn" title="المفتاح السابق">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button id="btnNextKeyframe" class="icon-btn" title="المفتاح التالي">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button id="btnAddKeyframe" class="btn" title="إضافة مفتاح حركة عند المؤشر (K)">
+              <i class="fa-solid fa-diamond text-amber-400"></i>
+              <span>مفتاح حركة (K)</span>
+            </button>
+          </div>
+
+          <div class="timecode-display" id="timecodeDisplay">00:00.00 / 00:05.00 (#0)</div>
+
+          <div class="nav-group">
+            <span style="font-size:11px; color:var(--text-muted);">التكبير:</span>
+            <button id="btnZoomOutTimeline" class="icon-btn" title="تصغير"><i class="fa-solid fa-minus"></i></button>
+            <button id="btnZoomInTimeline" class="icon-btn" title="تكبير"><i class="fa-solid fa-plus"></i></button>
+            <button id="btnZoomFitTimeline" class="icon-btn" title="ملاءمة العرض"><i class="fa-solid fa-arrows-left-right"></i></button>
+          </div>
+
+          <div class="nav-group">
+            <button id="btnUploadMusic" class="btn" title="إضافة ملف موسيقى خلفية للمشهد (MP3/WAV)">
+              <i class="fa-solid fa-music text-amber-400"></i>
+              <span id="musicBtnLabel">موسيقى</span>
+            </button>
+            <button id="btnToggleMusicMute" class="icon-btn" title="كتم / تشغيل الموسيقى" style="display:none;">
+              <i class="fa-solid fa-volume-high" id="musicMuteIcon"></i>
+            </button>
+            <button id="btnRemoveMusic" class="icon-btn text-danger" title="حذف مسار الموسيقى" style="display:none;">
+              <i class="fa-regular fa-trash-can"></i>
+            </button>
+            <input type="file" id="musicFileInput" accept="audio/*" style="display:none;">
+          </div>
+        </div>
+
+        <!-- Tracks & Layers Timeline Body -->
+        <div class="timeline-body">
+          <!-- Left: Layer Headers List -->
+          <div class="timeline-layers-header">
+            <div class="timeline-ruler-header">الطبقة</div>
+            <div class="timeline-layer-headers-list" id="timelineHeadersContainer">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Right: Tracks Viewport with Time Ruler -->
+          <div class="timeline-tracks-viewport" id="timelineTracksViewport">
+            <!-- Time Ruler Canvas -->
+            <canvas id="timeRulerCanvas" class="time-ruler-canvas" height="26"></canvas>
+
+            <!-- Tracks Scrollable Area -->
+            <div class="timeline-tracks-container" id="timelineTracksContainer">
+              <!-- Track rows and clip bars generated dynamically -->
+            </div>
+
+            <!-- Draggable Playhead Needle -->
+            <div id="playheadLine" class="timeline-playhead-line" style="left:0px;">
+              <div id="playheadHead" class="timeline-playhead-head"></div>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <!-- ===================================================================
+         MODALS & OVERLAYS
+         =================================================================== -->
+    <!-- 1. Shortcuts Help Modal -->
+    <div id="modalShortcuts" class="modal-backdrop">
+      <div class="modal-window">
+        <div class="modal-header">
+          <span>اختصارات لوحة المفاتيح</span>
+          <button class="icon-btn close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <table class="shortcuts-table">
+            <tbody>
+              <tr><td><kbd>المسافة Space</kbd></td><td>تشغيل / إيقاف مؤقت لمعاينة المشهد</td></tr>
+              <tr><td><kbd>Ctrl + Z</kbd></td><td>تراجع عن آخر إجراء (Undo)</td></tr>
+              <tr><td><kbd>Ctrl + Y</kbd> / <kbd>Ctrl + Shift + Z</kbd></td><td>إعادة الإجراء (Redo)</td></tr>
+              <tr><td><kbd>Ctrl + D</kbd></td><td>تكرار ومضاعفة الطبقة المحددة (Duplicate)</td></tr>
+              <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>حذف الطبقة المحددة</td></tr>
+              <tr><td><kbd>K</kbd></td><td>إضافة مفتاح حركة (Keyframe) عند موضع المؤشر</td></tr>
+              <tr><td><kbd>مفاتيح الأسهم</kbd></td><td>تحريك الطبقة 1 بكسل (مع <kbd>Shift</kbd> 10 بكسل)</td></tr>
+              <tr><td><kbd>Ctrl + A</kbd></td><td>تحديد جميع طبقات المشهد</td></tr>
+              <tr><td><kbd>Ctrl + 0</kbd></td><td>ملاءمة المشهد مع الشاشة (Fit to Viewport)</td></tr>
+              <tr><td><kbd>?</kbd></td><td>فتح نافذة المساعد هذه في أي وقت</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Custom Dimensions Modal -->
+    <div id="modalCustomAspect" class="modal-backdrop">
+      <div class="modal-window" style="max-width:380px;">
+        <div class="modal-header">
+          <span>تحديد مقاس مخصص للمشهد</span>
+          <button class="icon-btn close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-3">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">العرض (px)</label>
+              <input type="number" id="customWInput" value="1920" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">الارتفاع (px)</label>
+              <input type="number" id="customHInput" value="1080" class="form-input">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">معدل الإطارات (FPS)</label>
+              <input type="number" id="customFpsInput" value="30" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">مدة المشهد (ثوانٍ)</label>
+              <input type="number" id="customDurInput" value="5.0" step="0.5" class="form-input">
+            </div>
+          </div>
+          <button id="btnApplyCustomAspect" class="btn btn-primary" style="width:100%; margin-top:10px;">تطبيق المقاس</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Stagger Layers Modal -->
+    <div id="modalStagger" class="modal-backdrop">
+      <div class="modal-window" style="max-width:360px;">
+        <div class="modal-header">
+          <span>توزيع زمني متتابع (Stagger)</span>
+          <button class="icon-btn close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-3">
+          <p style="color:var(--text-muted);">ترحيل أوقات بدء الطبقات المحددة بفاصل زمني محدد لإنشاء تتابع انسيابي.</p>
+          <div class="form-group">
+            <label class="form-label">الفاصل الزمني بين كل طبقة والتي تليها (ثوانٍ):</label>
+            <input type="number" id="staggerOffsetInput" value="0.2" step="0.05" min="0.05" max="3.0" class="form-input">
+          </div>
+          <button id="btnApplyStagger" class="btn btn-primary" style="width:100%; margin-top:10px;">تطبيق التوزيع الزمني</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Brand Kit Modal -->
+    <div id="modalBrandKit" class="modal-backdrop">
+      <div class="modal-window" style="max-width:580px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-palette text-indigo-400"></i>
+            <span style="font-weight:700;">الهوية البصرية للعلامة التجارية (Brand Kit)</span>
+          </div>
+          <button class="icon-btn close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-4" style="max-height:75vh; overflow-y:auto; padding:16px;">
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+            قم بإعداد ألوان وخطوط وشعار هويتك لمرة واحدة، ليتم تطبيقها بنقرة واحدة على أي مشهد أو قالب.
+          </p>
+
+          <!-- 1. Brand Colors -->
+          <div style="background:var(--bg-card); padding:12px; border-radius:8px; border:1px solid var(--border-subtle);">
+            <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-main);">
+              <i class="fa-solid fa-droplet text-indigo-400 ml-1"></i> ألوان الهوية (Brand Colors)
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
+              <div class="form-group">
+                <label class="form-label" style="font-size:10px;">الأساسي (Primary)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="bkColorPrimary" value="#6366f1" class="color-swatch-btn">
+                  <input type="text" id="bkColorPrimaryText" value="#6366f1" class="form-input" style="font-size:10px; font-family:var(--font-mono);">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size:10px;">الثانوي (Secondary)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="bkColorSecondary" value="#06b6d4" class="color-swatch-btn">
+                  <input type="text" id="bkColorSecondaryText" value="#06b6d4" class="form-input" style="font-size:10px; font-family:var(--font-mono);">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size:10px;">التمييز (Accent)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="bkColorAccent" value="#f59e0b" class="color-swatch-btn">
+                  <input type="text" id="bkColorAccentText" value="#f59e0b" class="form-input" style="font-size:10px; font-family:var(--font-mono);">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size:10px;">الداكن (Dark)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="bkColorDark" value="#0d0f18" class="color-swatch-btn">
+                  <input type="text" id="bkColorDarkText" value="#0d0f18" class="form-input" style="font-size:10px; font-family:var(--font-mono);">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size:10px;">الفاتح (Light)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="bkColorLight" value="#ffffff" class="color-swatch-btn">
+                  <input type="text" id="bkColorLightText" value="#ffffff" class="form-input" style="font-size:10px; font-family:var(--font-mono);">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size:10px;">الإضافي (Extra)</label>
+                <div class="color-input-wrap">
+                  <input type="color" id="bkColorExtra" value="#10b981" class="color-swatch-btn">
+                  <input type="text" id="bkColorExtraText" value="#10b981" class="form-input" style="font-size:10px; font-family:var(--font-mono);">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Brand Fonts -->
+          <div style="background:var(--bg-card); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-top:10px;">
+            <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-main);">
+              <i class="fa-solid fa-font text-cyan-400 ml-1"></i> خطوط الهوية (Bundled OFL Fonts)
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">خط العناوين (Heading Font)</label>
+                <select id="bkFontHeading" class="form-input">
+                  <option value="Cairo" style="font-family:'Cairo';">Cairo — واضح وعريض</option>
+                  <option value="Tajawal" style="font-family:'Tajawal';">Tajawal — خفيف وأنيق</option>
+                  <option value="Almarai" style="font-family:'Almarai';">Almarai — هندسي دقيق</option>
+                  <option value="Noto Kufi Arabic" style="font-family:'Noto Kufi Arabic';">Noto Kufi — كوفي كلاسيكي</option>
+                  <option value="Readex Pro" style="font-family:'Readex Pro';">Readex Pro — تقني عصري</option>
+                  <option value="Inter" style="font-family:'Inter';">Inter — لاتيني حديث</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">خط النصوص (Body Font)</label>
+                <select id="bkFontBody" class="form-input">
+                  <option value="Tajawal" style="font-family:'Tajawal';">Tajawal — خفيف وأنيق</option>
+                  <option value="Cairo" style="font-family:'Cairo';">Cairo — واضح وعريض</option>
+                  <option value="Almarai" style="font-family:'Almarai';">Almarai — هندسي دقيق</option>
+                  <option value="Noto Kufi Arabic" style="font-family:'Noto Kufi Arabic';">Noto Kufi — كوفي كلاسيكي</option>
+                  <option value="Readex Pro" style="font-family:'Readex Pro';">Readex Pro — تقني عصري</option>
+                  <option value="Inter" style="font-family:'Inter';">Inter — لاتيني حديث</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Watermark & Logo -->
+          <div style="background:var(--bg-card); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <div style="font-size:12px; font-weight:700; color:var(--text-main);">
+                <i class="fa-solid fa-stamp text-amber-400 ml-1"></i> العلامة المائية والشعار (Watermark)
+              </div>
+              <label style="display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer;">
+                <input type="checkbox" id="bkWatermarkEnabled">
+                <span>تفعيل العلامة المائية</span>
+              </label>
+            </div>
+
+            <div id="bkWatermarkControls" style="display:none; flex-direction:column; gap:8px;">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">نوع العلامة المائية</label>
+                  <select id="bkWatermarkType" class="form-input">
+                    <option value="text">نصية (Text)</option>
+                    <option value="image">شعار صورة (Image Logo)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">الموضع على الشاشة</label>
+                  <select id="bkWatermarkPos" class="form-input">
+                    <option value="bottom-right">أسفل اليمين (Bottom Right)</option>
+                    <option value="bottom-left">أسفل اليسار (Bottom Left)</option>
+                    <option value="top-right">أعلى اليمين (Top Right)</option>
+                    <option value="top-left">أعلى اليسار (Top Left)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="bkWatermarkTextGroup" class="form-group">
+                <label class="form-label">نص العلامة المائية</label>
+                <input type="text" id="bkWatermarkText" value="@MickeyStudio" class="form-input" placeholder="اسم الحساب أو القناة">
+              </div>
+
+              <div id="bkWatermarkImageGroup" class="form-group" style="display:none;">
+                <label class="form-label">ملف الشعار (Logo Image)</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <button id="btnUploadBrandLogo" class="btn btn-primary" style="font-size:11px;">
+                    <i class="fa-solid fa-upload"></i> رفع الشعار
+                  </button>
+                  <span id="bkLogoFileName" style="font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">لم يتم اختيار ملف</span>
+                  <input type="file" id="bkLogoFileInput" accept="image/*" style="display:none;">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">الشفافية (Opacity)</label>
+                  <input type="number" id="bkWatermarkOpacity" min="0.1" max="1" step="0.05" value="0.75" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">الحجم (Scale)</label>
+                  <input type="number" id="bkWatermarkScale" min="0.3" max="2.0" step="0.1" value="1.0" class="form-input">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display:flex; gap:10px; margin-top:14px;">
+            <button id="btnApplyBrandToScene" class="btn btn-amber" style="flex:1;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>تطبيق الهوية على المشهد</span>
+            </button>
+            <button id="btnSaveBrandKit" class="btn btn-primary" style="flex:1;">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>حفظ الهوية في الحساب</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Save as Template Modal -->
+    <div id="modalSaveTemplate" class="modal-backdrop">
+      <div class="modal-window" style="max-width:440px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="fa-regular fa-bookmark text-emerald-400"></i>
+            <span style="font-weight:700;">حفظ المشهد كنموذج (Save as Template)</span>
+          </div>
+          <button class="icon-btn close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-3" style="padding:16px;">
+          <div class="form-group">
+            <label class="form-label">اسم النموذج</label>
+            <input type="text" id="saveTplName" class="form-input" placeholder="مثال: شريط تعريفي خاص بقناتي">
+          </div>
+          <div class="form-group">
+            <label class="form-label">التصنيف (Category)</label>
+            <select id="saveTplCategory" class="form-input">
+              <option value="lower_thirds">أشرطة تعريفية (Lower Thirds)</option>
+              <option value="titles_intros">عناوين ومقدمات (Titles & Intros)</option>
+              <option value="social_cards">سوشيال ميديا (Social Cards)</option>
+              <option value="quote_cards">اقتباسات (Quote Cards)</option>
+              <option value="subscribe_cta">اشتراك وتفاعل (CTA & Subscribe)</option>
+              <option value="countdown_counters">عدادات وأرقام (Counters & Stats)</option>
+              <option value="data_charts">مخططات بيانية (Data Charts)</option>
+              <option value="news_ticker">شريط إخباري (News Ticker)</option>
+              <option value="listicles">قوائم وخطوات (Listicles)</option>
+              <option value="outro_endscreens">شاشات ختامية (Outro / End Screen)</option>
+              <option value="transitions">انتقالات (Transitions)</option>
+              <option value="aurora_backgrounds">خلفيات متحركة (Backgrounds)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الوصف</label>
+            <textarea id="saveTplDesc" rows="2" class="form-input" placeholder="وصف موجز للنموذج واستخداماته..."></textarea>
+          </div>
+          <button id="btnConfirmSaveTemplate" class="btn btn-primary" style="width:100%; margin-top:10px;">
+            <i class="fa-solid fa-bookmark ml-1"></i> حفظ في قائمة قوالبي
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Share Template Modal -->
+    <div id="modalShareTemplate" class="modal-backdrop">
+      <div class="modal-window" style="max-width:460px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-share-nodes text-cyan-400"></i>
+            <span style="font-weight:700;">مشاركة النموذج (Share Template)</span>
+          </div>
+          <button class="icon-btn close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-3" style="padding:16px;">
+          <p style="font-size:12px; color:var(--text-muted);">
+            يمكنك مشاركة هذا الرابط مع زملائك لعرض النموذج ومعاينته بصورة مستقلة أو استيراده لمشاريعهم:
+          </p>
+          <div class="form-group">
+            <input type="text" id="shareTplUrlInput" class="form-input" readonly style="font-family:var(--font-mono); font-size:11px; direction:ltr; text-align:left;">
+          </div>
+          <button id="btnCopyShareUrl" class="btn btn-primary" style="width:100%;">
+            <i class="fa-regular fa-copy ml-1"></i> نسخ الرابط
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. Send to Premiere Modal -->
+    <div id="modalSendPremiere" class="modal-backdrop">
+      <div class="modal-window" style="max-width:520px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-paper-plane text-indigo-400"></i>
+            <span style="font-weight:700;">إرسال المشهد إلى Adobe Premiere Pro</span>
+          </div>
+          <button class="icon-btn close-modal-btn" id="btnCloseSendPremiere"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-4" style="padding:18px;">
+          <!-- Scene Summary Badge -->
+          <div style="background:#161922; border:1px solid #2d3343; border-radius:10px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div id="premiereSceneName" style="font-weight:700; color:#f8fafc; font-size:13px;">مشهد بدون عنوان</div>
+              <div id="premiereSceneMeta" style="font-size:11px; color:#94a3b8; margin-top:2px;">1920×1080 • 30 fps • 5.0 ثوانٍ</div>
+            </div>
+            <div id="premiereLayerCountBadge" style="background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600;">
+              0 طبقات
+            </div>
+          </div>
+
+          <!-- Mode Selection -->
+          <div class="form-group">
+            <label class="form-label" style="font-weight:700; color:#e2e8f0; margin-bottom:8px;">نمط الإدراج في بريمير:</label>
+            <div style="display:grid; gap:8px;">
+              <label style="display:flex; align-items:flex-start; gap:10px; background:#181c28; border:1px solid #374151; border-radius:8px; padding:10px; cursor:pointer;">
+                <input type="radio" name="sendPremiereMode" value="editable" checked style="margin-top:3px; accent-color:#6366f1;">
+                <div>
+                  <div style="font-weight:700; color:#f1f5f9; font-size:12px;">طبقات قابلة للتعديل (Editable Layers)</div>
+                  <div style="font-size:11px; color:#94a3b8; margin-top:2px; line-height:1.4;">
+                    تصدير كل طبقة بصورة مستقلة: الطبقات البسيطة تُرسل كـ PNG مفرغ مع Motion Keyframes أصلية، والطبقات المركبة تُصيّر كفيديو ProRes 4444 شفاف.
+                  </div>
+                </div>
+              </label>
+              <label style="display:flex; align-items:flex-start; gap:10px; background:#181c28; border:1px solid #374151; border-radius:8px; padding:10px; cursor:pointer;">
+                <input type="radio" name="sendPremiereMode" value="transparent_video" style="margin-top:3px; accent-color:#6366f1;">
+                <div>
+                  <div style="font-weight:700; color:#f1f5f9; font-size:12px;">فيديو شفاف واحد (Single Transparent Video)</div>
+                  <div style="font-size:11px; color:#94a3b8; margin-top:2px; line-height:1.4;">
+                    تصدير المشهد كاملاً بجميع طبقاته كفيديو مفرغ فائق الجودة بصيغة QuickTime MOV (ProRes 4444 مع قناة Alpha كاملة).
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Target Placement -->
+          <div class="form-group">
+            <label class="form-label" style="font-weight:700; color:#e2e8f0; margin-bottom:8px;">موضع الإدراج في التايملاين:</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <label style="display:flex; align-items:center; gap:8px; background:#181c28; border:1px solid #374151; border-radius:8px; padding:9px; cursor:pointer;">
+                <input type="radio" name="sendPremiereTarget" value="playhead" checked style="accent-color:#6366f1;">
+                <span style="font-size:12px; color:#f1f5f9;">مؤشر التايملاين (Playhead)</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:8px; background:#181c28; border:1px solid #374151; border-radius:8px; padding:9px; cursor:pointer;">
+                <input type="radio" name="sendPremiereTarget" value="track" style="accent-color:#6366f1;">
+                <span style="font-size:12px; color:#f1f5f9;">التراك المحدد (Selected Track)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Nested Sequence Checkbox -->
+          <div class="form-group">
+            <label style="display:flex; align-items:center; gap:8px; background:#181c28; border:1px solid #374151; border-radius:8px; padding:10px; cursor:pointer;">
+              <input type="checkbox" id="chkSendPremiereNested" style="width:16px; height:16px; accent-color:#6366f1;">
+              <div>
+                <span style="font-size:12px; font-weight:600; color:#f1f5f9;">إنشاء داخل تسلسل مدمج (Nested Sequence)</span>
+                <span style="display:block; font-size:10px; color:#94a3b8;">تجميع كافة طبقات المشهد داخل Sequence فرعي باسم المشهد لحماية التايملاين من التزاحم.</span>
+              </div>
+            </label>
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; border-top:1px solid #2d3343; padding-top:12px;">
+            <button id="btnSendAsUpdate" type="button" class="btn" style="background:#059669; border:1px solid #10b981; color:#ffffff; font-size:12px; font-weight:700; display:none;">
+              <i class="fa-solid fa-rotate ml-1"></i> إرسال كتحديث مستبدل (<span id="modalNextVersionPill">v2</span>)
+            </button>
+            <div style="display:flex; gap:8px; margin-right:auto;">
+              <button id="btnCancelSendPremiere" type="button" class="btn btn-secondary">إلغاء</button>
+              <button id="btnConfirmSendPremiere" type="button" class="btn btn-primary" style="background:#6366f1; border-color:#4f46e5;">
+                <i class="fa-solid fa-paper-plane ml-1"></i> إرسال إلى بريمير
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Version History Modal -->
+    <div id="modalVersionHistory" class="modal-backdrop">
+      <div class="modal-window" style="max-width:540px;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i>
+            <span style="font-weight:700;">سجل إصدارات المشهد (آخر 20 إصدار)</span>
+          </div>
+          <button class="icon-btn close-modal-btn" id="btnCloseVersionHistory"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body space-y-3" style="padding:16px; max-height:70vh; overflow-y:auto;">
+          <div style="font-size:11px; color:#94a3b8; line-height:1.5; background:#181c28; border:1px solid #2d3343; border-radius:8px; padding:10px;">
+            <i class="fa-solid fa-circle-info text-cyan-400 ml-1"></i>
+            يحتفظ محرر Mickey Studio بآخر 20 إصداراً لكل مشهد مع ملخص الفروقات. يمكنك استعادة أي إصدار سابق بضغطة زر واحدة.
+          </div>
+          <div id="versionHistoryList" class="space-y-2">
+            <!-- Dynamically populated versions -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden Image File Input for Layer Uploads -->
+    <input type="file" id="imageFileInput" accept="image/*" style="display:none;">
+
+    <!-- Toast Notifications Container -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <!-- Load Motion Engine v2 (Shared Module) -->
+  <script src="shared/motion-engine.js"></script>
+
+  <!-- Load Procedural Audio SFX Engine (CC0) -->
+  <script src="shared/audio-sfx.js"></script>
+
+  <!-- Load Motion Editor Controller -->
+  <script src="motion-editor.js"></script>
+</body>
+</html>

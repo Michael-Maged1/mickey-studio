@@ -1,0 +1,133 @@
+{
+  "version": 2,
+  "id": "counter_milestone_100k",
+  "name": "عداد إنجاز 100 ألف (Milestone 100K)",
+  "nameEn": "100K Follower Milestone Counter",
+  "category": "countdown_counters",
+  "description": "احتفال بتجاوز حاجز المائة ألف متابع مع عداد سريع وحلقة متوهجة.",
+  "width": 1080,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "color",
+    "color": "#0b0e17"
+  },
+  "layers": [
+    {
+      "id": "glow_ring",
+      "type": "shape",
+      "name": "حلقة الاحتفال",
+      "start": 0.2,
+      "duration": 4.8,
+      "transform": {
+        "x": 540,
+        "y": 540,
+        "w": 580,
+        "h": 580,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.4
+      },
+      "style": {
+        "fill": "brand.primary",
+        "stroke": "brand.accent",
+        "strokeWidth": 4,
+        "radius": 290
+      },
+      "content": {
+        "shape": "donut",
+        "innerRadius": 210
+      },
+      "presets": {
+        "loop": {
+          "name": "spin",
+          "speed": 0.1
+        }
+      }
+    },
+    {
+      "id": "cnt_num",
+      "type": "counter",
+      "name": "رقم الإنجاز",
+      "start": 0.5,
+      "duration": 4.5,
+      "transform": {
+        "x": 540,
+        "y": 520,
+        "w": 680,
+        "h": 140,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.accent",
+        "font": "Inter",
+        "fontSize": 110,
+        "fontWeight": 900,
+        "align": "center"
+      },
+      "content": {
+        "startVal": 0,
+        "endVal": 100000,
+        "prefix": "+",
+        "separator": ","
+      },
+      "presets": {
+        "in": {
+          "name": "counter_rollup",
+          "dur": 2.2,
+          "sfx": "click"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 2
+        }
+      }
+    },
+    {
+      "id": "cnt_label",
+      "type": "text",
+      "name": "نص الشكر",
+      "start": 1.2,
+      "duration": 3.8,
+      "transform": {
+        "x": 540,
+        "y": 640,
+        "w": 600,
+        "h": 50,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 38,
+        "fontWeight": 700,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "شكراً لكم على 100,000 مبدع ❤️",
+        "textEn": "Thank You for 100K Creators ❤️"
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 0.6
+        }
+      }
+    }
+  ]
+}

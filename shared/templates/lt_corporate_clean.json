@@ -1,0 +1,158 @@
+{
+  "version": 2,
+  "id": "lt_corporate_clean",
+  "name": "شريط تعريفي أنيق (Corporate Clean)",
+  "nameEn": "Corporate Clean Lower Third",
+  "category": "lower_thirds",
+  "description": "شريط تعريفي احترافي للاسم والمسمى الوظيفي مع بار حركة نيون جانبي.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "lt_bar",
+      "type": "shape",
+      "name": "شريط الخلفية",
+      "start": 0.2,
+      "duration": 4.8,
+      "transform": {
+        "x": 480,
+        "y": 920,
+        "w": 720,
+        "h": 90,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.dark",
+        "stroke": "brand.primary",
+        "strokeWidth": 2,
+        "radius": 12
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideUp",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        }
+      }
+    },
+    {
+      "id": "lt_accent_stripe",
+      "type": "shape",
+      "name": "خط التمييز الجانبي",
+      "start": 0.35,
+      "duration": 4.65,
+      "transform": {
+        "x": 820,
+        "y": 920,
+        "w": 8,
+        "h": 64,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "radius": 4
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "pop",
+          "dur": 0.4
+        }
+      }
+    },
+    {
+      "id": "lt_name",
+      "type": "text",
+      "name": "اسم المتحدث",
+      "start": 0.4,
+      "duration": 4.6,
+      "transform": {
+        "x": 470,
+        "y": 896,
+        "w": 650,
+        "h": 40,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 34,
+        "fontWeight": 800,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "المهندس / أحمد مصطفى",
+        "textEn": "Eng. Ahmed Mostafa"
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 0.4
+        }
+      }
+    },
+    {
+      "id": "lt_role",
+      "type": "text",
+      "name": "المسمى الوظيفي",
+      "start": 0.6,
+      "duration": 4.4,
+      "transform": {
+        "x": 470,
+        "y": 940,
+        "w": 650,
+        "h": 30,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "font": "brand.body",
+        "fontSize": 22,
+        "fontWeight": 500,
+        "align": "right",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "مدير قطاع الابتكار والتحول الرقمي",
+        "textEn": "Head of Digital Innovation"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.4
+        }
+      }
+    }
+  ]
+}

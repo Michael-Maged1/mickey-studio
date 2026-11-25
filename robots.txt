@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /api.php
+Disallow: /cloudflare-worker/
+
+Sitemap: https://mickey-studio-eta.vercel.app/sitemap.xml

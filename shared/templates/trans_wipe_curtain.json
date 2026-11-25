@@ -1,0 +1,88 @@
+{
+  "version": 2,
+  "id": "trans_wipe_curtain",
+  "name": "انتقال الستارة الملونة (Color Wipe Curtain)",
+  "nameEn": "Dynamic Multi-Bar Wipe Transition",
+  "category": "transitions",
+  "description": "انتقال حركي سريع 1.8 ثانية بمسح ستائري متعدد الألوان.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 2,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "bar_1",
+      "type": "shape",
+      "name": "شريحة انتقال 1",
+      "start": 0,
+      "duration": 1.8,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 1920,
+        "h": 1080,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.primary"
+      },
+      "content": {
+        "shape": "rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.6,
+          "sfx": "whoosh"
+        },
+        "out": {
+          "name": "slideRight",
+          "dur": 0.6
+        }
+      }
+    },
+    {
+      "id": "bar_2",
+      "type": "shape",
+      "name": "شريحة انتقال 2",
+      "start": 0.15,
+      "duration": 1.65,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 1920,
+        "h": 1080,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.secondary"
+      },
+      "content": {
+        "shape": "rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideRight",
+          "dur": 0.6
+        },
+        "out": {
+          "name": "slideRight",
+          "dur": 0.6
+        }
+      }
+    }
+  ]
+}

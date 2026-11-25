@@ -37,6 +37,9 @@ export default {
         case 'detect_viral_clips': return await detectViralClips(context);
         case 'generate_chapters': return await generateChapters(context);
         case 'detect_censor_words': return await detectCensorWords(context);
+        case 'generate_motion_scene':
+        case 'motion_ai_generate':
+          return await generateMotionSceneAI(context);
         case 'proxy_media': return await proxyMedia(context);
         case 'consume_generation': return json({ success: true, remaining: context.access.remaining, plan: context.access.account ? 'free' : 'guest', permit: context.access.permit || undefined }, 200, headers);
         case 'account_status': {
@@ -396,6 +399,44 @@ async function generateText(ctx) {
   if (!prompt) return json({ success: false, error: 'النص المطلوب فارغ.' }, 400, ctx.headers);
   const text = await geminiText(ctx, prompt, 2000);
   return text ? json({ success: true, text, response: text }, 200, ctx.headers) : json({ success: false, error: 'تعذر إنشاء النص. تحقق من إعداد Gemini في Cloudflare.' }, 502, ctx.headers);
+}
+async function generateMotionSceneAI(ctx) {
+  const rawIdea = String(ctx.body.prompt || ctx.body.idea || '').trim();
+  if (!rawIdea) return json({ success: false, error: 'اكتب فكرة مشهد الموشن أولاً.' }, 400, ctx.headers);
+
+  const aspect = String(ctx.body.aspectRatio || '16:9').trim();
+  const isVert = aspect === '9:16';
+  const isSq = aspect === '1:1';
+  const width = isVert ? 1080 : 1920;
+  const height = isVert ? 1920 : 1080;
+  const sceneW = isSq ? 1080 : width;
+
+  const finalPrompt = /version["']?\s*:\s*2/i.test(rawIdea) && /layers/i.test(rawIdea)
+    ? rawIdea
+    : `You are a Senior Motion Graphics Director. Output ONLY one valid JSON object matching Mickey Motion Engine v2 schema (no markdown fences). Canvas: ${sceneW}x${height}, fps: 30, duration: 5.0. Background MUST use a rich multi-stop gradient. Build 7-10 coordinated layers using Arabic RTL text (direction:"rtl", align:"center", font:"Readex Pro"|"Cairo"), glassmorphic card (stroke + shadow + radius), ambient blurred glow orbs (float/pulse), progressRing/counter when relevant, underline_draw/pop/slideUp/elastic entrances and scaleDown/slideDown exits.\n\nUser request:\n${rawIdea}`;
+
+  for (const key of await keysForRequest(ctx)) {
+    for (const model of ['gemini-2.0-flash', 'gemini-1.5-flash']) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
+            generationConfig: { temperature: 0.45, maxOutputTokens: 3500, responseMimeType: 'application/json' }
+          })
+        });
+        const data = await readJson(response);
+        const text = data.candidates?.[0]?.content?.parts?.map(x => x.text || '').join('').trim();
+        if (response.ok && text) {
+          let scene = null;
+          try { scene = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '').trim()); } catch (_) {}
+          return json({ success: true, raw_reply: text, text, raw: text, scene, provider: model }, 200, ctx.headers);
+        }
+      } catch (_) {}
+    }
+  }
+  return json({ success: false, error: 'تعذر توليد مشهد الموشن عبر الذكاء الاصطناعي حالياً.' }, 502, ctx.headers);
 }
 async function detectViralClips(ctx) {
   const transcript = String(ctx.body.transcript || ctx.body.text || '').trim();

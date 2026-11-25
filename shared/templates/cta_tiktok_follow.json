@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "id": "cta_tiktok_follow",
+  "name": "زر متابعة ومشاركة ريلز (Reels Follow Pill)",
+  "nameEn": "Reels Follow & Share Action Pill",
+  "category": "subscribe_cta",
+  "description": "كبسولة عائمة لطلب المتابعة والإعجاب والمشاركة بنعومة.",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 5,
+  "background": {
+    "type": "transparent"
+  },
+  "layers": [
+    {
+      "id": "follow_pill",
+      "type": "shape",
+      "name": "كبسولة المتابعة",
+      "start": 0.3,
+      "duration": 4.7,
+      "transform": {
+        "x": 540,
+        "y": 1550,
+        "w": 700,
+        "h": 100,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.95
+      },
+      "style": {
+        "fill": "brand.primary",
+        "stroke": "brand.secondary",
+        "strokeWidth": 3,
+        "radius": 50
+      },
+      "content": {
+        "shape": "rounded-rect"
+      },
+      "presets": {
+        "in": {
+          "name": "slideUp",
+          "dur": 0.5,
+          "sfx": "whoosh"
+        },
+        "loop": {
+          "name": "pulse",
+          "period": 2.2
+        }
+      }
+    },
+    {
+      "id": "follow_text",
+      "type": "text",
+      "name": "نص المتابعة",
+      "start": 0.5,
+      "duration": 4.5,
+      "transform": {
+        "x": 540,
+        "y": 1550,
+        "w": 600,
+        "h": 45,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 34,
+        "fontWeight": 800,
+        "align": "center",
+        "direction": "rtl"
+      },
+      "content": {
+        "text": "تابع للمزيد من الأسرار 🚀",
+        "textEn": "Follow for More Secrets 🚀"
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 0.4
+        }
+      }
+    }
+  ]
+}

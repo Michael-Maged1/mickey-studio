@@ -1,0 +1,291 @@
+{
+  "version": 2,
+  "presets": [
+    {
+      "id": "fade_in",
+      "name": "تلاشي للداخل (Fade In)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.5,
+      "defaultEase": "easeOutCubic",
+      "description": "ظهور ناعم بتزايد الشفافية من 0% إلى 100%",
+      "icon": "fa-solid fa-cloud-arrow-up",
+      "params": {}
+    },
+    {
+      "id": "slide_up",
+      "name": "انزلاق للأعلى (Slide Up)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.6,
+      "defaultEase": "easeOutCubic",
+      "description": "حركة صعود عمودية ناعمة مع ظهور الشفافية",
+      "icon": "fa-solid fa-arrow-up",
+      "params": { "distance": 80 }
+    },
+    {
+      "id": "slide_down",
+      "name": "انزلاق للأسفل (Slide Down)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.6,
+      "defaultEase": "easeOutCubic",
+      "description": "هبوط انسيابي من الأعلى إلى موضع العنصر",
+      "icon": "fa-solid fa-arrow-down",
+      "params": { "distance": 80 }
+    },
+    {
+      "id": "slide_left",
+      "name": "انزلاق لليسار (Slide Left)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.6,
+      "defaultEase": "easeOutCubic",
+      "description": "دخول أفقي من اليمين باتجاه اليسار",
+      "icon": "fa-solid fa-arrow-left",
+      "params": { "distance": 120 }
+    },
+    {
+      "id": "slide_right",
+      "name": "انزلاق لليمين (Slide Right)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.6,
+      "defaultEase": "easeOutCubic",
+      "description": "دخول أفقي من اليسار باتجاه اليمين",
+      "icon": "fa-solid fa-arrow-right",
+      "params": { "distance": 120 }
+    },
+    {
+      "id": "pop_in",
+      "name": "تكبير نطّاط (Scale Pop)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.7,
+      "defaultEase": "easeOutBack",
+      "description": "تكبير ديناميكي سريع مع ارتداد جذاب في النهاية",
+      "icon": "fa-solid fa-expand",
+      "params": { "overshoot": 1.2 }
+    },
+    {
+      "id": "rotate_in",
+      "name": "دوران ودخول (Rotate In)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 0.7,
+      "defaultEase": "easeOutCubic",
+      "description": "دخول العنصر مع دوران سلس من زاوية جانبية",
+      "icon": "fa-solid fa-rotate-right",
+      "params": { "startAngle": -90 }
+    },
+    {
+      "id": "blur_in",
+      "name": "تمويه للداخل (Blur In)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image"],
+      "defaultDur": 0.6,
+      "defaultEase": "easeOutCubic",
+      "description": "ظهور سينمائي يبدأ من تمويه ضبابي حتى اكتمال الحدة",
+      "icon": "fa-solid fa-water",
+      "params": { "maxBlur": 24 }
+    },
+    {
+      "id": "wipe_reveal",
+      "name": "مسح وقناع (Wipe Reveal)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image"],
+      "defaultDur": 0.7,
+      "defaultEase": "easeInOutCubic",
+      "description": "كشف تدريجي للعنصر بواسطة قناع خطي من اليمين لليسار",
+      "icon": "fa-solid fa-bars-progress",
+      "params": { "direction": "horizontal" }
+    },
+    {
+      "id": "bounce_in",
+      "name": "هبوط ارتدادي (Bounce)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 0.9,
+      "defaultEase": "easeOutBounce",
+      "description": "سقوط قوي من الأعلى مع ارتدادات فيزيائية طبيعية",
+      "icon": "fa-solid fa-baseball",
+      "params": { "height": 180 }
+    },
+    {
+      "id": "elastic_in",
+      "name": "تأثير مطاطي (Elastic)",
+      "category": "in",
+      "targetTypes": ["text", "shape", "image"],
+      "defaultDur": 1.0,
+      "defaultEase": "easeOutElastic",
+      "description": "تمدد وانكماش مطاطي فائق الحيوية",
+      "icon": "fa-solid fa-wave-square",
+      "params": {}
+    },
+    {
+      "id": "typewriter",
+      "name": "آلة كاتبة (Typewriter)",
+      "category": "in",
+      "targetTypes": ["text"],
+      "defaultDur": 2.5,
+      "defaultEase": "linear",
+      "description": "ظهور النص حرفاً بحرف مع المحافظة التامة على اتصال الحروف العربية",
+      "icon": "fa-solid fa-keyboard",
+      "params": { "speed": 1.0 }
+    },
+    {
+      "id": "word_by_word",
+      "name": "كلمة بكلمة (Word by Word)",
+      "category": "in",
+      "targetTypes": ["text"],
+      "defaultDur": 1.8,
+      "defaultEase": "linear",
+      "description": "ظهور النص كلمة وراء كلمة مع الحفاظ على التشكيل العربي الكامل",
+      "icon": "fa-solid fa-font",
+      "params": {}
+    },
+    {
+      "id": "line_by_line",
+      "name": "سطر بسطر (Line by Line)",
+      "category": "in",
+      "targetTypes": ["text"],
+      "defaultDur": 1.5,
+      "defaultEase": "easeOutCubic",
+      "description": "ظهور النص سطراً تلو الآخر مع حركة انزلاق خفيفة",
+      "icon": "fa-solid fa-align-justify",
+      "params": {}
+    },
+    {
+      "id": "character_cascade",
+      "name": "شلال الحروف (Character Cascade)",
+      "category": "in",
+      "targetTypes": ["text"],
+      "defaultDur": 1.4,
+      "defaultEase": "easeOutCubic",
+      "description": "هبوط متتابع للحروف العربية المسبقة التشكيل مع الشفافية",
+      "icon": "fa-solid fa-arrow-down-short-wide",
+      "params": { "stagger": 0.04 }
+    },
+    {
+      "id": "highlight_sweep",
+      "name": "مسح مضيء (Highlight Sweep)",
+      "category": "in",
+      "targetTypes": ["text", "shape"],
+      "defaultDur": 1.2,
+      "defaultEase": "easeInOutCubic",
+      "description": "شريط ضوئي ساطع يمسح النص من البداية للنهاية لإبراز أهميته",
+      "icon": "fa-solid fa-wand-magic-sparkles",
+      "params": { "color": "#ffffff", "intensity": 0.8 }
+    },
+    {
+      "id": "underline_draw",
+      "name": "رسم خط تحتي (Underline Draw)",
+      "category": "in",
+      "targetTypes": ["text"],
+      "defaultDur": 0.8,
+      "defaultEase": "easeInOutCubic",
+      "description": "رسم خط أنيق أسفل النص يمتد من 0% إلى 100% العرض",
+      "icon": "fa-solid fa-underline",
+      "params": { "color": "#06b6d4", "height": 4 }
+    },
+    {
+      "id": "counter_rollup",
+      "name": "تصاعد رقمي (Counter Roll-up)",
+      "category": "in",
+      "targetTypes": ["counter"],
+      "defaultDur": 2.0,
+      "defaultEase": "easeOutExpo",
+      "description": "دوران وتصاعد الأرقام من القيمة الابتدائية إلى النهائية",
+      "icon": "fa-solid fa-arrow-trend-up",
+      "params": {}
+    },
+    {
+      "id": "fade_out",
+      "name": "تلاشي للخارج (Fade Out)",
+      "category": "out",
+      "targetTypes": ["text", "shape", "image", "counter", "chart"],
+      "defaultDur": 0.4,
+      "defaultEase": "easeInCubic",
+      "description": "اختفاء تدريجي للشاشات مع انخفاض الشفافية للصفر",
+      "icon": "fa-solid fa-eye-slash",
+      "params": {}
+    },
+    {
+      "id": "slide_down_out",
+      "name": "هبوط للخارج (Slide Down Out)",
+      "category": "out",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 0.4,
+      "defaultEase": "easeInCubic",
+      "description": "انزلاق للأسفل مع اختفاء الشفافية",
+      "icon": "fa-solid fa-arrow-down-long",
+      "params": { "distance": 90 }
+    },
+    {
+      "id": "slide_up_out",
+      "name": "صعود للخارج (Slide Up Out)",
+      "category": "out",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 0.4,
+      "defaultEase": "easeInCubic",
+      "description": "انزلاق للأعلى مع اختفاء الشفافية",
+      "icon": "fa-solid fa-arrow-up-long",
+      "params": { "distance": 90 }
+    },
+    {
+      "id": "scale_down_out",
+      "name": "تصغير للخارج (Scale Down Out)",
+      "category": "out",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 0.4,
+      "defaultEase": "easeInBack",
+      "description": "انكماش العنصر إلى المركز حتى يختفي",
+      "icon": "fa-solid fa-compress",
+      "params": {}
+    },
+    {
+      "id": "float_loop",
+      "name": "تعويم مستمر (Float Loop)",
+      "category": "loop",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 3.0,
+      "defaultEase": "linear",
+      "description": "تأرجح عمودي هادئ ومستمر يعطي حيوية للتصميم",
+      "icon": "fa-solid fa-feather-pointed",
+      "params": { "amplitude": 12, "period": 3.0 }
+    },
+    {
+      "id": "pulse_loop",
+      "name": "نبض مستمر (Pulse Loop)",
+      "category": "loop",
+      "targetTypes": ["text", "shape", "image", "counter"],
+      "defaultDur": 2.0,
+      "defaultEase": "linear",
+      "description": "نبض تكبير وتصغير متكرر للتركيز على العنصر",
+      "icon": "fa-solid fa-heart-pulse",
+      "params": { "amplitude": 0.06, "period": 2.0 }
+    },
+    {
+      "id": "spin_loop",
+      "name": "دوران مستمر (Spin Loop)",
+      "category": "loop",
+      "targetTypes": ["shape", "image"],
+      "defaultDur": 5.0,
+      "defaultEase": "linear",
+      "description": "دوران بزاوية 360 درجة بشكل متصل ودائري",
+      "icon": "fa-solid fa-arrows-rotate",
+      "params": { "speed": 0.2 }
+    },
+    {
+      "id": "shake_loop",
+      "name": "اهتزاز تفاعلي (Shake Loop)",
+      "category": "loop",
+      "targetTypes": ["text", "shape", "counter"],
+      "defaultDur": 1.5,
+      "defaultEase": "linear",
+      "description": "اهتزاز جانبي سريع يجذب انتباه المشاهد في العروض والمبيعات",
+      "icon": "fa-solid fa-bell",
+      "params": { "amplitude": 8, "frequency": 6 }
+    }
+  ]
+}

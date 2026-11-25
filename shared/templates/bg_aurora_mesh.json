@@ -1,0 +1,152 @@
+{
+  "version": 2,
+  "id": "bg_aurora_mesh",
+  "name": "خلفية الشفق القطبي (Fluid Aurora Mesh)",
+  "nameEn": "Ambient Fluid Aurora Background",
+  "category": "aurora_backgrounds",
+  "description": "خلفية هادئة بكرات لونية متحركة تحاكي الشفق القطبي مع نص عائم.",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 6,
+  "background": {
+    "type": "gradient",
+    "gradient": {
+      "type": "linear",
+      "angle": 45,
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#090a14"
+        },
+        {
+          "offset": 0.5,
+          "color": "#141829"
+        },
+        {
+          "offset": 1,
+          "color": "#0b0d17"
+        }
+      ]
+    }
+  },
+  "layers": [
+    {
+      "id": "aurora_orb_1",
+      "type": "shape",
+      "name": "كرة شفق نيون أزرق",
+      "start": 0,
+      "duration": 6,
+      "transform": {
+        "x": 500,
+        "y": 400,
+        "w": 600,
+        "h": 600,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.3
+      },
+      "style": {
+        "fill": "brand.primary",
+        "radius": 300,
+        "glow": {
+          "color": "brand.primary",
+          "blur": 60
+        }
+      },
+      "content": {
+        "shape": "circle"
+      },
+      "presets": {
+        "loop": {
+          "name": "float",
+          "period": 5
+        }
+      }
+    },
+    {
+      "id": "aurora_orb_2",
+      "type": "shape",
+      "name": "كرة شفق نيون سماوي",
+      "start": 0,
+      "duration": 6,
+      "transform": {
+        "x": 1400,
+        "y": 650,
+        "w": 550,
+        "h": 550,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 0.25
+      },
+      "style": {
+        "fill": "brand.secondary",
+        "radius": 275,
+        "glow": {
+          "color": "brand.secondary",
+          "blur": 60
+        }
+      },
+      "content": {
+        "shape": "circle"
+      },
+      "presets": {
+        "loop": {
+          "name": "pulse",
+          "period": 4
+        }
+      }
+    },
+    {
+      "id": "aurora_text",
+      "type": "text",
+      "name": "نص الخلفية الترويجي",
+      "start": 0.4,
+      "duration": 5.6,
+      "transform": {
+        "x": 960,
+        "y": 540,
+        "w": 1200,
+        "h": 140,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "opacity": 1
+      },
+      "style": {
+        "fill": "brand.light",
+        "font": "brand.heading",
+        "fontSize": 72,
+        "fontWeight": 900,
+        "align": "center",
+        "direction": "rtl",
+        "glow": {
+          "color": "brand.secondary",
+          "blur": 24
+        }
+      },
+      "content": {
+        "text": "إبداع بلا حدود • استوديو ميكي للموشن",
+        "textEn": "Boundless Creativity • Mickey Motion Studio"
+      },
+      "presets": {
+        "in": {
+          "name": "fade",
+          "dur": 1
+        },
+        "loop": {
+          "name": "float",
+          "period": 3.5
+        }
+      }
+    }
+  ]
+}
