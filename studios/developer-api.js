@@ -191,10 +191,12 @@
 
     if (STATE.devApi.keyVisible) {
       keyInput.type = 'text';
+      keyInput.style.webkitTextSecurity = 'none';
       keyInput.value = STATE.devApi.activeKey;
       if (eyeIcon) eyeIcon.className = 'fa-solid fa-eye-slash text-xs';
     } else {
-      keyInput.type = 'password';
+      keyInput.type = 'text';
+      keyInput.style.webkitTextSecurity = 'disc';
       keyInput.value = STATE.devApi.activeKey;
       if (eyeIcon) eyeIcon.className = 'fa-solid fa-eye text-xs';
     }

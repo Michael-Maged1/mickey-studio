@@ -7,6 +7,7 @@ await mkdir(outputUrl, { recursive: true });
 
 const rootFiles = [
   'index.html',
+  'extension.html',
   'admin.html',
   'app.js',
   'style.css',

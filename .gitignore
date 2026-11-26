@@ -11,3 +11,5 @@ dist/
 video-worker/.venv/
 video-worker/__pycache__/
 *.log
+
+*.rar

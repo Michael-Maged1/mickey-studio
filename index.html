@@ -75,7 +75,13 @@
       </a>
 
       <!-- Left Side: Account Controls & Protected Dashboard Link -->
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2.5 sm:gap-3">
+        <a href="extension.html" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-cyan-500/35 bg-cyan-500/10 hover:bg-cyan-500/20 text-xs text-cyan-200 font-bold transition shadow-sm">
+          <i class="fa-solid fa-download text-cyan-300 text-xs"></i>
+          <span class="hidden sm:inline">تحميل إضافة Premiere</span>
+          <span class="sm:hidden">الإضافة</span>
+        </a>
+
         <!-- Dashboard Button: Shown ONLY when signed in with specific Firebase email -->
         <button id="btn-top-dashboard" type="button" onclick="MickeyStudio.switchTab('dashboard')" class="hidden items-center gap-2 px-3.5 py-1.5 rounded-xl border border-indigo-500/30 bg-indigo-950/40 hover:bg-indigo-900/60 text-xs text-indigo-300 font-semibold transition shadow-sm">
           <i class="fa-solid fa-gauge text-indigo-400 text-xs"></i>
@@ -148,19 +154,12 @@
             <p class="text-xs sm:text-sm text-zinc-300 leading-relaxed">
               أنشئ مشاهد موشن جرافيك عربية، جرّب وصدّر ملفات <span class="text-cyan-300 font-mono">3D LUT (.cube)</span>، ولّد صوراً وتعليقاً صوتياً احترافياً، وفرّغ الصوت بدقة عالية مباشرة من متصفحك.
             </p>
-            <div class="flex flex-wrap items-center gap-2.5 pt-1">
-              <button type="button" onclick="MickeyStudio.switchTab('motion-builder')" class="btn-primary text-xs py-2.5 px-4 rounded-xl gap-2 shadow-lg shadow-indigo-500/20">
-                <i class="fa-solid fa-sparkles"></i>
-                <span>ابدأ مشهد موشن جرافيك</span>
-              </button>
-              <button type="button" onclick="MickeyStudio.switchTab('lut-studio')" class="btn-secondary text-xs py-2.5 px-4 rounded-xl gap-2 border-cyan-500/30 text-cyan-200 hover:bg-cyan-950/40">
-                <i class="fa-solid fa-palette text-cyan-400"></i>
-                <span>مكتبة الفلاتر والـ LUTs</span>
-              </button>
-              <button type="button" onclick="MickeyStudio.handleAuthClick()" class="text-xs py-2.5 px-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 font-semibold transition flex items-center gap-2">
-                <i class="fa-solid fa-user-plus text-emerald-400"></i>
-                <span id="free-banner-btn-text">حساب مجاني</span>
-              </button>
+            <div class="flex flex-wrap items-center gap-3 pt-2">
+              <a href="extension.html" class="inline-flex items-center gap-3 py-3.5 px-7 rounded-2xl bg-gradient-to-l from-cyan-400 to-sky-400 hover:from-cyan-300 hover:to-sky-300 text-zinc-950 font-black text-sm shadow-xl shadow-cyan-500/25 transition transform hover:-translate-y-0.5">
+                <i class="fa-solid fa-download text-base"></i>
+                <span>تحميل إضافة Adobe Premiere Pro</span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-zinc-950/15 text-zinc-950 font-bold">v2.6.62</span>
+              </a>
             </div>
           </div>
 
@@ -194,7 +193,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-zinc-900/60 border border-white/10">
           <div class="relative flex-1 max-w-md">
             <i class="fa-solid fa-magnifying-glass text-xs text-zinc-500 absolute right-3.5 top-1/2 -translate-y-1/2"></i>
-            <input id="tools-search-input" type="search" placeholder="ابحث عن أداة (مثال: موشن، فلاتر، صوت، تفريغ، صور...)" class="w-full rounded-xl border border-white/10 bg-black/50 pr-9 pl-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-400/60 outline-none">
+            <input id="tools-search-input" name="mickey_tools_filter_noautofill" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" placeholder="ابحث عن أداة (مثال: موشن، فلاتر، صوت، تفريغ، صور...)" class="w-full rounded-xl border border-white/10 bg-black/50 pr-9 pl-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-400/60 outline-none">
           </div>
           <div class="flex flex-wrap items-center gap-1.5" id="tools-filter-bar">
             <button type="button" data-filter="all" class="tools-filter-pill active px-3 py-1.5 rounded-xl border border-white/10 text-xs font-semibold text-zinc-300 transition">الكل</button>
@@ -3302,7 +3301,7 @@
 
         <div class="flex items-center gap-3">
           <div class="relative w-64">
-            <input type="text" id="vault-search-input" oninput="MickeyStudio.searchVault(this.value)" placeholder="بحث بالاسم أو الوصف..." class="w-full px-3 py-1.5 text-xs pl-7">
+            <input type="text" id="vault-search-input" name="mickey_vault_filter_noautofill" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="MickeyStudio.searchVault(this.value)" placeholder="بحث بالاسم أو الوصف..." class="w-full px-3 py-1.5 text-xs pl-7">
             <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-[10px] text-zinc-500"></i>
           </div>
           <button type="button" onclick="MickeyStudio.exportVaultBackup()" class="btn-secondary text-xs py-1.5 px-3">
@@ -3412,7 +3411,7 @@
         <!-- Key Input Row -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div class="relative flex-1">
-            <input id="dev-api-key-input" type="password" readonly class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-cyan-300 font-mono tracking-wider focus:outline-none select-all" value="" placeholder="جاري تجهيز مفتاحك...">
+            <input id="dev-api-key-input" type="text" autocomplete="off" data-lpignore="true" data-1p-ignore="true" readonly style="-webkit-text-security: disc;" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-cyan-300 font-mono tracking-wider focus:outline-none select-all" value="" placeholder="جاري تجهيز مفتاحك...">
           </div>
           <button type="button" onclick="MickeyStudio.toggleApiKeyVisibility()" class="btn-secondary text-xs px-3 py-2.5" title="إظهار / إخفاء المفتاح">
             <i class="fa-solid fa-eye text-xs" id="dev-api-key-eye-icon"></i>
@@ -3650,7 +3649,7 @@
 
           <div>
             <label class="block text-xs text-zinc-300 font-medium mb-1">كلمة المرور (للتسجيل والدخول السريع)</label>
-            <input id="account-phone-password" type="password" minlength="8" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition" placeholder="8 أحرف أو أرقام على الأقل" dir="ltr">
+            <input id="account-phone-password" type="password" autocomplete="new-password" data-lpignore="true" minlength="8" class="w-full bg-[#18181B] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition" placeholder="8 أحرف أو أرقام على الأقل" dir="ltr">
           </div>
 
           <div class="grid grid-cols-2 gap-2 pt-1">

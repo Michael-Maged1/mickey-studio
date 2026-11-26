@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إضافة Mickey Studio لـ Adobe Premiere Pro // تحميل مباشر وMicrosoft Store</title>
+  <meta name="description" content="حمّل إضافة Mickey Studio لبرنامج Adobe Premiere Pro: محرك تلوين 3D LUT مسرّع بكرت الشاشة (GPU)، 32 لوت سينمائي حصري، حذف الصمت، الترجمة التلقائية، والموشن جرافيك.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="إضافة Mickey Studio لـ Adobe Premiere Pro (v2.6.62)">
+  <meta property="og:description" content="أداة مونتاج وتلوين متكاملة داخل Premiere Pro مع محرك 3D LUT مسرّع بـ CUDA/OpenCL و32 لوت سينمائي حصري — تحميل مباشر أو من Microsoft Store.">
+  <meta property="og:image" content="https://mickey-studio-eta.vercel.app/assets/extension-preview.png">
+  <meta name="theme-color" content="#09090B">
+  <link rel="icon" type="image/png" href="assets/mickey-studio-logo.png?v=2">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zinc: { 950: '#09090B', 900: '#121215', 850: '#18181B', 800: '#27272A', 700: '#3F3F46' }
+          },
+          fontFamily: {
+            sans: ['Readex Pro', 'Cairo', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Inter', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="stylesheet" href="shared/fonts/fonts.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css?v=3.0">
+</head>
+<body class="bg-[#09090B] text-zinc-100 min-h-screen flex flex-col font-sans selection:bg-indigo-600/30 selection:text-white antialiased overflow-x-hidden">
+
+  <!-- Top Navigation -->
+  <header class="site-header sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <a href="index.html" class="flex items-center gap-3 group">
+        <img src="assets/mickey-studio-logo.png" alt="Mickey Studio" class="w-9 h-9 object-contain drop-shadow-md group-hover:scale-105 transition-transform">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold tracking-tight text-white leading-none">MICKEY STUDIO</span>
+            <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold">v2.6.62</span>
+          </div>
+          <p class="text-[10px] text-zinc-400 mt-0.5 leading-none">إضافة Adobe Premiere Pro</p>
+        </div>
+      </a>
+
+      <div class="flex items-center gap-2.5">
+        <a href="index.html" class="px-3.5 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-zinc-200 font-semibold transition flex items-center gap-2">
+          <i class="fa-solid fa-arrow-right text-[11px]"></i>
+          <span>العودة للمنصة</span>
+        </a>
+        <a href="https://github.com/Michael-Maged1/mickey-studio/releases/download/v2.6.62/MickeyStudio-Setup-2.6.62.exe" download class="btn-primary text-xs py-2 px-4 rounded-xl gap-2 bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-bold">
+          <i class="fa-solid fa-download text-xs"></i>
+          <span class="hidden sm:inline">تحميل مباشر</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 w-full">
+    <!-- Hero Section -->
+    <section class="relative overflow-hidden border-b border-white/5 bg-[radial-gradient(ellipse_at_top,_rgba(34,211,238,0.14),_rgba(99,102,241,0.08)_45%,_transparent_70%)]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+
+        <!-- Hero Text & CTAs -->
+        <div class="lg:col-span-6 space-y-5 text-right">
+          <div class="inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-[11px] font-semibold">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>الإصدار 2.6.62 · Windows · Premiere Pro 2024 – 2027</span>
+          </div>
+
+          <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black text-white leading-tight tracking-tight">
+            إضافة <span class="text-transparent bg-clip-text bg-gradient-to-l from-cyan-300 via-indigo-300 to-violet-400">Mickey Studio</span> لـ Adobe Premiere Pro
+          </h1>
+
+          <p class="text-sm sm:text-base text-zinc-300 leading-relaxed">
+            حوّل مونتاجك وتلوينك داخل بريمير إلى سرعة صاروخية: محرك <span class="text-cyan-300 font-mono font-semibold">3D LUT</span> أصلي مسرّع بكرت الشاشة (GPU) بخط أصفر Real-Time، و<strong>32 لوت سينمائي حصري</strong>، وحذف الصمت، وتفريغ الصوت، والموشن جرافيك — في مثبّت واحد بدون Creative Cloud.
+          </p>
+
+          <!-- Download Buttons -->
+          <div class="flex flex-wrap items-center gap-3 pt-2">
+            <a href="https://github.com/Michael-Maged1/mickey-studio/releases/download/v2.6.62/MickeyStudio-Setup-2.6.62.exe" download
+               class="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-black text-sm shadow-lg shadow-cyan-500/20 transition transform hover:-translate-y-0.5">
+              <i class="fa-solid fa-download text-base"></i>
+              <span>تحميل مباشر لويندوز (v2.6.62)</span>
+            </a>
+
+            <a href="https://apps.microsoft.com/detail/9PKQLHG9DH3J" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/15 hover:border-cyan-400/50 text-white font-bold text-sm transition transform hover:-translate-y-0.5">
+              <i class="fa-brands fa-microsoft text-cyan-400 text-base"></i>
+              <span>التحميل من Microsoft Store</span>
+            </a>
+          </div>
+
+          <!-- Quick Trust Meta -->
+          <div class="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-[11px] text-zinc-400">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-bolt text-amber-400"></i> تسريع GPU (CUDA &amp; OpenCL)</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield-halved text-emerald-400"></i> مجانية 100% بدون اشتراك</span>
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-box-open text-indigo-400"></i> مثبّت واحد يثبّت الإضافة والبلجن</span>
+          </div>
+        </div>
+
+        <!-- Visual Extension Screenshot Showcase -->
+        <div class="lg:col-span-6">
+          <div class="relative rounded-3xl p-2 bg-gradient-to-br from-cyan-500/25 via-indigo-500/15 to-zinc-800/40 border border-white/10 shadow-2xl shadow-indigo-950/50">
+            <!-- Mock Window Chrome -->
+            <div class="flex items-center justify-between px-4 py-2.5 rounded-t-2xl bg-[#141418] border-b border-white/5">
+              <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-400/80"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/80"></span>
+              </div>
+              <span class="text-[10px] font-mono text-zinc-400">Adobe Premiere Pro · Mickey Studio Panel v2.6.62</span>
+              <span class="text-[10px] font-mono text-emerald-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>GPU Real-Time</span>
+            </div>
+            <div class="relative overflow-hidden rounded-b-2xl bg-[#101014]">
+              <img src="assets/extension-preview.png" alt="لقطة شاشة لإضافة Mickey Studio داخل Adobe Premiere Pro" class="w-full h-auto object-cover block">
+            </div>
+          </div>
+
+          <!-- Highlight Pills under Screenshot -->
+          <div class="grid grid-cols-3 gap-2.5 mt-3">
+            <div class="p-3 rounded-2xl bg-zinc-900/70 border border-white/5 text-center">
+              <div class="text-sm font-black text-cyan-300 font-mono">32 LUTs</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">لوت سينمائي حصري</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-zinc-900/70 border border-white/5 text-center">
+              <div class="text-sm font-black text-amber-300 font-mono">GPU 32-bit</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">خط أصفر Real-Time</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-zinc-900/70 border border-white/5 text-center">
+              <div class="text-sm font-black text-emerald-300 font-mono">1-Click</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">مثبّت موحد سريع</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+      <div class="text-center max-w-2xl mx-auto mb-10 space-y-2">
+        <span class="text-[11px] font-mono uppercase tracking-wider text-cyan-400 font-bold">ALL-IN-ONE PREMIERE SUITE</span>
+        <h2 class="text-2xl sm:text-3xl font-black text-white">كل ما تحتاجه في المونتاج داخل لوحة واحدة</h2>
+        <p class="text-xs sm:text-sm text-zinc-400">أدوات احترافية مصممة خصيصًا لتسريع عملك داخل Adobe Premiere Pro بدون تعقيد.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="p-5 rounded-2xl bg-zinc-900/70 border border-white/10 hover:border-cyan-400/40 transition space-y-2.5">
+          <div class="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center text-lg"><i class="fa-solid fa-palette"></i></div>
+          <h3 class="text-sm font-bold text-white">محرك تلوين Lumetri + 3D LUT (GPU)</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">لوحة Lumetri كاملة بمزامنة فورية مع بريمير، بالإضافة لبلجن <strong>Mickey Studio LUT</strong> المسرّع بكرت الشاشة (CUDA/OpenCL) لتطبيق أي ملف <span class="font-mono text-cyan-300">.cube</span> بدقة 100% بدون تغيير سلايدرزك.</p>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-zinc-900/70 border border-white/10 hover:border-indigo-400/40 transition space-y-2.5">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-lg"><i class="fa-solid fa-film"></i></div>
+          <h3 class="text-sm font-bold text-white">32 لوت سينمائي حصري مدمج</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">مكتبة حصرية من 32 لوت سينمائي (<strong>Mickey Studio 01 – 32</strong>) جاهزة داخل قائمة Creative Look مع تحكم كامل في القوة (Intensity) وتبديل فوري بضغطة زر.</p>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-zinc-900/70 border border-white/10 hover:border-emerald-400/40 transition space-y-2.5">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-lg"><i class="fa-solid fa-scissors"></i></div>
+          <h3 class="text-sm font-bold text-white">حذف الصمت والقص التلقائي</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">اكتشاف وحذف فترات الصمت والفراغات من التايملاين بدقة عالية مع خيارات Padding وZoom Cut لتجهيز فيديوهات يوتيوب والريلز في ثوانٍ.</p>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-zinc-900/70 border border-white/10 hover:border-violet-400/40 transition space-y-2.5">
+          <div class="w-10 h-10 rounded-xl bg-violet-500/15 text-violet-400 flex items-center justify-center text-lg"><i class="fa-solid fa-closed-captioning"></i></div>
+          <h3 class="text-sm font-bold text-white">تفريغ الصوت والترجمة العربية (Whisper)</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">تحويل الصوت العربي والإنجليزي إلى نصوص وملفات SRT متزامنة تلقائيًا داخل بريمير بدقة ممتازة.</p>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-zinc-900/70 border border-white/10 hover:border-amber-400/40 transition space-y-2.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-lg"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+          <h3 class="text-sm font-bold text-white">صانع الموشن جرافيك بالذكاء الاصطناعي</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">توليد مشاهد وعناوين موشن جرافيك عربية وإدراجها مباشرة في مشروعك داخل Premiere Pro.</p>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-zinc-900/70 border border-white/10 hover:border-rose-400/40 transition space-y-2.5">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center text-lg"><i class="fa-solid fa-crop-simple"></i></div>
+          <h3 class="text-sm font-bold text-white">خطوط الأمان (Safe Zones) ومزامنة الحساب</h3>
+          <p class="text-xs text-zinc-400 leading-relaxed">قوالب Safe Zones جاهزة لـ TikTok وReels وShorts، مع ربط سلس بحسابك السحابي على Mickey Studio.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3-Step Install Guide -->
+    <section class="border-t border-white/5 bg-zinc-900/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+        <div class="text-center max-w-xl mx-auto mb-10 space-y-2">
+          <h2 class="text-2xl font-black text-white">التثبيت في 3 خطوات بسيطة</h2>
+          <p class="text-xs text-zinc-400">لا تحتاج إلى Adobe Creative Cloud أو ZXP Installer.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-5 rounded-2xl bg-zinc-950/80 border border-white/10 space-y-2">
+            <div class="w-8 h-8 rounded-full bg-cyan-400/15 text-cyan-300 font-mono font-black text-sm flex items-center justify-center">1</div>
+            <h3 class="text-sm font-bold text-white">نزّل المثبّت الموحد</h3>
+            <p class="text-xs text-zinc-400 leading-relaxed">اختر التحميل المباشر لملف <span class="font-mono text-zinc-300">MickeyStudio-Setup-2.6.62.exe</span> أو ثبّته عبر Microsoft Store.</p>
+          </div>
+          <div class="p-5 rounded-2xl bg-zinc-950/80 border border-white/10 space-y-2">
+            <div class="w-8 h-8 rounded-full bg-cyan-400/15 text-cyan-300 font-mono font-black text-sm flex items-center justify-center">2</div>
+            <h3 class="text-sm font-bold text-white">شغّل المثبّت (بريمير مغلق)</h3>
+            <p class="text-xs text-zinc-400 leading-relaxed">سيقوم المثبّت تلقائيًا بتثبيت الإضافة وبلجن الـ 3D LUT المسرّع بكرت الشاشة وتفعيل محرك CEP.</p>
+          </div>
+          <div class="p-5 rounded-2xl bg-zinc-950/80 border border-white/10 space-y-2">
+            <div class="w-8 h-8 rounded-full bg-cyan-400/15 text-cyan-300 font-mono font-black text-sm flex items-center justify-center">3</div>
+            <h3 class="text-sm font-bold text-white">افتح الإضافة داخل بريمير</h3>
+            <p class="text-xs text-zinc-400 leading-relaxed">افتح Adobe Premiere Pro ثم من القائمة العلوية اختر <span class="font-mono text-cyan-300">Window &gt; Extensions &gt; Mickey Studio</span>.</p>
+          </div>
+        </div>
+
+        <!-- Bottom CTA -->
+        <div class="mt-10 p-6 sm:p-8 rounded-3xl bg-gradient-to-l from-cyan-500/10 via-indigo-500/10 to-zinc-900/80 border border-cyan-500/20 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="text-right space-y-1">
+            <h3 class="text-lg font-black text-white">جاهز لتجربة Mickey Studio داخل Premiere Pro؟</h3>
+            <p class="text-xs text-zinc-300">الإصدار 2.6.62 · Windows 10 / 11 (64-bit) · Premiere Pro 2024 – 2027</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 shrink-0">
+            <a href="https://github.com/Michael-Maged1/mickey-studio/releases/download/v2.6.62/MickeyStudio-Setup-2.6.62.exe" download
+               class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-black text-xs transition">
+              <i class="fa-solid fa-download"></i>
+              <span>تحميل مباشر (.exe)</span>
+            </a>
+            <a href="https://apps.microsoft.com/detail/9PKQLHG9DH3J" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/15 text-white font-bold text-xs transition">
+              <i class="fa-brands fa-microsoft text-cyan-400"></i>
+              <span>Microsoft Store</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/5 py-6 text-center text-[11px] text-zinc-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <span>© Mickey Studio — جميع الحقوق محفوظة</span>
+      <div class="flex items-center gap-4">
+        <a href="index.html" class="hover:text-zinc-300 transition">الرئيسية</a>
+        <a href="privacy.html" class="hover:text-zinc-300 transition">سياسة الخصوصية</a>
+        <a href="terms.html" class="hover:text-zinc-300 transition">الشروط والأحكام</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
