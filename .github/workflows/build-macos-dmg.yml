@@ -1,0 +1,225 @@
+name: Build macOS DMG Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 2.6.62)'
+        required: true
+        default: '2.6.62'
+      remove_command_asset:
+        description: 'Remove old .command asset after uploading .dmg'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS payload from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p work/payload work/dmg_root
+          gh release download "v${VERSION}" \
+            --pattern "MickeyStudio-Setup-macOS-${VERSION}.command" \
+            --dir work \
+            --clobber
+          awk '/^__MICKEY_PAYLOAD_BELOW__$/{flag=1;next} flag' "work/MickeyStudio-Setup-macOS-${VERSION}.command" | base64 -D > work/payload.zip
+          unzip -qo work/payload.zip -d work/payload
+          test -f work/payload/com.Mickey-Studio/manifest.json
+          echo "Payload extracted successfully."
+
+      - name: Build native macOS App Icon (.icns)
+        run: |
+          set -euo pipefail
+          mkdir -p work/AppIcon.iconset
+          SRC="assets/mickey-studio-logo.png"
+          for sz in 16 32 64 128 256 512; do
+            sips -z $sz $sz "$SRC" --out "work/AppIcon.iconset/icon_${sz}x${sz}.png" >/dev/null
+            sz2=$((sz * 2))
+            sips -z $sz2 $sz2 "$SRC" --out "work/AppIcon.iconset/icon_${sz}x${sz}@2x.png" >/dev/null
+          done
+          iconutil -c icns work/AppIcon.iconset -o work/AppIcon.icns
+
+      - name: Assemble Install Mickey Studio.app and Uninstall Mickey Studio.app
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          APP="work/dmg_root/Install Mickey Studio.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp work/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+          cp -R work/payload/com.Mickey-Studio "$APP/Contents/Resources/com.Mickey-Studio"
+
+          cat > "$APP/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>Install Mickey Studio</string>
+            <key>CFBundleDisplayName</key>
+            <string>Install Mickey Studio</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.mickeystudio.installer</string>
+            <key>CFBundleVersion</key>
+            <string>${VERSION}</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${VERSION}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleExecutable</key>
+            <string>install-mickey-studio</string>
+            <key>CFBundleIconFile</key>
+            <string>AppIcon</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>11.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          cat > "$APP/Contents/MacOS/install-mickey-studio" <<'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+          RES_DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+          PAYLOAD_DIR="$RES_DIR/com.Mickey-Studio"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$(dirname "$0")/../Info.plist" 2>/dev/null || echo "2.6.62")"
+          CEP_DIR="$HOME/Library/Application Support/Adobe/CEP/extensions"
+          TARGET_DIR="$CEP_DIR/com.Mickey-Studio"
+          LUTS_CREATIVE_DIR="$HOME/Library/Application Support/Adobe/Common/LUTs/Creative"
+          LUTS_TECH_DIR="$HOME/Library/Application Support/Adobe/Common/LUTs/Technical"
+          APP_SUPPORT_DIR="$HOME/Library/Application Support/Mickey Studio"
+          FFMPEG_BIN_DIR="$APP_SUPPORT_DIR/bin"
+          FFMPEG_TARGET="$FFMPEG_BIN_DIR/ffmpeg"
+
+          if pgrep -if "Adobe Premiere Pro" >/dev/null 2>&1; then
+            osascript -e 'display dialog "يرجى إغلاق Adobe Premiere Pro أولاً ثم الضغط على متابعة لضمان تفعيل الإضافة والفلاتر بشكل سليم." with title "Mickey Studio v'"$VERSION"'" buttons {"إلغاء", "متابعة"} default button 2 with icon caution' >/dev/null 2>&1 || exit 0
+          fi
+
+          for ver in 9 10 11 12 13 14 15; do
+            defaults write "com.adobe.CSXS.$ver" PlayerDebugMode 1
+          done
+          killall cfprefsd >/dev/null 2>&1 || true
+
+          mkdir -p "$CEP_DIR"
+          BACKUP_DIR=""
+          if [ -d "$TARGET_DIR" ]; then
+            BACKUP_DIR="$CEP_DIR/.com.Mickey-Studio.backup.$$"
+            mv "$TARGET_DIR" "$BACKUP_DIR"
+          fi
+
+          if cp -R "$PAYLOAD_DIR" "$TARGET_DIR"; then
+            xattr -dr com.apple.quarantine "$TARGET_DIR" >/dev/null 2>&1 || true
+            [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ] && rm -rf "$BACKUP_DIR"
+          else
+            rm -rf "$TARGET_DIR"
+            [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ] && mv "$BACKUP_DIR" "$TARGET_DIR"
+            osascript -e 'display dialog "حدث خطأ أثناء تثبيت ملفات الإضافة." with title "Mickey Studio Installer" buttons {"موافق"} default button 1 with icon stop' >/dev/null 2>&1 || true
+            exit 1
+          fi
+
+          mkdir -p "$LUTS_CREATIVE_DIR" "$LUTS_TECH_DIR"
+          rm -f "$LUTS_CREATIVE_DIR"/00_MickeyStudio_*.cube "$LUTS_TECH_DIR"/00_MickeyStudio_*.cube 2>/dev/null || true
+          if [ -d "$TARGET_DIR/assets/luts/creative" ]; then
+            cp -f "$TARGET_DIR/assets/luts/creative/"*.cube "$LUTS_CREATIVE_DIR/" 2>/dev/null || true
+          fi
+
+          mkdir -p "$FFMPEG_BIN_DIR"
+          EXISTING_FFMPEG=""
+          for cand in "$FFMPEG_TARGET" "/opt/homebrew/bin/ffmpeg" "/usr/local/bin/ffmpeg" "$(command -v ffmpeg 2>/dev/null || true)"; do
+            if [ -n "$cand" ] && [ -x "$cand" ]; then
+              EXISTING_FFMPEG="$cand"
+              break
+            fi
+          done
+
+          FFMPEG_STATUS="جاهز"
+          if [ -n "$EXISTING_FFMPEG" ]; then
+            if [ "$EXISTING_FFMPEG" != "$FFMPEG_TARGET" ]; then
+              ln -sf "$EXISTING_FFMPEG" "$FFMPEG_TARGET" 2>/dev/null || true
+            fi
+          else
+            ARCH="$(uname -m)"
+            TMP_FF="/tmp/mickey_ff_$$"
+            mkdir -p "$TMP_FF"
+            if [ "$ARCH" = "arm64" ]; then
+              DL_URL="https://www.osxexperts.net/ffmpeg71arm.zip"
+            else
+              DL_URL="https://evermeet.cx/ffmpeg/getrelease/zip"
+            fi
+            if curl -fL --connect-timeout 15 --max-time 120 "$DL_URL" -o "$TMP_FF/ff.zip" 2>/dev/null && unzip -qo "$TMP_FF/ff.zip" -d "$TMP_FF/out" 2>/dev/null; then
+              FOUND_BIN="$(find "$TMP_FF/out" -type f -name ffmpeg | head -n 1 || true)"
+              if [ -n "$FOUND_BIN" ]; then
+                mv "$FOUND_BIN" "$FFMPEG_TARGET"
+                chmod +x "$FFMPEG_TARGET"
+                xattr -dr com.apple.quarantine "$FFMPEG_TARGET" >/dev/null 2>&1 || true
+              else
+                FFMPEG_STATUS="اختياري (brew install ffmpeg)"
+              fi
+            else
+              FFMPEG_STATUS="اختياري (brew install ffmpeg)"
+            fi
+            rm -rf "$TMP_FF" 2>/dev/null || true
+          fi
+
+          osascript -e 'display dialog "تم تثبيت إضافة Mickey Studio v'"$VERSION"' على جهاز Mac بنجاح!
+
+          • المسار: ~/Library/Application Support/Adobe/CEP/extensions/com.Mickey-Studio
+          • الفلاتر: تم تثبيت 32 فلتر Mickey Studio LUTs
+          • FFmpeg: '"$FFMPEG_STATUS"'
+
+          افتح Adobe Premiere Pro ثم اختر:
+          Window > Extensions > Mickey Studio" with title "Mickey Studio — تم التثبيت بنجاح" buttons {"ممتاز"} default button 1' >/dev/null 2>&1 || true
+          SCRIPT
+
+          chmod +x "$APP/Contents/MacOS/install-mickey-studio"
+          codesign --force --deep --sign - "$APP"
+
+          # Create README inside DMG
+          cat > "work/dmg_root/اقرأني - طريقة التثبيت.txt" <<EOF
+          Mickey Studio v${VERSION} — macOS Installer
+          ==========================================
+          1. اغلق Adobe Premiere Pro تماماً.
+          2. اضغط كليك يمين (Right-Click) على "Install Mickey Studio" ثم اختر Open (فتح).
+          3. افتح Adobe Premiere Pro واختر: Window > Extensions > Mickey Studio.
+          EOF
+
+      - name: Create macOS DMG image
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          DMG_NAME="MickeyStudio-Setup-macOS-${VERSION}.dmg"
+          hdiutil create \
+            -volname "Mickey Studio ${VERSION}" \
+            -srcfolder work/dmg_root \
+            -ov \
+            -format UDZO \
+            "$DMG_NAME"
+          ls -lh "$DMG_NAME"
+          shasum -a 256 "$DMG_NAME"
+
+      - name: Upload DMG to GitHub Release and clean up old .command
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          REMOVE_CMD: ${{ inputs.remove_command_asset }}
+        run: |
+          set -euo pipefail
+          DMG_NAME="MickeyStudio-Setup-macOS-${VERSION}.dmg"
+          gh release upload "v${VERSION}" "$DMG_NAME" --clobber
+          if [ "$REMOVE_CMD" = "true" ]; then
+            gh release delete-asset "v${VERSION}" "MickeyStudio-Setup-macOS-${VERSION}.command" --yes || true
+          fi
+          gh release view "v${VERSION}" --json tagName,assets
