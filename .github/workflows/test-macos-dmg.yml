@@ -1,0 +1,73 @@
+name: Test macOS DMG Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to test (e.g. 2.6.62)'
+        required: true
+        default: '2.6.62'
+
+jobs:
+  test-dmg:
+    runs-on: macos-latest
+    steps:
+      - name: Download live DMG from GitHub Release and run full E2E install test
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          DMG="MickeyStudio-Setup-macOS-${VERSION}.dmg"
+          URL="https://github.com/Michael-Maged1/mickey-studio/releases/download/v${VERSION}/${DMG}"
+          echo "=== 1. Downloading live DMG: $URL ==="
+          curl -fL "$URL" -o "$DMG"
+          ls -lh "$DMG"
+          shasum -a 256 "$DMG"
+
+          echo "=== 2. Mounting DMG with hdiutil ==="
+          MOUNT_DIR="/Volumes/Mickey Studio ${VERSION}"
+          hdiutil attach "$DMG" -nobrowse -readonly
+          ls -la "$MOUNT_DIR"
+
+          APP="$MOUNT_DIR/Install Mickey Studio.app"
+          echo "=== 3. Verifying App Bundle structure, plist, codesign & bash syntax ==="
+          test -d "$APP"
+          plutil -lint "$APP/Contents/Info.plist"
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+          test -x "$APP/Contents/MacOS/install-mickey-studio"
+          bash -n "$APP/Contents/MacOS/install-mickey-studio"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          echo "=== 4. Running actual installer executable on real macOS ==="
+          # Stub osascript so headless runner doesn't block waiting for GUI button click
+          mkdir -p /tmp/fakebin
+          printf '#!/bin/bash\necho "[osascript dialog]: $*"\nexit 0\n' > /tmp/fakebin/osascript
+          chmod +x /tmp/fakebin/osascript
+          PATH="/tmp/fakebin:$PATH" "$APP/Contents/MacOS/install-mickey-studio"
+
+          echo "=== 5. Verifying installed extension, CEP flags, 32 LUTs, and FFmpeg ==="
+          CEP_EXT="$HOME/Library/Application Support/Adobe/CEP/extensions/com.Mickey-Studio"
+          test -f "$CEP_EXT/manifest.json"
+          test -f "$CEP_EXT/CSXS/manifest.xml"
+          test -f "$CEP_EXT/index.html"
+          test -f "$CEP_EXT/jsx/host.jsx"
+          grep -q "\"version\": \"${VERSION}\"" "$CEP_EXT/manifest.json"
+          echo "Extension version verified: ${VERSION}"
+
+          for ver in 9 10 11 12 13 14 15; do
+            val="$(defaults read "com.adobe.CSXS.$ver" PlayerDebugMode)"
+            test "$val" = "1"
+          done
+          echo "CEP PlayerDebugMode=1 verified for CSXS.9..CSXS.15"
+
+          LUT_COUNT="$(find "$HOME/Library/Application Support/Adobe/Common/LUTs/Creative" -maxdepth 1 -name 'Mickey Studio *.cube' | wc -l | tr -d ' ')"
+          echo "Installed Creative LUTs count: $LUT_COUNT"
+          test "$LUT_COUNT" -eq 32
+
+          FF_BIN="$HOME/Library/Application Support/Mickey Studio/bin/ffmpeg"
+          test -x "$FF_BIN"
+          "$FF_BIN" -version | head -n 2
+
+          echo "=== 6. Unmounting DMG cleanly ==="
+          hdiutil detach "$MOUNT_DIR"
+          echo "ALL_MACOS_DMG_TESTS_PASSED"
