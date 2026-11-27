@@ -721,7 +721,12 @@ window.MickeyStudio = (function () {
     STATE.activeTab = tabId;
     SFX.playClick();
 
-    if (window.location.hash !== '#' + tabId) {
+    if (tabId === 'landing') {
+      const cleanPath = window.location.pathname.replace(/\/index\.html$/i, '/') || '/';
+      if (window.location.hash || /\/index\.html$/i.test(window.location.pathname)) {
+        window.history.replaceState(null, '', cleanPath + window.location.search);
+      }
+    } else if (window.location.hash !== '#' + tabId) {
       window.history.pushState(null, '', '#' + tabId);
     }
 
