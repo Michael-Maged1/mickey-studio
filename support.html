@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ادعم تطوير إضافة Mickey Studio // الدعم عبر PayPal والمحفظة الإلكترونية</title>
+  <meta name="description" content="ساهم بأي مبلغ بسيط لدعم استمرار تطوير إضافة Mickey Studio المجانية لـ Adobe Premiere Pro.">
+  <meta name="theme-color" content="#09090B">
+  <link rel="icon" type="image/png" href="assets/mickey-studio-logo.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      background-color: #09090B;
+      color: #F4F4F5;
+      font-family: 'Cairo', sans-serif;
+    }
+    .grid-bg {
+      background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    .qr-frame {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.45);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-rose-500/30 selection:text-rose-200 grid-bg">
+
+  <!-- Top Navigation -->
+  <header class="sticky top-0 z-40 border-b border-white/10 bg-[#09090B]/85 backdrop-blur-xl">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <a href="/" class="flex items-center gap-3 group">
+        <img src="assets/mickey-studio-logo.png" alt="Mickey Studio" class="w-9 h-9 object-contain group-hover:scale-105 transition-transform">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-black tracking-tight text-white">MICKEY STUDIO</span>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold">دعم الإضافة</span>
+          </div>
+          <span class="text-[10px] text-zinc-400 block -mt-0.5">مجانية 100% بفضل دعمكم</span>
+        </div>
+      </a>
+
+      <div class="flex items-center gap-2">
+        <a href="/extension" class="px-3.5 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-zinc-200 transition flex items-center gap-2">
+          <i class="fa-solid fa-puzzle-piece text-cyan-400"></i>
+          <span>صفحة الإضافة</span>
+        </a>
+        <a href="/" class="px-3.5 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-zinc-200 transition flex items-center gap-2">
+          <i class="fa-solid fa-house text-zinc-400"></i>
+          <span>الرئيسية</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 py-10 sm:py-14 px-4 sm:px-6">
+    <div class="max-w-4xl mx-auto space-y-8">
+
+      <!-- Heading -->
+      <div class="text-center space-y-3 max-w-2xl mx-auto">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold">
+          <i class="fa-solid fa-heart animate-pulse text-rose-400"></i>
+          <span>ساهم في استمرار Mickey Studio مجاناً للجميع</span>
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-black text-white leading-tight">
+          ادعم تطوير إضافة <span class="text-transparent bg-clip-text bg-gradient-to-l from-cyan-300 via-indigo-300 to-rose-400">Mickey Studio</span>
+        </h1>
+        <p class="text-sm text-zinc-400 leading-relaxed">
+          اختر وسيلة الدعم المناسبة لك — امسح رمز الـ QR أو استخدم الرابط والرقم مباشرة.
+        </p>
+      </div>
+
+      <!-- Two Support Cards: PayPal & E-Wallet -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Card 1: PayPal -->
+        <div class="rounded-3xl bg-zinc-900/75 border border-white/10 hover:border-[#0070BA]/60 p-6 sm:p-7 flex flex-col items-center text-center gap-5 shadow-2xl transition">
+          <div class="qr-frame">
+            <img
+              src="https://api.qrserver.com/v1/create-qr-code/?size=210x210&margin=6&data=https%3A%2F%2Fpaypal.me%2FMichaelMaged16"
+              alt="PayPal QR Code - paypal.me/MichaelMaged16"
+              width="196"
+              height="196"
+              class="rounded-lg block"
+            >
+          </div>
+
+          <div class="flex items-center justify-center gap-2.5 text-base font-extrabold text-white">
+            <span>الدعم بواسطة</span>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#003087]/35 border border-[#0070BA]/50 text-[#4db5ff]">
+              <i class="fa-brands fa-paypal text-lg text-[#009cde]"></i>
+              <span class="font-sans tracking-tight">PayPal</span>
+            </span>
+          </div>
+
+          <a href="https://paypal.me/MichaelMaged16" target="_blank" rel="noopener noreferrer"
+             class="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl bg-[#0070BA] hover:bg-[#005ea6] text-white font-black text-sm shadow-lg shadow-[#0070BA]/25 transition transform hover:-translate-y-0.5">
+            <i class="fa-brands fa-paypal text-base"></i>
+            <span dir="ltr" class="font-mono text-xs sm:text-sm">paypal.me/MichaelMaged16</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-xs opacity-80"></i>
+          </a>
+        </div>
+
+        <!-- Card 2: E-Wallet -->
+        <div class="rounded-3xl bg-zinc-900/75 border border-white/10 hover:border-emerald-500/50 p-6 sm:p-7 flex flex-col items-center text-center gap-5 shadow-2xl transition">
+          <div class="relative inline-flex items-center justify-center">
+            <div class="qr-frame">
+              <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=210x210&margin=6&data=01515034914"
+                alt="E-Wallet QR Code - 01515034914"
+                width="196"
+                height="196"
+                class="rounded-lg block"
+              >
+            </div>
+            <span class="absolute -bottom-3 -left-3 w-11 h-11 rounded-2xl bg-emerald-500 text-zinc-950 flex items-center justify-center shadow-lg shadow-emerald-500/30 border-2 border-zinc-950" title="محفظة إلكترونية">
+              <i class="fa-solid fa-wallet text-lg"></i>
+            </span>
+          </div>
+
+          <div class="flex items-center justify-center gap-2 text-base font-extrabold text-white">
+            <i class="fa-solid fa-mobile-screen-button text-emerald-400"></i>
+            <span>تحويل عبر محفظة إلكترونية</span>
+          </div>
+
+          <div class="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-zinc-950/90 border border-emerald-500/30">
+            <div class="flex items-center gap-2.5">
+              <i class="fa-solid fa-phone text-emerald-400 text-sm"></i>
+              <span id="wallet-phone-number" dir="ltr" class="font-mono text-lg font-bold tracking-wider text-white select-all">01515034914</span>
+            </div>
+            <button type="button" id="copy-wallet-btn"
+                    class="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs transition inline-flex items-center gap-1.5 cursor-pointer shrink-0">
+              <i class="fa-regular fa-copy"></i>
+              <span id="copy-wallet-label">نسخ</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-zinc-400 -mt-2">فودافون كاش · انستاباي · أورنج كاش · اتصالات كاش · وي باي</p>
+        </div>
+
+      </div>
+
+      <!-- Thank You & Encouraging Note -->
+      <div class="rounded-3xl bg-gradient-to-l from-rose-500/10 via-indigo-500/10 to-cyan-500/10 border border-white/10 p-6 sm:p-8 text-center space-y-3 shadow-xl">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 mx-auto">
+          <i class="fa-solid fa-hand-holding-heart text-xl"></i>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-black text-white">شكراً من القلب على دعمك لـ Mickey Studio ❤️</h2>
+        <p class="text-sm sm:text-base text-zinc-300 leading-relaxed max-w-2xl mx-auto">
+          كل مساهمة — <strong class="text-white">حتى لو بأي مبلغ بسيط</strong> — بتفرق معانا جداً وبتساعدنا نكمل تطوير الإضافة، ونضيف أدوات ذكاء اصطناعي وتلوين جديدة، ونحافظ عليها <strong class="text-cyan-300">مجانية 100%</strong> لكل صناع المحتوى والمونتيرين.
+        </p>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="border-t border-white/5 py-6 text-center text-[11px] text-zinc-500">
+    <div class="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <span>© Mickey Studio — جميع الحقوق محفوظة</span>
+      <div class="flex items-center gap-4">
+        <a href="/" class="hover:text-zinc-300 transition">الرئيسية</a>
+        <a href="/extension" class="hover:text-zinc-300 transition">الإضافة</a>
+        <a href="/privacy" class="hover:text-zinc-300 transition">سياسة الخصوصية</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('copy-wallet-btn');
+      var lbl = document.getElementById('copy-wallet-label');
+      var num = '01515034914';
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        function done() {
+          if (lbl) lbl.textContent = 'تم النسخ ✓';
+          setTimeout(function () { if (lbl) lbl.textContent = 'نسخ'; }, 1800);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(num).then(done).catch(function () {
+            var ta = document.createElement('textarea');
+            ta.value = num; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            document.body.removeChild(ta); done();
+          });
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = num; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (_) {}
+          document.body.removeChild(ta); done();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
